@@ -886,7 +886,6 @@
         function handleModelStatusUpdate(data) {
             if (data.modelId && data.status) {
                 loadModels();
-                updateModelCounts();
             }
         }
         
@@ -902,13 +901,11 @@
                 window.pendingModelLoad = null;
             }
             loadModels();
-            updateModelCounts();
         }
         
         function handleModelStopEvent(data) {
             showToast('模型停止', `模型 ${data.modelId} 停止${data.success ? '成功' : '失败'}`, data.success ? 'success' : 'error');
             loadModels();
-            updateModelCounts();
         }
 
         // --- Console Logic ---
@@ -978,7 +975,6 @@
         
         // --- Initialization ---
         document.addEventListener('DOMContentLoaded', function() {
-            updateModelCounts();
             loadModels();
             initWebSocket();
             initModelSearch();
@@ -994,6 +990,11 @@
                 .then(data => {
                     if (data.success) {
                         const allModels = data.models || [];
+                        if (data.success) {
+                                const totalCount = (allModels || []).length;
+                                const el = document.getElementById('totalModelsCount');
+                                if (el) el.textContent = totalCount;
+                        }
                         return fetch('/api/models/loaded')
                             .then(response => response.json())
                             .then(loadedData => {
@@ -1010,7 +1011,11 @@
                                     };
                                 });
                                 renderModelsList(modelsWithStatus);
-                                updateModelCounts();
+                                if (loadedData.success) {
+                                    const loadedCount = (loadedData.models || []).length;
+                                    const el = document.getElementById('loadedModelsCount');
+                                    if (el) el.textContent = loadedCount;
+                                }
                             });
                     } else { throw new Error(data.error); }
                 })
@@ -1129,24 +1134,19 @@
 
         function refreshModels() {
             showToast('提示', '正在刷新模型列表', 'info');
-            loadModels();
-        }
-
-        function updateModelCounts() {
-            fetch('/api/models/loaded').then(r => r.json()).then(d => {
-                if (d.success) {
-                    const loadedCount = (d.models || []).length;
-                    const el = document.getElementById('loadedModelsCount');
-                    if (el) el.textContent = loadedCount;
-                }
-            });
-             fetch('/api/models/list').then(r => r.json()).then(d => {
-                if (d.success) {
-                    const totalCount = (d.models || []).length;
-                    const el = document.getElementById('totalModelsCount');
-                    if (el) el.textContent = totalCount;
-                }
-            });
+            fetch('/api/models/refresh')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        loadModels();
+                    } else {
+                        throw new Error(data.error || '刷新模型列表失败');
+                    }
+                })
+                .catch(error => {
+                    showToast('错误', error.message || '网络错误，请稍后重试', 'error');
+                    loadModels();
+                });
         }
 
         function formatFileSize(size) {

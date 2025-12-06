@@ -379,6 +379,12 @@
             opacity: 1;
         }
 
+        .message-stats {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 0.25rem;
+        }
+
         /* Input Area */
         .input-area {
             padding: 1.5rem;
@@ -1024,7 +1030,8 @@
                     contentEl, 
                     bubbleEl,
                     text: '',
-                    typing: true
+                    typing: true,
+                    startTime: null
                 });
                 // Show typing indicator initially
                 contentEl.innerHTML = `
@@ -1094,6 +1101,9 @@
                                             asst.typing = false;
                                             asst.contentEl.innerHTML = ''; // Remove typing dots
                                         }
+                                        if (asst.startTime === null && delta) {
+                                            asst.startTime = performance.now();
+                                        }
                                         asst.text += delta;
                                         asst.contentEl.innerHTML = marked.parse(asst.text);
                                         // We could syntax highlight here, but better to do it less frequently or at end
@@ -1153,6 +1163,17 @@
                     
                     // wrapper is parent of message-content, which is parent of bubble
                     asst.contentEl.parentElement.appendChild(actionsDiv);
+
+                    const endTime = performance.now();
+                    if (asst.startTime) {
+                        const tokens = estimateTokens(asst.text);
+                        const durationSec = Math.max(0.001, (endTime - asst.startTime) / 1000);
+                        const speed = tokens / durationSec;
+                        const statsDiv = document.createElement('div');
+                        statsDiv.className = 'message-stats';
+                        statsDiv.textContent = `速度: ${speed.toFixed(2)} token/s · 总计: ${tokens} · 用时: ${durationSec.toFixed(2)}s`;
+                        asst.contentEl.parentElement.appendChild(statsDiv);
+                    }
                 });
                 
                 scrollToBottom();
@@ -1503,6 +1524,17 @@
             els.topPInput.value = 0.9; els.topPVal.textContent = 0.9;
             els.maxTokensInput.value = -1;
             els.nPredict.value = 1; els.nPredictVal.textContent = 1;
+        }
+
+        function estimateTokens(text) {
+            if (!text) return 0;
+            let ascii = 0, nonAscii = 0;
+            for (let i = 0; i < text.length; i++) {
+                const code = text.charCodeAt(i);
+                if (code <= 127) ascii++; else nonAscii++;
+            }
+            const asciiTokens = Math.round(ascii / 4);
+            return (asciiTokens > 0 ? asciiTokens : 1) + nonAscii;
         }
     </script>
 </body>
