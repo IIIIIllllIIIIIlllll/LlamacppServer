@@ -319,7 +319,7 @@ public class LlamaServerHandler extends SimpleChannelInboundHandler<FullHttpRequ
 				String modelId = "unknown-model-" + System.currentTimeMillis();
 
 				if (primaryModel != null) {
-					modelName = primaryModel.getStringValue("general.name");
+					modelName = model.getName(); //primaryModel.getStringValue("general.name");
 					if (modelName == null || modelName.trim().isEmpty()) {
 						modelName = "未命名模型";
 					}
@@ -358,6 +358,10 @@ public class LlamaServerHandler extends SimpleChannelInboundHandler<FullHttpRequ
 					mmprojInfo.put("type", mmproj.getStringValue("general.architecture"));
 					
 					modelInfo.put("mmproj", mmprojInfo);
+				}
+				// 是否处于加载状态
+				if(manager.isLoading(modelId)) {
+					modelInfo.put("isLoading", true);
 				}
 
 				// 添加元数据

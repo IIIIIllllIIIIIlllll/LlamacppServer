@@ -8,10 +8,12 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ExecutorService;
@@ -64,6 +66,11 @@ public class LlamaServerManager {
 	 * 模型ID到端口映射
 	 */
 	private Map<String, Integer> modelPorts = new HashMap<>();
+	
+	/**
+	 * 	正在加载中的模型。
+	 */
+	private Set<String> loadingModels = new HashSet<>();
 	
 	/**
 	 * 线程池，用于异步执行模型加载任务
@@ -290,6 +297,8 @@ public class LlamaServerManager {
 		for(GGUFModel e : this.list) {
 			if(e.getModelId().equals(modelId))
 				return e;
+			else
+				System.err.println(e.getModelId());
 		}
 		return null;
 	}
@@ -364,6 +373,16 @@ public class LlamaServerManager {
 		return false;
 	}
 	
+	/**
+	 * 	检查指定ID的模型是否处于加载状态。
+	 * @param modelId
+	 * @return
+	 */
+	public boolean isLoading(String modelId) {
+		synchronized (this.loadingModels) {
+			return this.loadingModels.contains(modelId);
+		}
+	}
 	
 	/**
 	 * 异步加载指定的模型
@@ -376,10 +395,10 @@ public class LlamaServerManager {
 	 * @param mlock 是否锁定内存
 	 * @return 是否成功启动加载任务
 	 */
-    public boolean loadModelAsync(String modelId, ModelLaunchOptions options) {
+    public synchronized boolean loadModelAsync(String modelId, ModelLaunchOptions options) {
 
         Map<String, Object> launchConfig = options.toConfigMap();
-        configManager.saveLaunchConfig(modelId, launchConfig);
+        this.configManager.saveLaunchConfig(modelId, launchConfig);
 		
 		// 检查模型是否已经加载
 		if (this.loadedProcesses.containsKey(modelId)) {
@@ -403,8 +422,15 @@ public class LlamaServerManager {
             LlamaServer.sendModelLoadEvent(modelId, false, "未提供llamaBinPath");
             return false;
         }
-        executorService.submit(() -> {
-            loadModelInBackground(modelId, targetModel, options);
+		// 如果这个模型已经在加载中 
+		synchronized (this.loadingModels) {
+			if(this.loadingModels.contains(targetModel.getModelId())) {
+				LlamaServer.sendModelLoadEvent(modelId, false, "该模型正在加载中");
+				return false;
+			}
+		}
+        this.executorService.submit(() -> {
+            this.loadModelInBackground(modelId, targetModel, options);
         });
 		
 		return true; // 表示成功提交加载任务
@@ -435,6 +461,11 @@ public class LlamaServerManager {
 		
 		// 设置输出处理器，接受llamacpp运行状态，然后判断特定的内容。
         process.setOutputHandler(line -> {
+        	try {
+        		Thread.sleep(1000 * 3600);
+        	}catch (Exception e) {
+        		e.printStackTrace();
+			}
             //	判断是否加载成功。
             //	1.这是成功了
             if(line.contains("srv  update_slots: all slots are idle")) {
@@ -468,12 +499,16 @@ public class LlamaServerManager {
 		
 		// 启动进程
 		boolean started = process.start();
-		
 		if (!started) {
 			System.err.println("启动模型 " + modelId + " 失败");
 			// 发送WebSocket事件通知启动失败
 			LlamaServer.sendModelLoadEvent(modelId, false, "启动模型进程失败");
 			return;
+		}else {
+			// 设置模型的状态为启动中
+			synchronized (this.loadingModels) {
+				this.loadingModels.add(targetModel.getModelId());
+			}
 		}
 		
 		// 等待进程加载完成，超时时间10分钟
@@ -495,7 +530,6 @@ public class LlamaServerManager {
 				this.modelPorts.put(modelId, port);
 				System.out.println("成功启动模型 " + modelId + "，端口: " + port + "，PID: " + process.getPid());
 				// 发送WebSocket事件通知加载成功
-				System.out.println("发送事件，理论上要这么做的");
 				LlamaServer.sendModelLoadEvent(modelId, true, "模型加载成功，端口: " + port);
 			} else {
 				System.err.println("加载模型 " + modelId + " 失败");
@@ -511,6 +545,10 @@ public class LlamaServerManager {
 			process.stop();
 			// 发送WebSocket事件通知加载被中断
 			LlamaServer.sendModelLoadEvent(modelId, false, "模型加载被中断");
+		}finally {
+			synchronized (this.loadingModels) {
+				this.loadingModels.remove(targetModel.getModelId());
+			}
 		}
 	}
 	

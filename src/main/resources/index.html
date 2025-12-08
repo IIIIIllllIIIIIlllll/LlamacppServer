@@ -550,6 +550,10 @@
         #logContainer::-webkit-scrollbar { width: 8px; height: 8px; }
         #logContainer::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
         #logContainer::-webkit-scrollbar-track { background: #1e293b; }
+        /* Force Font Awesome spinner animation even when user prefers reduced motion */
+        @media (prefers-reduced-motion: reduce) {
+            .fa-spin { animation: fa-spin 2s linear infinite !important; }
+        }
     </style>
 </head>
 <body>
@@ -997,13 +1001,14 @@
                         return fetch('/api/models/loaded')
                             .then(response => response.json())
                             .then(loadedData => {
-                                const loadedModels = loadedData.success ? (loadedData.models || []) : [];
+                        const loadedModels = loadedData.success ? (loadedData.models || []) : [];
                                 const loadedModelIds = loadedModels.map(m => m.id);
                                 const modelsWithStatus = allModels.map(model => {
                                     const isLoaded = loadedModelIds.includes(model.id);
                                     const loadedModel = loadedModels.find(m => m.id === model.id);
                                     return {
                                         ...model,
+                                        isLoading: !!model.isLoading,
                                         isLoaded: isLoaded,
                                         status: isLoaded ? (loadedModel ? loadedModel.status : 'loaded') : 'stopped',
                                         port: isLoaded && loadedModel ? loadedModel.port : null
@@ -1062,7 +1067,7 @@
             models.forEach(model => {
                 const metadata = model.metadata || {};
                 const architecture = metadata.architecture || '未知';
-                const isLoading = document.getElementById('loading-toast-' + model.id) !== null;
+                const isLoading = !!model.isLoading;
                 
                 let status = model.status;
                 let statusText = '已停止';
