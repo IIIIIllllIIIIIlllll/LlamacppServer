@@ -1409,7 +1409,7 @@ public class LlamaServerHandler extends SimpleChannelInboundHandler<FullHttpRequ
 					
 					// 每发送10个数据块记录一次日志
 					if (chunkCount % 10 == 0) {
-						logger.info("已发送 {} 个流式数据块", chunkCount);
+						//logger.info("已发送 {} 个流式数据块", chunkCount);
 					}
 				} else if (line.startsWith("event: ")) {
 					// 处理事件行
@@ -1478,11 +1478,11 @@ public class LlamaServerHandler extends SimpleChannelInboundHandler<FullHttpRequ
 	/**
 	 * 发送OpenAI格式的JSON响应并清理资源
 	 */
-	private void sendOpenAIJsonResponseWithCleanup(ChannelHandlerContext ctx, Object data) {
+	private void sendOpenAIJsonResponseWithCleanup(ChannelHandlerContext ctx, Object data, HttpResponseStatus httpStatus) {
 		String json = gson.toJson(data);
 		byte[] content = json.getBytes(StandardCharsets.UTF_8);
 
-		FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
+		FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, httpStatus);
 		response.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/json; charset=UTF-8");
 		response.headers().set(HttpHeaderNames.CONTENT_LENGTH, content.length);
 		response.content().writeBytes(content);
@@ -1540,7 +1540,7 @@ public class LlamaServerHandler extends SimpleChannelInboundHandler<FullHttpRequ
 		
 		Map<String, Object> response = new HashMap<>();
 		response.put("error", error);
-		sendOpenAIJsonResponseWithCleanup(ctx, response);
+		sendOpenAIJsonResponseWithCleanup(ctx, response, HttpResponseStatus.valueOf(httpStatus));
 	}
 	
 	/**
