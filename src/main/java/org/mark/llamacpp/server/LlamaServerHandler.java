@@ -917,7 +917,7 @@ public class LlamaServerHandler extends SimpleChannelInboundHandler<FullHttpRequ
 		try {
 			// 只支持GET请求
 			if (request.method() != HttpMethod.GET) {
-				sendOpenAIErrorResponseWithCleanup(ctx, 405, "Method not allowed", "Only GET method is supported");
+				this.sendOpenAIErrorResponseWithCleanup(ctx, 405, null, "Only GET method is supported", "method");
 				return;
 			}
 
@@ -1018,7 +1018,7 @@ public class LlamaServerHandler extends SimpleChannelInboundHandler<FullHttpRequ
 			sendOpenAIJsonResponse(ctx, response);
 		} catch (Exception e) {
 			logger.error("处理OpenAI模型列表请求时发生错误", e);
-			sendOpenAIErrorResponseWithCleanup(ctx, 500, "Internal server error", e.getMessage());
+			this.sendOpenAIErrorResponseWithCleanup(ctx, 500, null, e.getMessage(), null);
 		}
 	}
 	
@@ -1029,14 +1029,14 @@ public class LlamaServerHandler extends SimpleChannelInboundHandler<FullHttpRequ
 		try {
 			// 只支持POST请求
 			if (request.method() != HttpMethod.POST) {
-				sendOpenAIErrorResponseWithCleanup(ctx, 405, "Method not allowed", "Only POST method is supported");
+				this.sendOpenAIErrorResponseWithCleanup(ctx, 405, null, "Only POST method is supported", "method");
 				return;
 			}
 
 			// 读取请求体
 			String content = request.content().toString(CharsetUtil.UTF_8);
 			if (content == null || content.trim().isEmpty()) {
-				sendOpenAIErrorResponseWithCleanup(ctx, 400, "Bad request", "Request body is empty");
+				this.sendOpenAIErrorResponseWithCleanup(ctx, 400, null, "Request body is empty", "messages");
 				return;
 			}
 
@@ -1045,7 +1045,7 @@ public class LlamaServerHandler extends SimpleChannelInboundHandler<FullHttpRequ
 			
 			// 获取模型名称
 			if (!requestJson.has("model")) {
-				sendOpenAIErrorResponseWithCleanup(ctx, 400, "Bad request", "Missing required parameter: model");
+				this.sendOpenAIErrorResponseWithCleanup(ctx, 400, null, "Missing required parameter: model", "model");
 				return;
 			}
 			
@@ -1062,21 +1062,21 @@ public class LlamaServerHandler extends SimpleChannelInboundHandler<FullHttpRequ
 			
 			// 检查模型是否已加载
 			if (!manager.getLoadedProcesses().containsKey(modelName)) {
-				sendOpenAIErrorResponseWithCleanup(ctx, 404, "Not found", "Model not found: " + modelName);
+				this.sendOpenAIErrorResponseWithCleanup(ctx, 404, null, "Model not found: " + modelName, "model");
 				return;
 			}
 			
 			// 获取模型端口
 			Integer modelPort = manager.getModelPort(modelName);
 			if (modelPort == null) {
-				sendOpenAIErrorResponseWithCleanup(ctx, 500, "Internal server error", "Model port not found: " + modelName);
+				this.sendOpenAIErrorResponseWithCleanup(ctx, 500, null, "Model port not found: " + modelName, null);
 				return;
 			}
 			// 转发请求到对应的llama.cpp进程
 			forwardRequestToLlamaCpp(ctx, request, modelName, modelPort, "/v1/chat/completions", isStream);
 		} catch (Exception e) {
 			logger.error("处理OpenAI聊天补全请求时发生错误", e);
-			sendOpenAIErrorResponseWithCleanup(ctx, 500, "Internal server error", e.getMessage());
+			this.sendOpenAIErrorResponseWithCleanup(ctx, 500, null, e.getMessage(), null);
 		}
 	}
 	
@@ -1087,14 +1087,14 @@ public class LlamaServerHandler extends SimpleChannelInboundHandler<FullHttpRequ
 		try {
 			// 只支持POST请求
 			if (request.method() != HttpMethod.POST) {
-				sendOpenAIErrorResponseWithCleanup(ctx, 405, "Method not allowed", "Only POST method is supported");
+				this.sendOpenAIErrorResponseWithCleanup(ctx, 405, null, "Only POST method is supported", "method");
 				return;
 			}
 
 			// 读取请求体
 			String content = request.content().toString(CharsetUtil.UTF_8);
 			if (content == null || content.trim().isEmpty()) {
-				sendOpenAIErrorResponseWithCleanup(ctx, 400, "Bad request", "Request body is empty");
+				this.sendOpenAIErrorResponseWithCleanup(ctx, 400, null, "Request body is empty", "messages");
 				return;
 			}
 
@@ -1110,7 +1110,7 @@ public class LlamaServerHandler extends SimpleChannelInboundHandler<FullHttpRequ
 			if (!requestJson.has("model")) {
 				modelName = manager.getFirstModelName();
 				if (modelName == null) {
-					sendOpenAIErrorResponseWithCleanup(ctx, 404, "Not found", "No models are currently loaded");
+					this.sendOpenAIErrorResponseWithCleanup(ctx, 404, null, "No models are currently loaded", null);
 					return;
 				}
 			} else {
@@ -1125,21 +1125,21 @@ public class LlamaServerHandler extends SimpleChannelInboundHandler<FullHttpRequ
 
 			// 检查模型是否已加载
 			if (!manager.getLoadedProcesses().containsKey(modelName)) {
-				sendOpenAIErrorResponseWithCleanup(ctx, 404, "Not found", "Model not found: " + modelName);
+				this.sendOpenAIErrorResponseWithCleanup(ctx, 404, null, "Model not found: " + modelName, "model");
 				return;
 			}
 
 			// 获取模型端口
 			Integer modelPort = manager.getModelPort(modelName);
 			if (modelPort == null) {
-				sendOpenAIErrorResponseWithCleanup(ctx, 500, "Internal server error", "Model port not found: " + modelName);
+				this.sendOpenAIErrorResponseWithCleanup(ctx, 500, null, "Model port not found: " + modelName, null);
 				return;
 			}
 			// 转发请求到对应的llama.cpp进程
 			forwardRequestToLlamaCpp(ctx, request, modelName, modelPort, "/v1/completions", isStream);
 		} catch (Exception e) {
 			logger.error("处理OpenAI文本补全请求时发生错误", e);
-			sendOpenAIErrorResponseWithCleanup(ctx, 500, "Internal server error", e.getMessage());
+			this.sendOpenAIErrorResponseWithCleanup(ctx, 500, null, e.getMessage(), null);
 		}
 	}
 
@@ -1149,12 +1149,12 @@ public class LlamaServerHandler extends SimpleChannelInboundHandler<FullHttpRequ
 	private void handleOpenAIEmbeddingsRequest(ChannelHandlerContext ctx, FullHttpRequest request) {
 		try {
 			if (request.method() != HttpMethod.POST) {
-				sendOpenAIErrorResponseWithCleanup(ctx, 405, "Method not allowed", "Only POST method is supported");
+				this.sendOpenAIErrorResponseWithCleanup(ctx, 405, null, "Only POST method is supported", "method");
 				return;
 			}
 			String content = request.content().toString(CharsetUtil.UTF_8);
 			if (content == null || content.trim().isEmpty()) {
-				sendOpenAIErrorResponseWithCleanup(ctx, 400, "Bad request", "Request body is empty");
+				this.sendOpenAIErrorResponseWithCleanup(ctx, 400, null, "Request body is empty", "messages");
 				return;
 			}
 			JsonObject requestJson = gson.fromJson(content, JsonObject.class);
@@ -1163,25 +1163,25 @@ public class LlamaServerHandler extends SimpleChannelInboundHandler<FullHttpRequ
 			if (!requestJson.has("model")) {
 				modelName = manager.getFirstModelName();
 				if (modelName == null) {
-					sendOpenAIErrorResponseWithCleanup(ctx, 404, "Not found", "No models are currently loaded");
+					this.sendOpenAIErrorResponseWithCleanup(ctx, 404, null, "No models are currently loaded", null);
 					return;
 				}
 			} else {
 				modelName = requestJson.get("model").getAsString();
 			}
 			if (!manager.getLoadedProcesses().containsKey(modelName)) {
-				sendOpenAIErrorResponseWithCleanup(ctx, 404, "Not found", "Model not found: " + modelName);
+				this.sendOpenAIErrorResponseWithCleanup(ctx, 404, null, "Model not found: " + modelName, "model");
 				return;
 			}
 			Integer modelPort = manager.getModelPort(modelName);
 			if (modelPort == null) {
-				sendOpenAIErrorResponseWithCleanup(ctx, 500, "Internal server error", "Model port not found: " + modelName);
+				this.sendOpenAIErrorResponseWithCleanup(ctx, 500, null, "Model port not found: " + modelName, null);
 				return;
 			}
 			forwardRequestToLlamaCpp(ctx, request, modelName, modelPort, "/v1/embeddings", false);
 		} catch (Exception e) {
 			logger.error("处理OpenAI嵌入请求时发生错误", e);
-			sendOpenAIErrorResponseWithCleanup(ctx, 500, "Internal server error", e.getMessage());
+			this.sendOpenAIErrorResponseWithCleanup(ctx, 500, null, e.getMessage(), null);
 		}
 	}
 	
@@ -1205,7 +1205,7 @@ public class LlamaServerHandler extends SimpleChannelInboundHandler<FullHttpRequ
 			logger.info("转发请求到llama.cpp进程: {} {} 端口: {} 请求体长度: {}", method.name(), endpoint, port, requestBody.length());
 		} catch (Exception e) {
 			logger.error("读取请求体时发生错误", e);
-			sendOpenAIErrorResponseWithCleanup(ctx, 500, "Internal server error", "Failed to read request body: " + e.getMessage());
+			this.sendOpenAIErrorResponseWithCleanup(ctx, 500, null, "Failed to read request body: " + e.getMessage(), null);
 			return;
 		}
 		
@@ -1271,7 +1271,7 @@ public class LlamaServerHandler extends SimpleChannelInboundHandler<FullHttpRequ
 				if (e.getMessage() != null && e.getMessage().contains("Connection reset by peer")) {
 					
 				}
-				sendOpenAIErrorResponseWithCleanup(ctx, 500, "Internal server error", e.getMessage());
+				this.sendOpenAIErrorResponseWithCleanup(ctx, 500, null, e.getMessage(), null);
 			} finally {
 				// 释放之前保留的引用计数
 				request.content().release();
@@ -1513,11 +1513,30 @@ public class LlamaServerHandler extends SimpleChannelInboundHandler<FullHttpRequ
 	/**
 	 * 发送OpenAI格式的错误响应并清理资源
 	 */
-	private void sendOpenAIErrorResponseWithCleanup(ChannelHandlerContext ctx, int code, String type, String message) {
+	private void sendOpenAIErrorResponseWithCleanup(ChannelHandlerContext ctx, int httpStatus, String openAiErrorCode, String message, String param) {
+		String type = "invalid_request_error";
+		// 通过code判断错误类型
+		if(httpStatus == 401) {
+			type = "authentication_error";
+		}
+		if(httpStatus == 403) {
+			type = "permission_error";
+		}
+		if(httpStatus == 404 || httpStatus == 400) {
+			type = "invalid_request_error";
+		}
+		if(httpStatus == 429) {
+			type = "rate_limit_error";
+		}
+		if(httpStatus == 500 || httpStatus == 502 || httpStatus == 503 || httpStatus == 504) {
+			type = "server_error";
+		}
+		
 		Map<String, Object> error = new HashMap<>();
 		error.put("message", message);
 		error.put("type", type);
-		error.put("code", code);
+		error.put("code", openAiErrorCode);
+		error.put("param", param);
 		
 		Map<String, Object> response = new HashMap<>();
 		response.put("error", error);
