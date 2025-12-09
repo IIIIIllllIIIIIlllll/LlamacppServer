@@ -39,7 +39,7 @@
 
         /* Sidebar */
         .sidebar {
-            width: 260px;
+            width: 300px;
             background-color: var(--sidebar-bg);
             border-right: 1px solid var(--border-color);
             display: flex;
@@ -703,6 +703,10 @@
                             <input type="checkbox" class="form-check-input" id="reranking" name="reranking">
                             <label class="form-check-label" for="reranking">Reranking模式</label>
                         </div>
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" id="flashAttention" name="flashAttention" checked>
+                            <label class="form-check-label" for="flashAttention">Flash Attention</label>
+                        </div>
                     </div>
                     
                     <details style="margin-top: 1rem; border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 0.5rem;">
@@ -728,6 +732,11 @@
                                 <label class="form-label" for="presencePenalty">Presence Penalty</label>
                                 <input type="number" step="0.01" class="form-control" id="presencePenalty" name="presencePenalty" value="0.0">
                             </div>
+                        </div>
+                        <div class="form-group" style="margin-top: 1rem;">
+                            <label class="form-label" for="extraParams">额外参数</label>
+                            <textarea class="form-control" id="extraParams" name="extraParams" rows="2" placeholder="例如: --grp-attn-n 8 --grp-attn-w 512"></textarea>
+                            <small class="form-text">输入额外的命令行参数，用空格分隔</small>
                         </div>
                     </details>
                 </form>
@@ -1091,12 +1100,14 @@
                         actionButtons = `
                             <button class="btn-icon danger" onclick="stopModel('${model.id}')" title="停止"><i class="fas fa-stop"></i></button>
                             <button class="btn-icon" onclick="viewModelDetails('${model.id}')" title="详情"><i class="fas fa-info-circle"></i></button>
+                            <button class="btn-icon" onclick="viewModelConfig('${model.id}')" title="查看配置"><i class="fas fa-cog"></i></button>
                         `;
                     }
                 } else {
                     actionButtons = `
                         <button class="btn-icon primary" onclick="loadModel('${model.id}', '${model.name}')" title="加载"><i class="fas fa-plus"></i></button>
                         <button class="btn-icon" onclick="viewModelDetails('${model.id}')" title="详情"><i class="fas fa-info-circle"></i></button>
+                        <button class="btn-icon" onclick="viewModelConfig('${model.id}')" title="查看配置"><i class="fas fa-cog"></i></button>
                     `;
                 }
                 
@@ -1174,6 +1185,8 @@
                         document.getElementById('mlock').checked = !!config.mlock;
                         document.getElementById('embedding').checked = !!config.embedding;
                         document.getElementById('reranking').checked = !!config.reranking;
+                        document.getElementById('flashAttention').checked = config.flashAttention !== undefined ? config.flashAttention : true;
+                        document.getElementById('extraParams').value = config.extraParams || '';
                     }
                     
                     fetch('/api/llamacpp/list').then(r => r.json()).then(listData => {
@@ -1213,7 +1226,9 @@
             data.mlock = document.getElementById('mlock').checked;
             data.embedding = document.getElementById('embedding').checked;
             data.reranking = document.getElementById('reranking').checked;
+            data.flashAttention = document.getElementById('flashAttention').checked;
             data.llamaBinPath = document.getElementById('llamaBinPathSelect').value;
+            data.extraParams = document.getElementById('extraParams').value;
 
             const submitBtn = document.querySelector('#loadModelModal .btn-primary');
             submitBtn.disabled = true; submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 处理中...';
@@ -1302,6 +1317,111 @@
             }
             html += `</div>`;
             content.innerHTML = html;
+            modal.classList.add('show');
+        }
+
+        function viewModelConfig(modelId) {
+            fetch(`/api/models/config?modelId=${encodeURIComponent(modelId)}`)
+                .then(r => r.json()).then(data => {
+                    if (data.success) {
+                        showModelConfigModal(data.data.modelId, data.data.config);
+                    } else {
+                        showToast('错误', data.error || '获取配置失败', 'error');
+                    }
+                })
+                .catch(e => {
+                    showToast('错误', '网络请求失败', 'error');
+                });
+        }
+
+        function showModelConfigModal(modelId, config) {
+            const modalId = 'modelConfigModal';
+            let modal = document.getElementById(modalId);
+            if (!modal) {
+                modal = document.createElement('div'); modal.id = modalId; modal.className = 'modal';
+                modal.innerHTML = `<div class="modal-content"><div class="modal-header"><h3 class="modal-title">启动配置</h3><button class="modal-close" onclick="closeModal('${modalId}')">&times;</button></div><div class="modal-body" id="${modalId}Content"></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('${modalId}')">关闭</button></div></div>`;
+                document.body.appendChild(modal);
+            }
+            const content = document.getElementById(modalId + 'Content');
+            
+            if (!config || Object.keys(config).length === 0) {
+                content.innerHTML = '<div class="empty-state"><div class="empty-state-text">暂无保存的配置，将使用默认值。</div></div>';
+            } else {
+                // Helper to format values
+                const fmt = (v) => {
+                    if (v === null || v === undefined) return '<span style="color:#999">默认</span>';
+                    if (typeof v === 'boolean') return v ? '<span style="color:var(--success-color)"><i class="fas fa-check"></i> 开启</span>' : '<span style="color:var(--text-secondary)">关闭</span>';
+                    return v;
+                };
+
+                // Helper to create a read-only form group
+                const createGroup = (label, value, fullWidth = false) => {
+                    return `
+                        <div class="form-group" style="margin-bottom: 0; ${fullWidth ? 'grid-column: span 2;' : ''}">
+                            <label class="form-label">${label}</label>
+                            <div class="form-control" style="background-color: #f9fafb; min-height: 38px; display: flex; align-items: center;">${value}</div>
+                        </div>
+                    `;
+                };
+
+                let html = '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;">';
+                
+                // 1. Basic Params
+                html += createGroup('上下文大小 (ctx-size)', fmt(config.ctxSize), true);
+                
+                html += createGroup('批处理大小 (batch-size)', fmt(config.batchSize));
+                html += createGroup('微批处理 (ubatch-size)', fmt(config.ubatchSize));
+                
+                // 2. Llama Bin
+                html += createGroup('Llama.cpp 版本', config.llamaBinPath || '<span style="color:#999">默认</span>', true);
+
+                // 3. Flags (grouped)
+                const flags = [
+                    {k: 'noMmap', l: '禁用内存映射'},
+                    {k: 'mlock', l: '锁定内存'},
+                    {k: 'embedding', l: 'Embedding模式'},
+                    {k: 'reranking', l: 'Reranking模式'},
+                    {k: 'flashAttention', l: 'Flash Attention'}
+                ];
+                
+                let flagsHtml = '<div class="form-group" style="grid-column: span 2; margin-bottom: 0;"><label class="form-label">功能选项</label><div style="display: flex; gap: 1rem; flex-wrap: wrap;">';
+                flags.forEach(item => {
+                    flagsHtml += `<div style="display: flex; align-items: center; gap: 0.5rem; background: #f3f4f6; padding: 0.375rem 0.75rem; border-radius: 0.5rem; border: 1px solid var(--border-color);">
+                        <span style="font-size: 0.875rem; color: var(--text-primary);">${item.l}</span>
+                        <span style="font-size: 0.875rem;">${fmt(config[item.k])}</span>
+                     </div>`;
+                });
+                flagsHtml += '</div></div>';
+                html += flagsHtml;
+
+                // 4. Advanced Params
+                 const advanced = [
+                    {k: 'temperature', l: 'Temperature'},
+                    {k: 'topP', l: 'Top P'},
+                    {k: 'topK', l: 'Top K'},
+                    {k: 'minP', l: 'Min P'},
+                    {k: 'presencePenalty', l: 'Presence Penalty'}
+                ];
+                
+                advanced.forEach(item => {
+                    if (config[item.k] !== undefined && config[item.k] !== null) {
+                        html += createGroup(item.l, fmt(config[item.k]));
+                    }
+                });
+
+                // 5. Extra Params
+                if (config.extraParams) {
+                    html += `
+                        <div class="form-group" style="grid-column: span 2; margin-bottom: 0;">
+                            <label class="form-label">额外参数</label>
+                            <div class="form-control" style="background-color: #f9fafb; min-height: 38px; height: auto; white-space: pre-wrap;">${config.extraParams}</div>
+                        </div>
+                    `;
+                }
+
+                html += '</div>';
+                content.innerHTML = html;
+            }
             modal.classList.add('show');
         }
 

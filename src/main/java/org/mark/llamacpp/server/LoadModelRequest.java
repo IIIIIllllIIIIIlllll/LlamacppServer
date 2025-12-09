@@ -41,6 +41,8 @@ public class LoadModelRequest {
     private Double presencePenalty;
     private Boolean embedding;
     private Boolean reranking;
+    private Boolean flashAttention;
+    private String extraParams;
     
     public LoadModelRequest() {
     }
@@ -117,6 +119,12 @@ public class LoadModelRequest {
     public Boolean getReranking() { return reranking; }
     public void setReranking(Boolean reranking) { this.reranking = reranking; }
     
+    public Boolean getFlashAttention() { return flashAttention; }
+    public void setFlashAttention(Boolean flashAttention) { this.flashAttention = flashAttention; }
+    
+    public String getExtraParams() { return extraParams; }
+    public void setExtraParams(String extraParams) { this.extraParams = extraParams; }
+
     @Override
     public String toString() {
         return "LoadModelRequest{" +
@@ -134,6 +142,8 @@ public class LoadModelRequest {
                 ", presencePenalty=" + presencePenalty +
                 ", embedding=" + embedding +
                 ", reranking=" + reranking +
+                ", flashAttention=" + flashAttention +
+                ", extraParams='" + extraParams + '\'' +
                 '}';
     }
 }

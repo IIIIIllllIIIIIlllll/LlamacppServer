@@ -75,7 +75,7 @@ public class LlamaServerManager {
 	/**
 	 * 线程池，用于异步执行模型加载任务
 	 */
-	private final ExecutorService executorService = Executors.newCachedThreadPool();
+	private final ExecutorService executorService = Executors.newSingleThreadExecutor();
 	
 	/**
 	 *
@@ -479,14 +479,30 @@ public class LlamaServerManager {
                 loadSuccess.set(false);
                 
                 // 从已加载进程列表中移除
-                loadedProcesses.remove(modelId);
-                modelPorts.remove(modelId);
+                this.loadedProcesses.remove(modelId);
+                this.modelPorts.remove(modelId);
                 
                 // 通过WebSocket广播模型停止事件
                 LlamaServer.sendModelStopEvent(modelId, false, "模型进程异常终止: " + line);
                 
                 // 唤醒等待的线程
                 latch.countDown();
+            }
+            //	4.检测到参数错误
+            if(line.startsWith("error")) {
+            	 System.err.println("检测到模型进程异常终止: " + line);
+                 // 设置加载失败状态
+                 loadSuccess.set(false);
+                 
+                 // 从已加载进程列表中移除
+                 this.loadedProcesses.remove(modelId);
+                 this.modelPorts.remove(modelId);
+                 
+                 // 通过WebSocket广播模型停止事件
+                 //LlamaServer.sendModelStopEvent(modelId, false, "模型启动失败: " + line);
+                 
+                 // 唤醒等待的线程
+                 latch.countDown();
             }
         });
 		

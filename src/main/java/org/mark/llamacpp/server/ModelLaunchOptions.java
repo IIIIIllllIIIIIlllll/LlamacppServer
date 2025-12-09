@@ -21,6 +21,8 @@ public class ModelLaunchOptions {
     public Double presencePenalty;
     public Boolean embedding;
     public Boolean reranking;
+    public Boolean flashAttention;
+    public String extraParams;
     public String host = "0.0.0.0";
 
     public static ModelLaunchOptions fromLoadRequest(LoadModelRequest r) {
@@ -38,6 +40,8 @@ public class ModelLaunchOptions {
         o.presencePenalty = r.getPresencePenalty();
         o.embedding = r.getEmbedding();
         o.reranking = r.getReranking();
+        o.flashAttention = r.getFlashAttention();
+        o.extraParams = r.getExtraParams();
         return o;
     }
 
@@ -56,40 +60,55 @@ public class ModelLaunchOptions {
         m.put("presencePenalty", presencePenalty);
         m.put("embedding", embedding != null ? embedding : false);
         m.put("reranking", reranking != null ? reranking : false);
+        m.put("flashAttention", flashAttention != null ? flashAttention : true);
+        m.put("extraParams", extraParams);
         return m;
     }
 
     public List<String> toCmdLine(GGUFModel targetModel, int port) {
-        List<String> command = new ArrayList<>();
-        String binBase = llamaBinPath != null ? llamaBinPath.trim() : "";
-        command.add(binBase + "/llama-server");
-        command.add("-m");
-        command.add(targetModel.getPath() + "/" + targetModel.getPrimaryModel().getFileName());
-        command.add("--port");
-        command.add(String.valueOf(port));
-        if (targetModel.getMmproj() != null) {
-            command.add("--mmproj");
-            command.add(targetModel.getPath() + "/" + targetModel.getMmproj().getFileName());
-        }
-        if (ctxSize != null) { command.add("-c"); command.add(ctxSize.toString()); }
-        if (batchSize != null) { command.add("-b"); command.add(batchSize.toString()); }
-        if (ubatchSize != null) { command.add("--ubatch-size"); command.add(ubatchSize.toString()); }
-        if (noMmap != null && noMmap) { command.add("--no-mmap"); }
-        if (mlock != null && mlock) { command.add("--mlock"); }
-        if (temperature != null) { command.add("--temp"); command.add(String.valueOf(temperature)); }
-        if (topP != null) { command.add("--top-p"); command.add(String.valueOf(topP)); }
-        if (topK != null) { command.add("--top-k"); command.add(String.valueOf(topK)); }
-        if (minP != null) { command.add("--min-p"); command.add(String.valueOf(minP)); }
-        if (presencePenalty != null) { command.add("--presence-penalty"); command.add(String.valueOf(presencePenalty)); }
-        if (embedding != null && embedding) { command.add("--embedding"); }
-        if (reranking != null && reranking) { command.add("--reranking"); }
-        if (host != null && !host.isEmpty()) { command.add("--host " + host); }
-        command.add("--no-webui");
-        command.add("-fa");
-        command.add("1");
+    	List<String> command = new ArrayList<>();
+    	String binBase = llamaBinPath != null ? llamaBinPath.trim() : "";
+    	command.add(binBase + "/llama-server");
+    	command.add("-m");
+    	command.add(targetModel.getPath() + "/" + targetModel.getPrimaryModel().getFileName());
+    	command.add("--port");
+    	command.add(String.valueOf(port));
+    	if (targetModel.getMmproj() != null) {
+    		command.add("--mmproj");
+    		command.add(targetModel.getPath() + "/" + targetModel.getMmproj().getFileName());
+    	}
+    	if (ctxSize != null) { command.add("-c"); command.add(ctxSize.toString()); }
+    	if (batchSize != null) { command.add("-b"); command.add(batchSize.toString()); }
+    	if (ubatchSize != null) { command.add("--ubatch-size"); command.add(ubatchSize.toString()); }
+    	if (noMmap != null && noMmap) { command.add("--no-mmap"); }
+    	if (mlock != null && mlock) { command.add("--mlock"); }
+    	if (temperature != null) { command.add("--temp"); command.add(String.valueOf(temperature)); }
+    	if (topP != null) { command.add("--top-p"); command.add(String.valueOf(topP)); }
+    	if (topK != null) { command.add("--top-k"); command.add(String.valueOf(topK)); }
+    	if (minP != null) { command.add("--min-p"); command.add(String.valueOf(minP)); }
+    	if (presencePenalty != null) { command.add("--presence-penalty"); command.add(String.valueOf(presencePenalty)); }
+    	if (embedding != null && embedding) { command.add("--embedding"); }
+    	if (reranking != null && reranking) { command.add("--reranking"); }
+    	if (host != null && !host.isEmpty()) { command.add("--host " + host); }
+    	// Flash Attention
+    	command.add("-fa");
+    	if (flashAttention != null && !flashAttention) { command.add("0"); } else { command.add("1"); }
+    	// Extra Params
+    	if (extraParams != null && !extraParams.trim().isEmpty()) {
+    		// Split by whitespace to add as separate arguments
+    		String[] parts = extraParams.trim().split("\\s+");
+    		for (String part : parts) {
+    			if (!part.isEmpty()) {
+    				command.add(part);
+    			}
+    		}
+    	}
+    	command.add("--no-webui");
         
-        command.add("-np");
-        command.add("4");
+        //command.add("-np");
+        //command.add("4");
+        
+        //command.add("--jinja");
         
         return command;
     }
