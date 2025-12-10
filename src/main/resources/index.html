@@ -709,11 +709,12 @@
                             <label class="form-check-label" for="flashAttention">Flash Attention</label>
                         </div>
                     </div>
+                    <!--
                     <div class="form-group" id="vramEstimateGroup" style="display:none; margin-top: 0.5rem;">
                         <label class="form-label">显存估算结果</label>
                         <div class="form-control" id="vramEstimateResult" style="background-color:#f9fafb; min-height:38px; display:flex; align-items:center;"></div>
                     </div>
-                    
+                    -->
                     <details style="margin-top: 1rem; border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 0.5rem;">
                         <summary style="cursor: pointer; font-size: 0.875rem; color: var(--primary-color); font-weight: 500;">高级参数 (Temperature, Top-P, etc.)</summary>
                         <div style="padding-top: 1rem; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
@@ -1272,11 +1273,13 @@
                 return;
             }
             const ctxSize = parseInt(document.getElementById('ctxSize').value || '2048', 10);
+            const batchSize = parseInt(document.getElementById('batchSize').value || '512', 10);
             const ubatch = parseInt(document.getElementById('ubatchSize').value || '0', 10);
             const flashAttention = document.getElementById('flashAttention').checked;
             const payload = {
                 modelId,
                 ctxSize,
+                batchSize: isNaN(batchSize) || batchSize <= 0 ? null : batchSize,
                 ubatchSize: isNaN(ubatch) || ubatch <= 0 ? null : ubatch,
                 flashAttention
             };
@@ -1284,11 +1287,30 @@
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
             }).then(r => r.json()).then(res => {
                 if (res && res.success) {
-                    const mib = res.data && res.data.mib ? res.data.mib : null;
-                    if (mib) {
-                        const text = `预计显存：总计 ${mib.total.toFixed(1)} MiB（权重 ${mib.weights.toFixed(1)}，KV ${mib.kv.toFixed(1)}，计算 ${mib.compute.toFixed(1)}）`;
+                    const bytes = res.data && res.data.bytes ? res.data.bytes : null;
+                    if (bytes) {
+                         const toMiB = (val) => (val / (1024 * 1024)).toFixed(1);
+                         const total = toMiB(bytes.totalVramRequired || 0);
+                         const weights = toMiB(bytes.modelWeights || 0);
+                         const kv = toMiB(bytes.kvCache || 0);
+                         const overhead = toMiB(bytes.runtimeOverhead || 0);
+                         
+                        const text = `预计显存：总计 ${total} MiB（权重 ${weights}，KV ${kv}，其他 ${overhead}）`;
                         const hint = document.getElementById('ctxSizeVramHint');
                         if (hint) hint.textContent = text;
+                        /*
+                        // 显示结果区域
+                        const resultDiv = document.getElementById('vramEstimateResult');
+                        const groupDiv = document.getElementById('vramEstimateGroup');
+                        if (resultDiv && groupDiv) {
+                            resultDiv.textContent = text;
+                            groupDiv.style.display = 'block';
+                        } else {
+                             // Fallback
+                             const hint = document.getElementById('ctxSizeVramHint');
+                             if (hint) hint.textContent = text;
+                        }
+                        */
                     } else {
                         showToast('错误', '返回数据格式不正确', 'error');
                     }

@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.mark.llamacpp.gguf.GGUFBundle;
 import org.mark.llamacpp.server.struct.VramEstimation;
 
 /**

@@ -22,10 +22,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
+import org.mark.llamacpp.gguf.GGUFBundle;
 import org.mark.llamacpp.gguf.GGUFMetaData;
 import org.mark.llamacpp.gguf.GGUFModel;
 import org.mark.llamacpp.server.struct.ModelLaunchOptions;
-import org.mark.llamacpp.server.tools.GGUFBundle;
 import org.mark.llamacpp.server.tools.PortChecker;
 
 import com.google.gson.Gson;
@@ -280,6 +280,8 @@ public class LlamaServerManager {
 			if(primaryFile != null && primaryFile.exists()) {
 				GGUFMetaData md = GGUFMetaData.readFile(primaryFile);
 				model.setPrimaryModel(md);
+				// 将主模型元数据也添加到列表中，保持兼容性
+				model.addMetaData(md);
 			}
 			
 			// 处理mmproj文件
@@ -290,7 +292,10 @@ public class LlamaServerManager {
 				model.addMetaData(md);
 			}
 			
-			// 添加所有分卷文件的元数据
+			// 优化：不再读取所有分卷文件的元数据
+			// 分卷文件的元数据通常与主文件相同，或者只包含张量信息
+			// 逐个读取会导致严重的IO性能问题
+			/*
 			List<File> splitFiles = bundle.getSplitFiles();
 			if(splitFiles != null) {
 				for(File f : splitFiles) {
@@ -300,6 +305,7 @@ public class LlamaServerManager {
 					}
 				}
 			}
+			*/
 			
 			model.setSize(bundle.getTotalFileSize());
 			

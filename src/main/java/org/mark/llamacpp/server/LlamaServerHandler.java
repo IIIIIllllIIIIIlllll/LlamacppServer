@@ -15,6 +15,7 @@ import org.mark.llamacpp.server.struct.ApiResponse;
 import org.mark.llamacpp.server.struct.LoadModelRequest;
 import org.mark.llamacpp.server.struct.ModelLaunchOptions;
 import org.mark.llamacpp.server.struct.StopModelRequest;
+import org.mark.llamacpp.server.struct.VramEstimation;
 import org.mark.llamacpp.server.tools.VramEstimator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -236,17 +237,23 @@ public class LlamaServerHandler extends SimpleChannelInboundHandler<FullHttpRequ
 
             String modelId = json.has("modelId") ? json.get("modelId").getAsString() : null;
             Integer ctxSize = json.has("ctxSize") ? json.get("ctxSize").getAsInt() : null;
-            Integer ubatchSize = json.has("ubatchSize") ? (json.get("ubatchSize").isJsonNull() ? null : json.get("ubatchSize").getAsInt()) : null;
-            boolean flashAttention = json.has("flashAttention") && json.get("flashAttention").getAsBoolean();
-
+            Integer batchSize = json.has("batchSize") ? json.get("batchSize").getAsInt() : null;
+            Integer ubatchSize = json.has("ubatchSize") ? json.get("ubatchSize").getAsInt() : null;
+            
             if (modelId == null || modelId.trim().isEmpty()) {
                 sendJsonResponse(ctx, ApiResponse.error("缺少必需的modelId参数"));
                 return;
             }
-            if (ctxSize == null || ctxSize <= 0) {
-                ctxSize = 2048;
+            if(ctxSize == null || ctxSize == 0) {
+            	ctxSize = 2048;
             }
-
+            if (batchSize == null || batchSize <= 0) {
+            	batchSize = 512;
+            }
+            if (ubatchSize == null || ubatchSize <= 0) {
+            	ubatchSize = 512;
+            }
+            
             LlamaServerManager manager = LlamaServerManager.getInstance();
             // 确保模型列表已加载
             manager.listModel();
@@ -255,8 +262,21 @@ public class LlamaServerHandler extends SimpleChannelInboundHandler<FullHttpRequ
                 sendJsonResponse(ctx, ApiResponse.error("未找到指定模型: " + modelId));
                 return;
             }
-
-            VramEstimator.Result r = VramEstimator.estimate(model, ctxSize, ubatchSize, flashAttention);
+            
+            if (model.getPrimaryModel() == null) {
+            	 sendJsonResponse(ctx, ApiResponse.error("模型元数据不完整，无法估算显存"));
+                 return;
+            }
+            
+            VramEstimation result = VramEstimator.estimateVram(new File(model.getPrimaryModel().getFilePath()), ctxSize.intValue(), 16, batchSize.intValue(), ubatchSize.intValue());
+            // 整合一下
+            Map<String, Object> data = new HashMap<>();
+            data.put("modelId", modelId);
+            data.put("ctxSize", ctxSize);
+            data.put("bytes", result);
+            
+            /**
+            NewVramEstimator.Result r = NewVramEstimator.estimate(model, ctxSize, ubatchSize, flashAttention);
 
             Map<String, Object> data = new HashMap<>();
             data.put("modelId", modelId);
@@ -278,8 +298,9 @@ public class LlamaServerHandler extends SimpleChannelInboundHandler<FullHttpRequ
 
             data.put("bytes", bytes);
             data.put("mib", mib);
+            **/
 
-            sendJsonResponse(ctx, ApiResponse.success(data));
+            this.sendJsonResponse(ctx, ApiResponse.success(data));
         } catch (Exception e) {
             logger.error("估算显存时发生错误", e);
             sendJsonResponse(ctx, ApiResponse.error("估算显存失败: " + e.getMessage()));
