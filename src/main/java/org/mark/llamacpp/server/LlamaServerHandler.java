@@ -15,6 +15,7 @@ import org.mark.llamacpp.server.struct.ApiResponse;
 import org.mark.llamacpp.server.struct.LoadModelRequest;
 import org.mark.llamacpp.server.struct.ModelLaunchOptions;
 import org.mark.llamacpp.server.struct.StopModelRequest;
+import org.mark.llamacpp.server.tools.VramEstimator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -123,11 +124,16 @@ public class LlamaServerHandler extends SimpleChannelInboundHandler<FullHttpRequ
                 handleLoadedModelsRequest(ctx, request);
                 return;
             }
-			// 模型列表API
-			if (uri.startsWith("/api/models/list")) {
-				handleModelListRequest(ctx, request);
-				return;
-			}
+            // 模型列表API
+            if (uri.startsWith("/api/models/list")) {
+                handleModelListRequest(ctx, request);
+                return;
+            }
+            // 显存估算API
+            if (uri.startsWith("/api/models/vram/estimate")) {
+                handleVramEstimateRequest(ctx, request);
+                return;
+            }
             // 设置模型别名API
             if (uri.startsWith("/api/model/alias/set")) {
                 handleSetModelAliasRequest(ctx, request);
@@ -203,6 +209,80 @@ public class LlamaServerHandler extends SimpleChannelInboundHandler<FullHttpRequ
         } catch (Exception e) {
             logger.error("处理API请求时发生错误", e);
             this.sendJsonResponse(ctx, ApiResponse.error("服务器内部错误"));
+        }
+    }
+
+    /**
+     * 估算模型显存需求
+     */
+    private void handleVramEstimateRequest(ChannelHandlerContext ctx, FullHttpRequest request) {
+        try {
+            if (request.method() != HttpMethod.POST) {
+                sendJsonResponse(ctx, ApiResponse.error("只支持POST请求"));
+                return;
+            }
+
+            String content = request.content().toString(CharsetUtil.UTF_8);
+            if (content == null || content.trim().isEmpty()) {
+                sendJsonResponse(ctx, ApiResponse.error("请求体为空"));
+                return;
+            }
+
+            JsonObject json = gson.fromJson(content, JsonObject.class);
+            if (json == null) {
+                sendJsonResponse(ctx, ApiResponse.error("请求体解析失败"));
+                return;
+            }
+
+            String modelId = json.has("modelId") ? json.get("modelId").getAsString() : null;
+            Integer ctxSize = json.has("ctxSize") ? json.get("ctxSize").getAsInt() : null;
+            Integer ubatchSize = json.has("ubatchSize") ? (json.get("ubatchSize").isJsonNull() ? null : json.get("ubatchSize").getAsInt()) : null;
+            boolean flashAttention = json.has("flashAttention") && json.get("flashAttention").getAsBoolean();
+
+            if (modelId == null || modelId.trim().isEmpty()) {
+                sendJsonResponse(ctx, ApiResponse.error("缺少必需的modelId参数"));
+                return;
+            }
+            if (ctxSize == null || ctxSize <= 0) {
+                ctxSize = 2048;
+            }
+
+            LlamaServerManager manager = LlamaServerManager.getInstance();
+            // 确保模型列表已加载
+            manager.listModel();
+            GGUFModel model = manager.findModelById(modelId);
+            if (model == null) {
+                sendJsonResponse(ctx, ApiResponse.error("未找到指定模型: " + modelId));
+                return;
+            }
+
+            VramEstimator.Result r = VramEstimator.estimate(model, ctxSize, ubatchSize, flashAttention);
+
+            Map<String, Object> data = new HashMap<>();
+            data.put("modelId", modelId);
+            data.put("ctxSize", ctxSize);
+            data.put("ubatchSize", ubatchSize);
+            data.put("flashAttention", flashAttention);
+
+            Map<String, Object> bytes = new HashMap<>();
+            bytes.put("weights", r.getWeightsBytes());
+            bytes.put("kv", r.getKvBytes());
+            bytes.put("compute", r.getComputeBytes());
+            bytes.put("total", r.getTotalBytes());
+
+            Map<String, Object> mib = new HashMap<>();
+            mib.put("weights", r.getWeightsMiB());
+            mib.put("kv", r.getKvMiB());
+            mib.put("compute", r.getComputeMiB());
+            mib.put("total", r.getTotalMiB());
+
+            data.put("bytes", bytes);
+            data.put("mib", mib);
+
+            sendJsonResponse(ctx, ApiResponse.success(data));
+        } catch (Exception e) {
+            logger.error("估算显存时发生错误", e);
+            sendJsonResponse(ctx, ApiResponse.error("估算显存失败: " + e.getMessage()));
         }
     }
 

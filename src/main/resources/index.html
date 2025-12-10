@@ -668,6 +668,7 @@
                         <label class="form-label" for="ctxSize">上下文大小 (ctx-size)</label>
                         <input type="number" class="form-control" id="ctxSize" name="ctxSize" min="1" placeholder="例如: 2048" value="32768">
                         <small class="form-text">模型的最大上下文长度</small>
+                        <small class="form-text" id="ctxSizeVramHint" style="color: var(--success-color);"></small>
                     </div>
                     
                     <div class="settings-grid" style="height: auto; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
@@ -708,6 +709,10 @@
                             <label class="form-check-label" for="flashAttention">Flash Attention</label>
                         </div>
                     </div>
+                    <div class="form-group" id="vramEstimateGroup" style="display:none; margin-top: 0.5rem;">
+                        <label class="form-label">显存估算结果</label>
+                        <div class="form-control" id="vramEstimateResult" style="background-color:#f9fafb; min-height:38px; display:flex; align-items:center;"></div>
+                    </div>
                     
                     <details style="margin-top: 1rem; border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 0.5rem;">
                         <summary style="cursor: pointer; font-size: 0.875rem; color: var(--primary-color); font-weight: 500;">高级参数 (Temperature, Top-P, etc.)</summary>
@@ -743,6 +748,7 @@
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeModal('loadModelModal')">取消</button>
+                <button class="btn btn-secondary" onclick="estimateVram()"><i class="fas fa-memory"></i> 估算显存</button>
                 <button class="btn btn-primary" onclick="submitLoadModel()">加载模型</button>
             </div>
         </div>
@@ -1256,6 +1262,41 @@
             }).catch(e => {
                 showToast('错误', '网络请求失败', 'error');
                 submitBtn.disabled = false; submitBtn.innerHTML = '加载模型';
+            });
+        }
+
+        function estimateVram() {
+            const modelId = document.getElementById('modelId').value;
+            if (!modelId) {
+                showToast('错误', '请先选择模型', 'error');
+                return;
+            }
+            const ctxSize = parseInt(document.getElementById('ctxSize').value || '2048', 10);
+            const ubatch = parseInt(document.getElementById('ubatchSize').value || '0', 10);
+            const flashAttention = document.getElementById('flashAttention').checked;
+            const payload = {
+                modelId,
+                ctxSize,
+                ubatchSize: isNaN(ubatch) || ubatch <= 0 ? null : ubatch,
+                flashAttention
+            };
+            fetch('/api/models/vram/estimate', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+            }).then(r => r.json()).then(res => {
+                if (res && res.success) {
+                    const mib = res.data && res.data.mib ? res.data.mib : null;
+                    if (mib) {
+                        const text = `预计显存：总计 ${mib.total.toFixed(1)} MiB（权重 ${mib.weights.toFixed(1)}，KV ${mib.kv.toFixed(1)}，计算 ${mib.compute.toFixed(1)}）`;
+                        const hint = document.getElementById('ctxSizeVramHint');
+                        if (hint) hint.textContent = text;
+                    } else {
+                        showToast('错误', '返回数据格式不正确', 'error');
+                    }
+                } else {
+                    showToast('错误', (res && res.error) ? res.error : '估算失败', 'error');
+                }
+            }).catch(() => {
+                showToast('错误', '网络请求失败', 'error');
             });
         }
         
