@@ -39,19 +39,87 @@
             background-color: var(--bg-color);
             color: var(--text-primary);
             height: 100vh;
-            display: flex;
             overflow: hidden;
         }
 
-        /* Sidebar */
-        .sidebar {
-            width: 300px;
+        .app-shell {
+            display: flex;
+            height: 100vh;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        .sessions-sidebar {
+            width: 260px;
             background-color: var(--sidebar-bg);
             border-right: 1px solid var(--border-color);
             display: flex;
             flex-direction: column;
-            transition: transform 0.3s ease;
-            z-index: 20;
+            height: 100vh;
+        }
+
+        .sessions-header {
+            height: 64px;
+            padding: 0 1rem;
+            display: flex;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .new-session-btn {
+            width: 100%;
+            justify-content: center;
+        }
+
+        .sessions-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0.75rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .session-item {
+            width: 100%;
+            justify-content: flex-start;
+            border: 1px solid transparent;
+            padding: 0.625rem 0.75rem;
+        }
+
+        .session-item.active {
+            background-color: #eef2ff;
+            border-color: #c7d2fe;
+            color: var(--primary-color);
+        }
+
+        .settings-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background-color: rgba(0, 0, 0, 0.45);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+
+        .settings-modal.active {
+            display: flex;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 360px;
+            background-color: var(--sidebar-bg);
+            border: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            border-radius: var(--radius);
+            overflow: hidden;
+            max-width: calc(100vw - 2rem);
+            max-height: calc(100vh - 2rem);
+            box-shadow: var(--shadow-md);
         }
 
         .sidebar-header {
@@ -204,6 +272,8 @@
         /* Main Chat Area */
         .main-area {
             flex: 1;
+            min-width: 0;
+            height: 100vh;
             display: flex;
             flex-direction: column;
             position: relative;
@@ -233,6 +303,35 @@
             border-radius: 9999px;
             font-size: 0.875rem;
             font-weight: 500;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            min-width: 0;
+        }
+
+        .header-title {
+            font-size: 1.125rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            display: flex;
+            align-items: center;
+            gap: 0.625rem;
+            white-space: nowrap;
+        }
+
+        .header-model {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            min-width: 0;
+        }
+
+        .header-model-select {
+            width: 320px;
+            max-width: 45vw;
         }
 
         .chat-container {
@@ -550,14 +649,23 @@
             width: 100%;
         }
 
-        /* Mobile Toggle */
         .menu-toggle {
-            display: none;
+            display: inline-flex;
             background: none;
             border: none;
             font-size: 1.25rem;
             color: var(--text-secondary);
             cursor: pointer;
+            align-items: center;
+            justify-content: center;
+            width: 2.5rem;
+            height: 2.5rem;
+            border-radius: 0.5rem;
+        }
+
+        .menu-toggle:hover {
+            background-color: #f3f4f6;
+            color: var(--text-primary);
         }
         
         /* Lightbox */
@@ -602,19 +710,17 @@
         }
 
         @media (max-width: 768px) {
-            .sidebar {
-                position: fixed;
-                left: -300px;
-                height: 100%;
-                box-shadow: var(--shadow-md);
+            .header-title span {
+                display: none;
             }
-            
-            .sidebar.active {
-                transform: translateX(300px);
+
+            .header-model-select {
+                width: 200px;
+                max-width: 55vw;
             }
-            
-            .menu-toggle {
-                display: block;
+
+            .sessions-sidebar {
+                width: 220px;
             }
             
             .message-wrapper {
@@ -671,22 +777,15 @@
     </style>
 </head>
 <body>
-    <!-- Sidebar -->
-    <aside class="sidebar" id="sidebar">
-        <div class="sidebar-header">
-            <h1><i class="fas fa-robot"></i> Llama Chat</h1>
-            <button class="btn-ghost" id="close-sidebar-btn" style="margin-left: auto; display: none;">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-        <div class="sidebar-content">
-            <div class="setting-group">
-                <label for="model-selector">模型选择</label>
-                <select id="model-selector" class="form-select">
-                    <option value="" disabled selected>加载中...</option>
-                </select>
+    <div class="settings-modal" id="settings-modal" aria-hidden="true">
+        <aside class="sidebar" id="sidebar" role="dialog" aria-modal="true">
+            <div class="sidebar-header">
+                <h1><i class="fas fa-cog"></i> 设置</h1>
+                <button class="btn-ghost" id="close-settings-btn" style="margin-left: auto;">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
-
+            <div class="sidebar-content">
             <div class="setting-group">
                 <label for="system-prompt">系统提示词 (System Prompt)</label>
                 <textarea id="system-prompt" class="form-textarea" rows="4" placeholder="设定AI的角色和行为...">You are a helpful, respectful and honest assistant.</textarea>
@@ -723,64 +822,81 @@
                     <i class="fas fa-undo"></i> 重置默认设置
                 </button>
             </div>
-        </div>
-        <div class="sidebar-footer">
-            <div style="font-size: 0.75rem; color: var(--text-secondary);">
-                Llama.cpp Server<br>v1.0.0
             </div>
-        </div>
-    </aside>
+            <div class="sidebar-footer">
+                <div style="font-size: 0.75rem; color: var(--text-secondary);">
+                    Llama.cpp Server<br>v1.0.0
+                </div>
+            </div>
+        </aside>
+    </div>
 
-    <!-- Main Chat Area -->
-    <main class="main-area">
-        <div class="chat-header">
-            <div style="display: flex; align-items: center; gap: 1rem;">
-                <button class="menu-toggle" id="menu-toggle">
-                    <i class="fas fa-bars"></i>
+    <div class="app-shell">
+        <aside class="sessions-sidebar" id="sessions-sidebar">
+            <div class="sessions-header">
+                <button class="btn btn-primary new-session-btn" id="new-session-btn">
+                    <i class="fas fa-plus"></i> 新会话
                 </button>
-                <div class="model-badge" id="current-model-badge">
-                    <i class="fas fa-cube" style="margin-right: 6px;"></i>
-                    <span id="current-model-name">未选择模型</span>
-                </div>
             </div>
-            <button class="btn btn-ghost btn-danger-ghost" onclick="clearChat()" title="清空对话">
-                <i class="fas fa-trash-alt"></i>
-                <span style="display: none; margin-left: 5px;" class="desktop-only">清空</span>
-            </button>
-        </div>
+            <div class="sessions-list" id="sessions-list"></div>
+        </aside>
 
-        <div id="chat-container" class="chat-container">
-            <div class="welcome-screen" id="welcome-screen">
-                <div class="welcome-icon">
-                    <i class="fas fa-comments"></i>
+        <main class="main-area">
+            <div class="chat-header">
+                <div class="header-left">
+                    <button class="menu-toggle" id="settings-btn" title="设置">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                    <div class="header-title">
+                        <i class="fas fa-robot"></i>
+                        <span>Llama Chat</span>
+                    </div>
+                    <div class="header-model">
+                        <i class="fas fa-cube" style="color: var(--text-secondary);"></i>
+                        <select id="model-selector" class="form-select header-model-select">
+                            <option value="" disabled selected>加载中...</option>
+                        </select>
+                    </div>
                 </div>
-                <h2>欢迎使用 Llama Server Chat</h2>
-                <p>请在左侧选择一个模型开始对话</p>
-            </div>
-        </div>
-
-        <div class="input-area">
-            <div class="input-container">
-                <button class="stop-btn" id="stop-btn">
-                    <i class="fas fa-stop"></i> 停止生成
+                <button class="btn btn-ghost btn-danger-ghost" onclick="clearChat()" title="清空对话">
+                    <i class="fas fa-trash-alt"></i>
+                    <span style="display: none; margin-left: 5px;" class="desktop-only">清空</span>
                 </button>
-                <div id="input-attachments" class="input-attachments" style="display: none;"></div>
-                <div class="input-wrapper">
-                    <button class="upload-btn" onclick="document.getElementById('file-input').click()" title="上传图片">
-                        <i class="fas fa-paperclip"></i>
-                    </button>
-                    <input type="file" id="file-input" accept="image/*" multiple style="display: none;">
-                    <textarea id="message-input" placeholder="发送消息... (Shift+Enter 换行)" rows="1" disabled></textarea>
-                    <button class="send-btn" id="send-btn" disabled>
-                        <i class="fas fa-paper-plane"></i>
-                    </button>
+            </div>
+
+            <div id="chat-container" class="chat-container">
+                <div class="welcome-screen" id="welcome-screen">
+                    <div class="welcome-icon">
+                        <i class="fas fa-comments"></i>
+                    </div>
+                    <h2>欢迎使用 Llama Server Chat</h2>
+                    <p>请在顶部选择一个模型开始对话</p>
                 </div>
             </div>
-            <div class="input-info">
-                Llama.cpp Server AI 生成的内容可能不准确，请核实重要信息。
+
+            <div class="input-area">
+                <div class="input-container">
+                    <button class="stop-btn" id="stop-btn">
+                        <i class="fas fa-stop"></i> 停止生成
+                    </button>
+                    <div id="input-attachments" class="input-attachments" style="display: none;"></div>
+                    <div class="input-wrapper">
+                        <button class="upload-btn" onclick="document.getElementById('file-input').click()" title="上传图片">
+                            <i class="fas fa-paperclip"></i>
+                        </button>
+                        <input type="file" id="file-input" accept="image/*" multiple style="display: none;">
+                        <textarea id="message-input" placeholder="发送消息... (Shift+Enter 换行)" rows="1" disabled></textarea>
+                        <button class="send-btn" id="send-btn" disabled>
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="input-info">
+                    Llama.cpp Server AI 生成的内容可能不准确，请核实重要信息。
+                </div>
             </div>
-        </div>
-    </main>
+        </main>
+    </div>
     
     <!-- Lightbox -->
     <div id="lightbox" class="lightbox" onclick="closeLightbox()">
@@ -792,6 +908,8 @@
         // State
         const state = {
             currentModel: '',
+            currentSessionId: '',
+            sessions: [],
             messages: [], // Array of {role, content (string or array), id}
             isGenerating: false,
             controller: null,
@@ -806,10 +924,11 @@
             sendBtn: document.getElementById('send-btn'),
             stopBtn: document.getElementById('stop-btn'),
             welcomeScreen: document.getElementById('welcome-screen'),
-            modelBadgeName: document.getElementById('current-model-name'),
-            sidebar: document.getElementById('sidebar'),
-            menuToggle: document.getElementById('menu-toggle'),
-            closeSidebarBtn: document.getElementById('close-sidebar-btn'),
+            sessionsList: document.getElementById('sessions-list'),
+            newSessionBtn: document.getElementById('new-session-btn'),
+            settingsModal: document.getElementById('settings-modal'),
+            settingsBtn: document.getElementById('settings-btn'),
+            closeSettingsBtn: document.getElementById('close-settings-btn'),
             fileInput: document.getElementById('file-input'),
             inputAttachments: document.getElementById('input-attachments'),
             lightbox: document.getElementById('lightbox'),
@@ -828,6 +947,7 @@
         // Initialization
         document.addEventListener('DOMContentLoaded', () => {
             loadModels();
+            loadSessions();
             setupEventListeners();
             setupAutoResize();
             
@@ -864,21 +984,79 @@
             }
         }
 
+        async function loadSessions() {
+            try {
+                const response = await fetch('/api/chat/sessions/list');
+                const json = await response.json();
+                if (!json || json.success !== true || !json.data || !Array.isArray(json.data.sessions)) {
+                    renderSessions([]);
+                    return;
+                }
+                state.sessions = json.data.sessions;
+                if (!state.currentSessionId && state.sessions.length > 0) {
+                    state.currentSessionId = state.sessions[0].id;
+                }
+                renderSessions(state.sessions);
+            } catch (e) {
+                renderSessions([]);
+            }
+        }
+
+        async function createNewSession() {
+            try {
+                const response = await fetch('/api/chat/sessions/create', { method: 'POST' });
+                const json = await response.json();
+                if (!json || json.success !== true || !json.data || !json.data.id) return;
+                const session = { id: json.data.id, createdAt: json.data.createdAt };
+                state.sessions = [session, ...state.sessions];
+                state.currentSessionId = session.id;
+                renderSessions(state.sessions);
+                resetChatForSessionSwitch();
+            } catch (e) {
+            }
+        }
+
+        function renderSessions(sessions) {
+            els.sessionsList.innerHTML = '';
+            sessions.forEach((s) => {
+                const btn = document.createElement('button');
+                btn.className = 'btn btn-ghost session-item' + (s.id === state.currentSessionId ? ' active' : '');
+                btn.type = 'button';
+                btn.textContent = '会话 ' + s.id;
+                btn.dataset.sessionId = s.id;
+                btn.addEventListener('click', () => switchSession(s.id));
+                els.sessionsList.appendChild(btn);
+            });
+        }
+
+        function switchSession(sessionId) {
+            state.currentSessionId = sessionId;
+            renderSessions(state.sessions);
+            resetChatForSessionSwitch();
+        }
+
+        function resetChatForSessionSwitch() {
+            state.messages = [];
+            els.chatContainer.innerHTML = '';
+            els.chatContainer.appendChild(els.welcomeScreen);
+            if (state.currentModel) {
+                els.welcomeScreen.style.display = 'none';
+            } else {
+                els.welcomeScreen.style.display = 'flex';
+            }
+        }
+
         // Event Listeners
         function setupEventListeners() {
             // Model Change
             els.modelSelector.addEventListener('change', (e) => {
                 state.currentModel = e.target.value;
-                els.modelBadgeName.textContent = state.currentModel;
                 els.messageInput.disabled = false;
                 els.sendBtn.disabled = false;
                 els.welcomeScreen.style.display = 'none';
-                
-                // Close sidebar on mobile
-                if (window.innerWidth <= 768) {
-                    els.sidebar.classList.remove('active');
-                }
             });
+
+            els.newSessionBtn.addEventListener('click', createNewSession);
 
             // Input Handling
             els.messageInput.addEventListener('keydown', (e) => {
@@ -896,21 +1074,31 @@
             // File Upload
             els.fileInput.addEventListener('change', handleFileUpload);
 
-            // Sidebar Toggles
-            els.menuToggle.addEventListener('click', () => {
-                els.sidebar.classList.add('active');
-                els.closeSidebarBtn.style.display = 'block';
+            els.settingsBtn.addEventListener('click', openSettings);
+            els.closeSettingsBtn.addEventListener('click', closeSettings);
+            els.settingsModal.addEventListener('click', (e) => {
+                if (e.target === els.settingsModal) closeSettings();
             });
-            
-            els.closeSidebarBtn.addEventListener('click', () => {
-                els.sidebar.classList.remove('active');
-                els.closeSidebarBtn.style.display = 'none';
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && els.settingsModal.classList.contains('active')) {
+                    closeSettings();
+                }
             });
 
             // Settings Sliders
             els.tempInput.addEventListener('input', (e) => els.tempVal.textContent = e.target.value);
             els.topPInput.addEventListener('input', (e) => els.topPVal.textContent = e.target.value);
             els.nPredict.addEventListener('input', (e) => els.nPredictVal.textContent = e.target.value);
+        }
+
+        function openSettings() {
+            els.settingsModal.classList.add('active');
+            els.settingsModal.setAttribute('aria-hidden', 'false');
+        }
+
+        function closeSettings() {
+            els.settingsModal.classList.remove('active');
+            els.settingsModal.setAttribute('aria-hidden', 'true');
         }
 
         // Auto Resize Textarea

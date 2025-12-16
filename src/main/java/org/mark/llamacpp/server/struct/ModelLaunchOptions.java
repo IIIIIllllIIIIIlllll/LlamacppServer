@@ -112,7 +112,7 @@ public class ModelLaunchOptions {
     			}
     		}
     	}
-    	command.add("--no-webui");
+    	//command.add("--no-webui");
     	
     	//command.add("--slot-prompt-similarity");
     	//command.add("1.0");
