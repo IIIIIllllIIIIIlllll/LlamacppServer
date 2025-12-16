@@ -24,6 +24,7 @@ public class ConsoleBroadcastOutputStream extends OutputStream {
         if (c == '\n') {
             String line = buffer.toString();
             LlamaServer.sendConsoleLineEvent(null, line);
+            LlamaServer.out.println(line);
             buffer.setLength(0);
         } else if (c != '\r') {
             buffer.append(c);
@@ -41,6 +42,7 @@ public class ConsoleBroadcastOutputStream extends OutputStream {
                 if (i > start) buffer.append(text, start, i);
                 String line = buffer.toString();
                 LlamaServer.sendConsoleLineEvent(null, line);
+                LlamaServer.out.println(line);
                 buffer.setLength(0);
                 start = i + 1;
             } else if (c == '\r') {

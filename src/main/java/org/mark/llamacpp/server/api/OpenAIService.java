@@ -18,10 +18,12 @@ import java.util.concurrent.Executors;
 import org.mark.llamacpp.gguf.GGUFModel;
 import org.mark.llamacpp.server.LlamaCppProcess;
 import org.mark.llamacpp.server.LlamaServerManager;
+import org.mark.llamacpp.server.MessageFilter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import io.netty.buffer.ByteBuf;
@@ -233,6 +235,10 @@ public class OpenAIService {
 				return;
 			}
 			
+			// 在这加入特殊处理，判断是否存在特殊字符。
+			String body = MessageFilter.filter(ctx, modelName, requestJson);
+			if(body == null)
+				return;
 			// 获取模型端口
 			Integer modelPort = manager.getModelPort(modelName);
 			if (modelPort == null) {
@@ -240,7 +246,7 @@ public class OpenAIService {
 				return;
 			}
 			// 转发请求到对应的llama.cpp进程
-			this.forwardRequestToLlamaCpp(ctx, request, modelName, modelPort, "/v1/chat/completions", isStream);
+			this.forwardRequestToLlamaCpp(ctx, request, modelName, modelPort, "/v1/chat/completions", isStream, body);
 		} catch (Exception e) {
 			logger.error("处理OpenAI聊天补全请求时发生错误", e);
 			this.sendOpenAIErrorResponseWithCleanup(ctx, 500, null, e.getMessage(), null);
@@ -295,7 +301,9 @@ public class OpenAIService {
 				this.sendOpenAIErrorResponseWithCleanup(ctx, 404, null, "Model not found: " + modelName, "model");
 				return;
 			}
-
+			
+			// 检查输入的内容是否包含特殊字符
+			System.out.println("1111111111111111111111111111111111111111111111111111" + requestJson.get("messages"));
 			// 获取模型端口
 			Integer modelPort = manager.getModelPort(modelName);
 			if (modelPort == null) {
@@ -303,7 +311,7 @@ public class OpenAIService {
 				return;
 			}
 			// 转发请求到对应的llama.cpp进程
-			forwardRequestToLlamaCpp(ctx, request, modelName, modelPort, "/v1/completions", isStream);
+			this.forwardRequestToLlamaCpp(ctx, request, modelName, modelPort, "/v1/completions", isStream, "");
 		} catch (Exception e) {
 			logger.error("处理OpenAI文本补全请求时发生错误", e);
 			this.sendOpenAIErrorResponseWithCleanup(ctx, 500, null, e.getMessage(), null);
@@ -345,7 +353,7 @@ public class OpenAIService {
 				this.sendOpenAIErrorResponseWithCleanup(ctx, 500, null, "Model port not found: " + modelName, null);
 				return;
 			}
-			this.forwardRequestToLlamaCpp(ctx, request, modelName, modelPort, "/v1/embeddings", false);
+			this.forwardRequestToLlamaCpp(ctx, request, modelName, modelPort, "/v1/embeddings", false, request.content().toString(StandardCharsets.UTF_8));
 		} catch (Exception e) {
 			logger.error("处理OpenAI嵌入请求时发生错误", e);
 			this.sendOpenAIErrorResponseWithCleanup(ctx, 500, null, e.getMessage(), null);
@@ -356,9 +364,8 @@ public class OpenAIService {
 	/**
 	 * 转发请求到对应的llama.cpp进程
 	 */
-	private void forwardRequestToLlamaCpp(ChannelHandlerContext ctx, FullHttpRequest request, String modelName, int port, String endpoint, boolean isStream) {
+	private void forwardRequestToLlamaCpp(ChannelHandlerContext ctx, FullHttpRequest request, String modelName, int port, String endpoint, boolean isStream, String requestBody) {
 		// 在异步执行前先读取请求体，避免ByteBuf引用计数问题
-		String requestBody;
 		HttpMethod method = request.method();
 		// 复制请求头，避免在异步任务中访问已释放的请求对象
 		Map<String, String> headers = new HashMap<>();
@@ -366,10 +373,11 @@ public class OpenAIService {
 			headers.put(entry.getKey(), entry.getValue());
 		}
 		
+		System.err.println("发送消息：" + requestBody);
+		
 		try {
 			// 使用retain()增加引用计数，确保在异步任务中可以安全访问
 			request.content().retain();
-			requestBody = request.content().toString(CharsetUtil.UTF_8);
 			logger.info("转发请求到llama.cpp进程: {} {} 端口: {} 请求体长度: {}", method.name(), endpoint, port, requestBody.length());
 		} catch (Exception e) {
 			logger.error("读取请求体时发生错误", e);

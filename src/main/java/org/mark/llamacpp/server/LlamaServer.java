@@ -50,7 +50,19 @@ public class LlamaServer {
     private static final Path CONSOLE_LOG_PATH = Paths.get("logs", "console.log");
     private static final String WEBSOCKET_PATH = "/ws";
     
+    
+    public static final String SLOTS_SAVE_KEYWORD = "/SLOTSAVE";
+    
+    
+    public static final String SLOTS_LOAD_KEYWORD = "/SLOTLOAD";
+    
     private static final Gson GSON = new Gson();
+    
+    
+    public static final PrintStream out = System.out;
+    
+    public static final PrintStream err = System.err;
+    
     
     public static void main(String[] args) {
         try {
@@ -299,5 +311,24 @@ public class LlamaServer {
 		String json = GSON.toJson(cfg);
 		Files.write(configFile, json.getBytes(StandardCharsets.UTF_8));
 		logger.info("llama.cpp配置已保存到文件: {}", configFile.toString());
+	}
+	
+	
+	/**
+	 * 	保存指定的KV缓存
+	 * @param model
+	 * @param slots
+	 */
+	public synchronized static void slotsSave(String model, int slots) {
+		System.err.println("特殊操作：保存");
+	}
+	
+	/**
+	 * 	读取指定的KV缓存
+	 * @param model
+	 * @param slots
+	 */
+	public synchronized static void slotsLoad(String model, int slots) {
+		System.err.println("特殊操作：读取");
 	}
 }
