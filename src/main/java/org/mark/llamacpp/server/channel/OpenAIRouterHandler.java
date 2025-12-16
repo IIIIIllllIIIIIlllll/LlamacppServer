@@ -28,7 +28,6 @@ public class OpenAIRouterHandler extends SimpleChannelInboundHandler<FullHttpReq
 	 */
 	private OpenAIService openAIServerHandler = new OpenAIService();
 	
-	
 	public OpenAIRouterHandler() {
 
 	}
@@ -52,7 +51,7 @@ public class OpenAIRouterHandler extends SimpleChannelInboundHandler<FullHttpReq
 				return;
 			}
 			// 聊天补全
-			if (uri.startsWith("/v1/chat/completions")) {
+			if (uri.startsWith("/v1/chat/completions") || uri.startsWith("/v1/chat/completion")) {
 				this.openAIServerHandler.handleOpenAIChatCompletionsRequest(ctx, request);
 				return;
 			}

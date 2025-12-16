@@ -25,6 +25,7 @@ public class ModelLaunchOptions {
     public Boolean flashAttention;
     public String extraParams;
     public String host = "0.0.0.0";
+    public String slotSavePath;
 
     public static ModelLaunchOptions fromLoadRequest(LoadModelRequest r) {
         ModelLaunchOptions o = new ModelLaunchOptions();
@@ -44,6 +45,7 @@ public class ModelLaunchOptions {
         o.reranking = r.getReranking();
         o.flashAttention = r.getFlashAttention();
         o.extraParams = r.getExtraParams();
+        o.slotSavePath = r.getSlotSavePath();
         return o;
     }
 
@@ -65,6 +67,7 @@ public class ModelLaunchOptions {
         m.put("reranking", reranking != null ? reranking : false);
         m.put("flashAttention", flashAttention != null ? flashAttention : true);
         m.put("extraParams", extraParams);
+        m.put("slotSavePath", slotSavePath);
         return m;
     }
 
@@ -94,6 +97,7 @@ public class ModelLaunchOptions {
     	if (embedding != null && embedding) { command.add("--embedding"); }
     	if (reranking != null && reranking) { command.add("--reranking"); }
     	if (host != null && !host.isEmpty()) { command.add("--host " + host); }
+    	if (slotSavePath != null && !slotSavePath.trim().isEmpty()) { command.add("--slot-save-path"); command.add(slotSavePath.trim()); }
     	// Flash Attention
     	command.add("-fa");
     	if (flashAttention != null && !flashAttention) { command.add("0"); } else { command.add("1"); }

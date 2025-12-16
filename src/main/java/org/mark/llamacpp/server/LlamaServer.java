@@ -36,9 +36,8 @@ import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler;
 import io.netty.handler.stream.ChunkedWriteHandler;
 
 
-
 /**
- * 	private static final Gson gson = new Gson();
+ * 	程序的入口。
  */
 public class LlamaServer {
     

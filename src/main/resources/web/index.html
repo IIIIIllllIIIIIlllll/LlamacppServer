@@ -390,6 +390,8 @@
             border: 1px solid var(--border-color);
         }
         .modal-content.model-detail { width: 95%; max-width: 1000px; }
+        .modal-content.slots-modal { width: 95%; max-width: 1200px; max-height: 85vh; }
+        #slotsModal .modal-body { overflow: hidden; display: flex; flex-direction: column; }
 
         @keyframes slideIn {
             from { opacity: 0; transform: scale(0.95); }
@@ -1326,13 +1328,12 @@
                         actionButtons = `
                             <button class="btn-icon danger" onclick="stopModel('${model.id}')" title="停止"><i class="fas fa-stop"></i></button>
                             <button class="btn-icon" onclick="viewModelDetails('${model.id}')" title="详情"><i class="fas fa-info-circle"></i></button>
-                            <button class="btn-icon" onclick="openModelBenchmarkDialog(decodeURIComponent('${encodeURIComponent(model.id)}'), decodeURIComponent('${encodeURIComponent(displayName)}'))" title="性能测试"><i class="fas fa-play"></i></button>
                             <button class="btn-icon" onclick="openModelBenchmarkList(decodeURIComponent('${encodeURIComponent(model.id)}'), decodeURIComponent('${encodeURIComponent(displayName)}'))" title="查看测试结果"><i class="fas fa-list"></i></button>
                             <button class="btn-icon" onclick="viewModelConfig('${model.id}')" title="查看配置"><i class="fas fa-cog"></i></button>
+                            <button class="btn-icon" onclick="openSlotsModal(decodeURIComponent('${encodeURIComponent(model.id)}'), decodeURIComponent('${encodeURIComponent(displayName)}'))" title="缓存管理"><i class="fas fa-database"></i></button>
                         `;
                     } else {
                         actionButtons = `
-                            <button class="btn-icon" onclick="openModelBenchmarkDialog(decodeURIComponent('${encodeURIComponent(model.id)}'), decodeURIComponent('${encodeURIComponent(displayName)}'))" title="性能测试"><i class="fas fa-play"></i></button>
                             <button class="btn-icon" onclick="openModelBenchmarkList(decodeURIComponent('${encodeURIComponent(model.id)}'), decodeURIComponent('${encodeURIComponent(displayName)}'))" title="查看测试结果"><i class="fas fa-list"></i></button>
                         `;
                     }
@@ -1551,7 +1552,153 @@
                 showToast('错误', '网络请求失败', 'error');
             });
         }
-        
+
+        function openSlotsModal(modelId, displayName) {
+            const modalId = 'slotsModal';
+            let modal = document.getElementById(modalId);
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = modalId;
+                modal.className = 'modal';
+                modal.innerHTML = `
+                    <div class="modal-content slots-modal">
+                        <div class="modal-header">
+                            <h3 class="modal-title">缓存管理 - ${displayName}</h3>
+                            <button class="modal-close" onclick="closeModal('${modalId}')">&times;</button>
+                        </div>
+                        <div class="modal-body" id="${modalId}Content">
+                            <div style="padding: 12px;">加载中...</div>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="btn btn-secondary" onclick="closeModal('${modalId}')">关闭</button>
+                            <button class="btn btn-primary" onclick="saveSelectedSlot('${modelId}')">保存</button>
+                            <button class="btn btn-primary" onclick="fetchSlotsForModel('${modelId}')">刷新</button>
+                        </div>
+                    </div>`;
+                document.body.appendChild(modal);
+            }
+            modal.classList.add('show');
+            fetchSlotsForModel(modelId);
+        }
+
+        function fetchSlotsForModel(modelId) {
+            const container = document.getElementById('slotsModalContent');
+            fetch(`/api/models/solts/get?modelId=${encodeURIComponent(modelId)}`)
+                .then(r => r.json())
+                .then(d => {
+                    if (!d.success) {
+                        const el = document.getElementById('slotsModalContent') || document.getElementById('slotsModal').querySelector('.modal-body');
+                        if (el) el.innerHTML = `<div class="empty-state"><div class="empty-state-icon"><i class="fas fa-exclamation-triangle"></i></div><div class="empty-state-title">加载失败</div><div class="empty-state-text">${d.error || '未知错误'}</div></div>`;
+                        return;
+                    }
+                    const slots = (d.data && d.data.slots) ? d.data.slots : [];
+                    renderSlotsContent(slots);
+                })
+                .catch(e => {
+                    const el = document.getElementById('slotsModalContent') || document.getElementById('slotsModal').querySelector('.modal-body');
+                    if (el) el.innerHTML = `<div class="empty-state"><div class="empty-state-icon"><i class="fas fa-exclamation-triangle"></i></div><div class="empty-state-title">网络错误</div><div class="empty-state-text">${e.message || ''}</div></div>`;
+                });
+        }
+
+        function saveSelectedSlot(modelId) {
+            const selectEl = document.getElementById('slotSelect');
+            const slots = window.__slotsData || [];
+            if (!selectEl || !slots.length) {
+                showToast('错误', '未找到可保存的Slot', 'error');
+                return;
+            }
+            const idx = parseInt(selectEl.value, 10) || 0;
+            const slot = slots[idx];
+            if (!slot && idx < 0) {
+                showToast('错误', '未选择有效的Slot', 'error');
+                return;
+            }
+            let slotId = slot && slot.id !== undefined ? slot.id : idx;
+            slotId = parseInt(slotId, 10);
+            if (Number.isNaN(slotId)) slotId = idx;
+            const d = new Date();
+            const pad = (n) => String(n).padStart(2, '0');
+            const ts = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+            const safeModelId = String(modelId).replace(/[^a-zA-Z0-9._-]/g, '_');
+            const filename = `${safeModelId}_${ts}.bin`;
+            fetch('/api/models/solts/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ modelId, slotId, filename })
+            }).then(r => r.json()).then(res => {
+                if (res && res.success) {
+                    showToast('成功', `已保存：${filename}`, 'success');
+                } else {
+                    showToast('错误', (res && res.error) ? res.error : '保存失败', 'error');
+                }
+            }).catch(() => {
+                showToast('错误', '网络请求失败', 'error');
+            });
+        }
+
+        function renderSlotsContent(slots) {
+            const modal = document.getElementById('slotsModal');
+            const body = document.getElementById('slotsModalContent') || (modal ? modal.querySelector('.modal-body') : null);
+            if (!body) return;
+            if (!slots || !slots.length) {
+                body.innerHTML = `<div class="empty-state"><div class="empty-state-icon"><i class="fas fa-database"></i></div><div class="empty-state-title">无可用Slot</div><div class="empty-state-text">当前模型没有可用的处理槽位</div></div>`;
+                return;
+            }
+            window.__slotsData = slots;
+            const prevIndex = (() => {
+                const sel = document.getElementById('slotSelect');
+                if (sel && sel.value !== '') {
+                    const v = parseInt(sel.value, 10);
+                    if (!Number.isNaN(v)) return v;
+                }
+                return 0;
+            })();
+            let html = '';
+            html += `<div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">`;
+            html += `<label class="form-label" for="slotSelect" style="margin:0;">选择 Slot</label>`;
+            html += `<select class="form-control" id="slotSelect" style="max-width:320px;">`;
+            slots.forEach((s, idx) => {
+                const id = s.id !== undefined ? s.id : idx;
+                const running = s.is_processing ? '处理中' : '空闲';
+                const nctx = s.n_ctx !== undefined ? s.n_ctx : '';
+                html += `<option value="${idx}">ID ${id} · ${running} · ctx ${nctx}</option>`;
+            });
+            html += `</select>`;
+            html += `</div>`;
+            html += `<pre id="slotJsonViewer" style="flex:1; min-height:0; overflow:auto; font-size:13px; background:#111827; color:#e5e7eb; padding:10px; border-radius:0.75rem;"></pre>`;
+            body.id = 'slotsModalContent';
+            body.innerHTML = html;
+            const selectEl = document.getElementById('slotSelect');
+            if (selectEl) {
+                const idx = Math.min(Math.max(prevIndex, 0), slots.length - 1);
+                selectEl.selectedIndex = idx;
+                selectEl.onchange = updateSlotJsonViewer;
+            }
+            updateSlotJsonViewer();
+        }
+
+        function updateSlotJsonViewer() {
+            const slots = window.__slotsData || [];
+            const selectEl = document.getElementById('slotSelect');
+            const viewer = document.getElementById('slotJsonViewer');
+            if (!selectEl || !viewer || !slots.length) return;
+            const idx = parseInt(selectEl.value, 10) || 0;
+            const slot = slots[idx];
+            if (!slot) {
+                viewer.textContent = '';
+                return;
+            }
+            try {
+                viewer.textContent = JSON.stringify(slot, null, 2);
+            } catch (e) {
+                viewer.textContent = '';
+            }
+        }
+
+        function escapeHtml(str) {
+            return String(str).replace(/[&<>"']/g, function(m) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]); });
+        }
+
         function showModelLoadingState(modelId) {
              let loadingToast = document.getElementById('loading-toast-' + modelId);
             if (!loadingToast) {

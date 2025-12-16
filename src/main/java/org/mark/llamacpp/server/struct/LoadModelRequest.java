@@ -44,6 +44,7 @@ public class LoadModelRequest {
     private Boolean reranking;
     private Boolean flashAttention;
     private String extraParams;
+    private String slotSavePath;
     
     public LoadModelRequest() {
     }
@@ -127,6 +128,8 @@ public class LoadModelRequest {
     
     public String getExtraParams() { return extraParams; }
     public void setExtraParams(String extraParams) { this.extraParams = extraParams; }
+    public String getSlotSavePath() { return slotSavePath; }
+    public void setSlotSavePath(String slotSavePath) { this.slotSavePath = slotSavePath; }
 
     @Override
     public String toString() {
@@ -148,6 +151,7 @@ public class LoadModelRequest {
                 ", reranking=" + reranking +
                 ", flashAttention=" + flashAttention +
                 ", extraParams='" + extraParams + '\'' +
+                ", slotSavePath='" + slotSavePath + '\'' +
                 '}';
     }
 }

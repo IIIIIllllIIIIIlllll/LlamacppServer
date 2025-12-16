@@ -5,9 +5,12 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.io.RandomAccessFile;
 import java.net.URL;
 import java.net.URLDecoder;
+import java.net.HttpURLConnection;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -193,6 +196,28 @@ public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequ
 			this.handleModelConfigSetRequest(ctx, request);
 			return;
 		}
+		// 查询对应模型的/solts接口
+		if (uri.startsWith("/api/models/solts/get")) {
+			this.handleModelSoltsGet(ctx, request);
+			return;
+		}
+		// 对应URL-POST：/slots/{solt_id}?action=save
+		if (uri.startsWith("/api/models/solts/save")) {
+			this.handleModelSoltsSave(ctx, request);
+			return;
+		}
+		// 对应URL-POST：/slots/{solt_id}?action=load
+		if (uri.startsWith("/api/models/solts/load")) {
+			this.handleModelSoltsLoad(ctx, request);
+			return;
+		}
+		// 对应URL-POST：/metrics
+		if(uri.startsWith("")) {
+			
+			
+		}
+		
+		
 		// 停止服务API
 		if (uri.startsWith("/api/shutdown")) {
 			this.handleShutdownRequest(ctx, request);
@@ -236,6 +261,293 @@ public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequ
 		}
 
 		ctx.fireChannelRead(request.retain());
+	}
+	
+	/**
+	 * 	获取指定模型的slots信息
+	 */
+	private void handleModelSoltsGet(ChannelHandlerContext ctx, FullHttpRequest request) {
+		try {
+			if (request.method() != HttpMethod.GET) {
+				sendJsonResponse(ctx, ApiResponse.error("只支持GET请求"));
+				return;
+			}
+			String query = request.uri();
+			String modelId = null;
+			String failOnNoSlot = null;
+			if (query.contains("?")) {
+				String q = query.substring(query.indexOf("?") + 1);
+				// modelId
+				if (q.contains("modelId=")) {
+					String tmp = q.substring(q.indexOf("modelId=") + 8);
+					if (tmp.contains("&")) tmp = tmp.substring(0, tmp.indexOf("&"));
+					modelId = URLDecoder.decode(tmp, "UTF-8");
+				}
+				// fail_on_no_slot
+				if (q.contains("fail_on_no_slot=")) {
+					String tmp = q.substring(q.indexOf("fail_on_no_slot=") + 16);
+					if (tmp.contains("&")) tmp = tmp.substring(0, tmp.indexOf("&"));
+					failOnNoSlot = URLDecoder.decode(tmp, "UTF-8");
+				}
+			}
+			if (modelId == null || modelId.trim().isEmpty()) {
+				sendJsonResponse(ctx, ApiResponse.error("缺少必需的modelId参数"));
+				return;
+			}
+			LlamaServerManager manager = LlamaServerManager.getInstance();
+			if (!manager.getLoadedProcesses().containsKey(modelId)) {
+				sendJsonResponse(ctx, ApiResponse.error("模型未加载: " + modelId));
+				return;
+			}
+			Integer port = manager.getModelPort(modelId);
+			if (port == null) {
+				sendJsonResponse(ctx, ApiResponse.error("未找到模型端口: " + modelId));
+				return;
+			}
+			String endpoint = "/slots";
+			if (failOnNoSlot != null && !failOnNoSlot.isEmpty()) {
+				endpoint += "?fail_on_no_slot=" + failOnNoSlot;
+			}
+			String targetUrl = String.format("http://localhost:%d%s", port, endpoint);
+			URL url = URI.create(targetUrl).toURL();
+			HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+			connection.setRequestMethod("GET");
+			connection.setConnectTimeout(30000);
+			connection.setReadTimeout(30000);
+			int responseCode = connection.getResponseCode();
+			String responseBody;
+			if (responseCode >= 200 && responseCode < 300) {
+				try (BufferedReader br = new BufferedReader(new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
+					StringBuilder sb = new StringBuilder();
+					String line;
+					while ((line = br.readLine()) != null) {
+						sb.append(line);
+					}
+					responseBody = sb.toString();
+				}
+				Object parsed = gson.fromJson(responseBody, Object.class);
+				Map<String, Object> data = new HashMap<>();
+				data.put("modelId", modelId);
+				data.put("slots", parsed);
+				sendJsonResponse(ctx, ApiResponse.success(data));
+			} else {
+				try (BufferedReader br = new BufferedReader(new InputStreamReader(connection.getErrorStream(), StandardCharsets.UTF_8))) {
+					StringBuilder sb = new StringBuilder();
+					String line;
+					while ((line = br.readLine()) != null) {
+						sb.append(line);
+					}
+					responseBody = sb.toString();
+				}
+				sendJsonResponse(ctx, ApiResponse.error("获取slots失败: " + responseBody));
+			}
+			connection.disconnect();
+		} catch (Exception e) {
+			logger.error("获取slots时发生错误", e);
+			sendJsonResponse(ctx, ApiResponse.error("获取slots失败: " + e.getMessage()));
+		}
+	}
+	
+	/**
+	 * 	保存指定模型指定slot的缓存
+	 */
+	private void handleModelSoltsSave(ChannelHandlerContext ctx, FullHttpRequest request) {
+		try {
+			if (request.method() != HttpMethod.POST) {
+				sendJsonResponse(ctx, ApiResponse.error("只支持POST请求"));
+				return;
+			}
+			String content = request.content().toString(CharsetUtil.UTF_8);
+			if (content == null || content.trim().isEmpty()) {
+				sendJsonResponse(ctx, ApiResponse.error("请求体为空"));
+				return;
+			}
+			JsonObject json = gson.fromJson(content, JsonObject.class);
+			if (json == null) {
+				sendJsonResponse(ctx, ApiResponse.error("请求体解析失败"));
+				return;
+			}
+			String modelId = json.has("modelId") ? json.get("modelId").getAsString() : null;
+			Integer slotId = null;
+			if (json.has("slotId")) {
+				slotId = json.get("slotId").getAsInt();
+			}
+			String filename = json.has("filename") ? json.get("filename").getAsString() : null;
+			if (modelId == null || modelId.trim().isEmpty()) {
+				sendJsonResponse(ctx, ApiResponse.error("缺少必需的modelId参数"));
+				return;
+			}
+			if (slotId == null) {
+				sendJsonResponse(ctx, ApiResponse.error("缺少必需的slotId参数"));
+				return;
+			}
+			if (filename == null || filename.trim().isEmpty()) {
+				sendJsonResponse(ctx, ApiResponse.error("缺少必需的filename参数"));
+				return;
+			}
+			filename = filename.trim();
+			if (!filename.matches("[a-zA-Z0-9._\\-]+")) {
+				sendJsonResponse(ctx, ApiResponse.error("文件名不合法"));
+				return;
+			}
+			LlamaServerManager manager = LlamaServerManager.getInstance();
+			if (!manager.getLoadedProcesses().containsKey(modelId)) {
+				sendJsonResponse(ctx, ApiResponse.error("模型未加载: " + modelId));
+				return;
+			}
+			Integer port = manager.getModelPort(modelId);
+			if (port == null) {
+				sendJsonResponse(ctx, ApiResponse.error("未找到模型端口: " + modelId));
+				return;
+			}
+			String endpoint = String.format("/slots/%d?action=save", slotId.intValue());
+			String targetUrl = String.format("http://localhost:%d%s", port, endpoint);
+			URL url = URI.create(targetUrl).toURL();
+			HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+			connection.setRequestMethod("POST");
+			connection.setDoOutput(true);
+			connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+			connection.setConnectTimeout(36000 * 1000);
+			connection.setReadTimeout(36000 * 1000);
+			JsonObject body = new JsonObject();
+			body.addProperty("filename", filename);
+			byte[] input = body.toString().getBytes(StandardCharsets.UTF_8);
+			try (OutputStream os = connection.getOutputStream()) {
+				os.write(input, 0, input.length);
+			}
+			int responseCode = connection.getResponseCode();
+			String responseBody;
+			if (responseCode >= 200 && responseCode < 300) {
+				try (BufferedReader br = new BufferedReader(new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
+					StringBuilder sb = new StringBuilder();
+					String line;
+					while ((line = br.readLine()) != null) {
+						sb.append(line);
+					}
+					responseBody = sb.toString();
+				}
+				Object parsed = gson.fromJson(responseBody, Object.class);
+				Map<String, Object> data = new HashMap<>();
+				data.put("modelId", modelId);
+				data.put("result", parsed);
+				sendJsonResponse(ctx, ApiResponse.success(data));
+			} else {
+				try (BufferedReader br = new BufferedReader(new InputStreamReader(connection.getErrorStream(), StandardCharsets.UTF_8))) {
+					StringBuilder sb = new StringBuilder();
+					String line;
+					while ((line = br.readLine()) != null) {
+						sb.append(line);
+					}
+					responseBody = sb.toString();
+				}
+				sendJsonResponse(ctx, ApiResponse.error("保存slot失败: " + responseBody));
+			}
+			connection.disconnect();
+		} catch (Exception e) {
+			logger.error("保存slot缓存时发生错误", e);
+			sendJsonResponse(ctx, ApiResponse.error("保存slot失败: " + e.getMessage()));
+		}
+	}
+	
+	/**
+	 * 	加载指定模型指定slot的缓存
+	 */
+	private void handleModelSoltsLoad(ChannelHandlerContext ctx, FullHttpRequest request) {
+		try {
+			if (request.method() != HttpMethod.POST) {
+				sendJsonResponse(ctx, ApiResponse.error("只支持POST请求"));
+				return;
+			}
+			String content = request.content().toString(CharsetUtil.UTF_8);
+			if (content == null || content.trim().isEmpty()) {
+				sendJsonResponse(ctx, ApiResponse.error("请求体为空"));
+				return;
+			}
+			JsonObject json = gson.fromJson(content, JsonObject.class);
+			if (json == null) {
+				sendJsonResponse(ctx, ApiResponse.error("请求体解析失败"));
+				return;
+			}
+			String modelId = json.has("modelId") ? json.get("modelId").getAsString() : null;
+			Integer slotId = null;
+			if (json.has("slotId")) {
+				slotId = json.get("slotId").getAsInt();
+			}
+			String filename = json.has("filename") ? json.get("filename").getAsString() : null;
+			if (modelId == null || modelId.trim().isEmpty()) {
+				sendJsonResponse(ctx, ApiResponse.error("缺少必需的modelId参数"));
+				return;
+			}
+			if (slotId == null) {
+				sendJsonResponse(ctx, ApiResponse.error("缺少必需的slotId参数"));
+				return;
+			}
+			if (filename == null || filename.trim().isEmpty()) {
+				sendJsonResponse(ctx, ApiResponse.error("缺少必需的filename参数"));
+				return;
+			}
+			filename = filename.trim();
+			if (!filename.matches("[a-zA-Z0-9._\\-]+")) {
+				sendJsonResponse(ctx, ApiResponse.error("文件名不合法"));
+				return;
+			}
+			LlamaServerManager manager = LlamaServerManager.getInstance();
+			if (!manager.getLoadedProcesses().containsKey(modelId)) {
+				sendJsonResponse(ctx, ApiResponse.error("模型未加载: " + modelId));
+				return;
+			}
+			Integer port = manager.getModelPort(modelId);
+			if (port == null) {
+				sendJsonResponse(ctx, ApiResponse.error("未找到模型端口: " + modelId));
+				return;
+			}
+			String endpoint = String.format("/slots/%d?action=restore", slotId.intValue());
+			String targetUrl = String.format("http://localhost:%d%s", port, endpoint);
+			URL url = URI.create(targetUrl).toURL();
+			HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+			connection.setRequestMethod("POST");
+			connection.setDoOutput(true);
+			connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+			connection.setConnectTimeout(36000 * 1000);
+			connection.setReadTimeout(36000 * 1000);
+			JsonObject body = new JsonObject();
+			body.addProperty("filename", filename);
+			byte[] input = body.toString().getBytes(StandardCharsets.UTF_8);
+			try (OutputStream os = connection.getOutputStream()) {
+				os.write(input, 0, input.length);
+			}
+			int responseCode = connection.getResponseCode();
+			String responseBody;
+			if (responseCode >= 200 && responseCode < 300) {
+				try (BufferedReader br = new BufferedReader(new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
+					StringBuilder sb = new StringBuilder();
+					String line;
+					while ((line = br.readLine()) != null) {
+						sb.append(line);
+					}
+					responseBody = sb.toString();
+				}
+				Object parsed = gson.fromJson(responseBody, Object.class);
+				Map<String, Object> data = new HashMap<>();
+				data.put("modelId", modelId);
+				data.put("result", parsed);
+				sendJsonResponse(ctx, ApiResponse.success(data));
+			} else {
+				try (BufferedReader br = new BufferedReader(new InputStreamReader(connection.getErrorStream(), StandardCharsets.UTF_8))) {
+					StringBuilder sb = new StringBuilder();
+					String line;
+					while ((line = br.readLine()) != null) {
+						sb.append(line);
+					}
+					responseBody = sb.toString();
+				}
+				sendJsonResponse(ctx, ApiResponse.error("加载slot失败: " + responseBody));
+			}
+			connection.disconnect();
+		} catch (Exception e) {
+			logger.error("加载slot缓存时发生错误", e);
+			sendJsonResponse(ctx, ApiResponse.error("加载slot失败: " + e.getMessage()));
+		}
 	}
 	
 	
