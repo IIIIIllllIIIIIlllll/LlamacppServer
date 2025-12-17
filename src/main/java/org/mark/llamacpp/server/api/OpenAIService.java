@@ -373,16 +373,9 @@ public class OpenAIService {
 		for (Map.Entry<String, String> entry : request.headers()) {
 			headers.put(entry.getKey(), entry.getValue());
 		}
-		
-		try {
-			// 使用retain()增加引用计数，确保在异步任务中可以安全访问
-			request.content().retain();
-			logger.info("转发请求到llama.cpp进程: {} {} 端口: {} 请求体长度: {}", method.name(), endpoint, port, requestBody.length());
-		} catch (Exception e) {
-			logger.error("读取请求体时发生错误", e);
-			this.sendOpenAIErrorResponseWithCleanup(ctx, 500, null, "Failed to read request body: " + e.getMessage(), null);
-			return;
-		}
+
+		int requestBodyLength = requestBody == null ? 0 : requestBody.length();
+		logger.info("转发请求到llama.cpp进程: {} {} 端口: {} 请求体长度: {}", method.name(), endpoint, port, requestBodyLength);
 		
 		this.worker.execute(() -> {
 			// 添加断开连接的事件监听
@@ -446,9 +439,6 @@ public class OpenAIService {
 				}
 				this.sendOpenAIErrorResponseWithCleanup(ctx, 500, null, e.getMessage(), null);
 			} finally {
-				// 释放之前保留的引用计数
-				//if(request.refCnt() != 0)
-					//request.content().release();
 				// 关闭连接
 				if (connection != null) {
 					connection.disconnect();
