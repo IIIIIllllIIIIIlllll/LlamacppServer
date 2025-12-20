@@ -1,5 +1,6 @@
 package org.mark.llamacpp.server;
 
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
@@ -15,6 +16,7 @@ import org.mark.llamacpp.server.channel.BasicRouterHandler;
 import org.mark.llamacpp.server.channel.CompletionRouterHandler;
 import org.mark.llamacpp.server.channel.DownloadRouterHandler;
 import org.mark.llamacpp.server.channel.OpenAIRouterHandler;
+import org.mark.llamacpp.server.io.ConsoleBroadcastOutputStream;
 import org.mark.llamacpp.server.struct.LlamaCppConfig;
 import org.mark.llamacpp.server.websocket.WebSocketManager;
 import org.mark.llamacpp.server.websocket.WebSocketServerHandler;
@@ -71,15 +73,15 @@ public class LlamaServer {
     
     
     public static void main(String[] args) {
-//        try {
-//            Files.createDirectories(CONSOLE_LOG_PATH.getParent());
-//            ConsoleBroadcastOutputStream out = new ConsoleBroadcastOutputStream(new FileOutputStream(CONSOLE_LOG_PATH.toFile(), true), StandardCharsets.UTF_8);
-//            PrintStream ps = new PrintStream(out, true, StandardCharsets.UTF_8.name());
-//            System.setOut(ps);
-//            System.setErr(ps);
-//        } catch (Exception e) {
-//            e.printStackTrace();
-//        }
+        try {
+            Files.createDirectories(CONSOLE_LOG_PATH.getParent());
+            ConsoleBroadcastOutputStream out = new ConsoleBroadcastOutputStream(new FileOutputStream(CONSOLE_LOG_PATH.toFile(), true), StandardCharsets.UTF_8);
+            PrintStream ps = new PrintStream(out, true, StandardCharsets.UTF_8.name());
+            System.setOut(ps);
+            System.setErr(ps);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
         // 执行一次，创建缓存目录。
         LlamaServer.getCachePath();
         
