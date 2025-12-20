@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>下载管理器 - Llama.cpp 模型管理系统</title>
+    <link rel="stylesheet" href="css/all.min.css">
+    <link href="css/css2.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #4f46e5; /* Indigo 600 */
+            --primary-hover: #4338ca;
+            --bg-color: #f3f4f6; /* Gray 100 */
+            --sidebar-bg: #ffffff;
+            --border-color: #e5e7eb;
+            --text-primary: #111827;
+            --text-secondary: #6b7280;
+            --success-color: #10b981;
+            --danger-color: #ef4444;
+            --warning-color: #f59e0b;
+            --info-color: #3b82f6;
+            --card-bg: #ffffff;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --radius: 0.5rem;
+            --transition-speed: 0.2s;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 300px;
+            background-color: var(--sidebar-bg);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            z-index: 20;
+            flex-shrink: 0;
+            box-shadow: 2px 0 8px rgba(0,0,0,0.02);
+        }
+
+        .sidebar-header {
+            height: 64px;
+            padding: 0 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+        }
+
+        .app-logo {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            text-decoration: none;
+        }
+        
+        .app-logo i { font-size: 1.5rem; }
+
+        .sidebar-nav {
+            flex: 1;
+            padding: 1.5rem 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            overflow-y: auto;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem 1rem;
+            border-radius: var(--radius);
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: all var(--transition-speed);
+            font-weight: 500;
+            cursor: pointer;
+            font-size: 0.875rem;
+        }
+
+        .nav-item i { width: 1.25rem; text-align: center; }
+
+        .nav-item:hover {
+            background-color: #f9fafb;
+            color: var(--text-primary);
+        }
+        
+        .nav-item.active {
+            background-color: #eff6ff; /* Blue 50 */
+            color: var(--primary-color);
+        }
+        
+        .nav-item.danger { color: var(--danger-color); }
+        .nav-item.danger:hover { background-color: #fef2f2; }
+
+        .sidebar-footer {
+            padding: 1rem 1.5rem;
+            border-top: 1px solid var(--border-color);
+            background-color: #f9fafb;
+        }
+
+        /* Main Area */
+        .main-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background-color: var(--bg-color);
+        }
+
+        .top-bar {
+            height: 64px;
+            padding: 0 2rem;
+            background-color: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(8px);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+            z-index: 10;
+        }
+
+        .page-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .top-actions {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        /* Content */
+        .content-scrollable {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0 2rem 2rem;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1.5rem;
+            margin: 1.5rem 0 2rem;
+        }
+
+        .stat-card {
+            background: var(--card-bg);
+            padding: 1.5rem;
+            border-radius: var(--radius);
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow-sm);
+            display: flex;
+            align-items: center;
+            gap: 1.25rem;
+            transition: transform 0.2s;
+        }
+        
+        .stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+
+        .stat-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 16px;
+            background-color: #eff6ff;
+            color: var(--primary-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+
+        .stat-info h3 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            line-height: 1.2;
+            margin-bottom: 0.25rem;
+        }
+
+        .stat-info p {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        /* Download List */
+        .download-list-container {
+            background: var(--card-bg);
+            border-radius: var(--radius);
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow-sm);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .download-list-header {
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #fff;
+            position: sticky;
+            top: 0;
+            z-index: 5;
+        }
+        
+        .download-list-header h2 { font-size: 1.125rem; font-weight: 600; color: var(--text-primary); }
+
+        .download-item {
+            display: flex;
+            align-items: center;
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            transition: background-color 0.2s;
+        }
+
+        .download-item:last-child { border-bottom: none; }
+        .download-item:hover { background-color: #f9fafb; }
+
+        .download-icon-wrapper {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            overflow: hidden;
+            background-color: #f3f4f6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 1.25rem;
+            font-size: 1.5rem;
+            color: var(--text-secondary);
+            flex-shrink: 0;
+            border: 1px solid var(--border-color);
+        }
+
+        .download-details {
+            flex: 1;
+            min-width: 0;
+            margin-right: 1rem;
+        }
+
+        .download-name {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.375rem;
+            cursor: pointer;
+        }
+        .download-name:hover { color: var(--primary-color); }
+
+        .download-meta {
+            display: flex;
+            gap: 1.25rem;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .download-meta span { display: flex; align-items: center; gap: 0.375rem; }
+        .download-meta i { font-size: 0.875rem; opacity: 0.7; }
+
+        .download-status-badge {
+            padding: 0.375rem 0.875rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            min-width: 100px;
+            justify-content: center;
+        }
+        .status-downloading { background-color: #fef3c7; color: #92400e; }
+        .status-idle { background-color: #f3f4f6; color: #4b5563; }
+        .status-completed { background-color: #dcfce7; color: #166534; }
+        .status-failed { background-color: #fef2f2; color: #dc2626; }
+        .status-paused { background-color: #e0e7ff; color: #3730a3; }
+
+        .download-actions {
+            display: flex;
+            gap: 0.75rem;
+            margin-left: 1.5rem;
+        }
+
+        .btn-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            background: white;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 1rem;
+        }
+        .btn-icon:hover { border-color: var(--primary-color); color: var(--primary-color); transform: translateY(-1px); }
+        .btn-icon.danger:hover { border-color: var(--danger-color); color: var(--danger-color); background-color: #fef2f2; }
+        .btn-icon.primary { background-color: var(--primary-color); color: white; border-color: var(--primary-color); }
+        .btn-icon.primary:hover { background-color: var(--primary-hover); border-color: var(--primary-hover); color: white; }
+
+        /* Progress Bar */
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background-color: #e5e7eb;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 0.5rem;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background-color: var(--primary-color);
+            transition: width 0.3s ease;
+        }
+
+        /* Modals */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal.show { display: flex; }
+
+        .modal-content {
+            background: white;
+            border-radius: 1rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            width: 90%;
+            max-width: 600px;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            animation: slideIn 0.2s ease-out;
+            border: 1px solid var(--border-color);
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .modal-header {
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title { font-size: 1.125rem; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem; }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+            line-height: 1;
+        }
+        .modal-close:hover { color: var(--text-primary); }
+
+        .modal-body {
+            padding: 1.5rem;
+            overflow-y: auto;
+        }
+
+        .modal-footer {
+            padding: 1.25rem 1.5rem;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.75rem;
+            background-color: #f9fafb;
+            border-radius: 0 0 1rem 1rem;
+        }
+
+        /* Forms */
+        .form-group { margin-bottom: 1.25rem; }
+        .form-label { display: block; font-size: 0.875rem; font-weight: 500; margin-bottom: 0.5rem; color: var(--text-primary); }
+        .form-control {
+            width: 100%;
+            padding: 0.625rem 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            transition: border-color 0.2s;
+            font-family: inherit;
+        }
+        .form-control:focus { border-color: var(--primary-color); outline: none; box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1); }
+        .form-text { font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.375rem; }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.625rem 1rem;
+            border-radius: 0.5rem;
+            font-weight: 500;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+            gap: 0.5rem;
+        }
+
+        .btn-primary { background-color: var(--primary-color); color: white; }
+        .btn-primary:hover:not(:disabled) { background-color: var(--primary-hover); }
+        .btn-primary:disabled { opacity: 0.7; cursor: not-allowed; }
+        
+        .btn-secondary { background-color: white; border-color: var(--border-color); color: var(--text-primary); }
+        .btn-secondary:hover { background-color: #f9fafb; border-color: #d1d5db; }
+        
+        .btn-danger { background-color: var(--danger-color); color: white; }
+        .btn-danger:hover { background-color: #dc2626; }
+
+        /* Toasts */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 3000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .toast {
+            background: white;
+            box-shadow: var(--shadow-md);
+            padding: 1rem;
+            border-radius: var(--radius);
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            min-width: 320px;
+            animation: slideInRight 0.3s ease-out;
+            border-left: 4px solid transparent;
+        }
+        
+        @keyframes slideInRight {
+            from { opacity: 0; transform: translateX(20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .toast.success { border-left-color: var(--success-color); }
+        .toast.error { border-left-color: var(--danger-color); }
+        .toast.warning { border-left-color: var(--warning-color); }
+        .toast.info { border-left-color: var(--info-color); }
+
+        .toast-icon { font-size: 1.25rem; margin-top: 2px; }
+        .toast.success .toast-icon { color: var(--success-color); }
+        .toast.error .toast-icon { color: var(--danger-color); }
+        .toast.warning .toast-icon { color: var(--warning-color); }
+        .toast.info .toast-icon { color: var(--info-color); }
+
+        .toast-content { flex: 1; }
+        .toast-title { font-weight: 600; margin-bottom: 0.25rem; font-size: 0.875rem; color: var(--text-primary); }
+        .toast-message { font-size: 0.875rem; color: var(--text-secondary); }
+
+        .toast-close { background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1rem; }
+        .toast-close:hover { color: var(--text-primary); }
+
+        /* Empty State */
+        .empty-state { text-align: center; padding: 3rem 1rem; color: var(--text-secondary); }
+        .empty-state-icon { font-size: 3rem; margin-bottom: 1rem; opacity: 0.3; }
+        .empty-state-title { font-size: 1.125rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--text-primary); }
+        .empty-state-text { font-size: 0.875rem; }
+        
+        /* Force Font Awesome spinner animation even when user prefers reduced motion */
+        @media (prefers-reduced-motion: reduce) {
+            .fa-spin { animation: fa-spin 2s linear infinite !important; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <a href="index.html" class="app-logo">
+                <i class="fas fa-download"></i>
+                <span>下载管理器</span>
+            </a>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="index.html" class="nav-item">
+                <i class="fas fa-home"></i>
+                <span>返回主页</span>
+            </a>
+            <a href="#" class="nav-item active">
+                <i class="fas fa-list"></i>
+                <span>下载任务</span>
+            </a>
+            <a href="#" class="nav-item" onclick="openConsoleModal(); return false;">
+                <i class="fas fa-terminal"></i>
+                <span>控制台日志</span>
+            </a>
+            <a href="#" class="nav-item" onclick="openSettingsModal(); return false;">
+                <i class="fas fa-cog"></i>
+                <span>系统设置</span>
+            </a>
+            <div style="flex: 1"></div>
+             <a href="#" class="nav-item danger" onclick="shutdownService(); return false;">
+                <i class="fas fa-power-off"></i>
+                <span>停止服务</span>
+            </a>
+        </nav>
+        <div class="sidebar-footer">
+            <div style="font-size: 0.75rem; color: var(--text-secondary);">
+                Llama.cpp Server<br>v1.0.0
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-area">
+        <!-- Top Bar -->
+        <div class="top-bar">
+            <h1 class="page-title">下载管理</h1>
+            <div class="top-actions">
+                <button class="btn btn-primary" onclick="openCreateDownloadModal()">
+                    <i class="fas fa-plus"></i>
+                    创建下载任务
+                </button>
+            </div>
+        </div>
+
+        <!-- Scrollable Content -->
+        <div class="content-scrollable">
+            <!-- Stats Grid -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-download"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="activeDownloadsCount">0</h3>
+                        <p>活跃下载</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="pendingDownloadsCount">0</h3>
+                        <p>等待队列</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="completedDownloadsCount">0</h3>
+                        <p>已完成</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-list"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="totalDownloadsCount">0</h3>
+                        <p>总任务数</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Download List -->
+            <div class="download-list-container">
+                <div class="download-list-header">
+                    <h2>下载任务</h2>
+                    <div style="margin-left: auto;">
+                        <button class="btn btn-secondary" onclick="refreshDownloads()" title="刷新列表">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
+                </div>
+                <div id="downloadsList">
+                    <div class="loading-spinner">
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Create Download Modal -->
+    <div class="modal" id="createDownloadModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title"><i class="fas fa-download"></i> 创建下载任务</h3>
+                <button class="modal-close" onclick="closeModal('createDownloadModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="createDownloadForm">
+                    <div class="form-group">
+                        <label class="form-label" for="downloadUrl">下载URL</label>
+                        <input type="url" class="form-control" id="downloadUrl" name="downloadUrl" placeholder="https://example.com/file.zip" required>
+                        <small class="form-text">输入要下载的文件的完整URL地址</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label" for="downloadPath">保存路径</label>
+                        <input type="text" class="form-control" id="downloadPath" name="downloadPath" placeholder="downloads" value="C:\Users\Mark\Downloads" required>
+                        <small class="form-text">文件保存的相对路径，默认为downloads目录</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label" for="downloadFileName">文件名（可选）</label>
+                        <input type="text" class="form-control" id="downloadFileName" name="downloadFileName" placeholder="留空使用URL中的文件名">
+                        <small class="form-text">自定义保存的文件名，留空则使用URL中的原始文件名</small>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('createDownloadModal')">取消</button>
+                <button class="btn btn-primary" onclick="submitCreateDownload()">创建任务</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script>
+        // --- Core Logic ---
+        let downloads = [];
+        let websocket = null;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 5;
+        const reconnectInterval = 5000;
+        
+        function initWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws`;
+            
+            try {
+                websocket = new WebSocket(wsUrl);
+                websocket.onopen = function(event) {
+                    console.log('WebSocket Connected');
+                    reconnectAttempts = 0;
+                    websocket.send(JSON.stringify({ type: 'connect', message: 'Connected', timestamp: new Date().toISOString() }));
+                };
+                websocket.onmessage = function(event) {
+                    handleWebSocketMessage(event.data);
+                };
+                websocket.onclose = function(event) {
+                    console.log('WebSocket Closed');
+                    if (reconnectAttempts < maxReconnectAttempts) {
+                        reconnectAttempts++;
+                        setTimeout(initWebSocket, reconnectInterval);
+                    }
+                };
+                websocket.onerror = function(error) { console.error('WebSocket Error:', error); };
+            } catch (error) { console.error('WebSocket Init Failed:', error); }
+        }
+        
+        function handleWebSocketMessage(message) {
+            try {
+                const data = JSON.parse(message);
+                if (data.type) {
+                    switch (data.type) {
+                        case 'notification': 
+                            showToast(data.title || '通知', data.message || '', data.level || 'info'); 
+                            break;
+                        case 'download_update':
+                            if (data.taskId) {
+                                updateDownloadItem(data.taskId, data);
+                            }
+                            break;
+                    }
+                }
+            } catch (error) {}
+        }
+        
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', function() {
+            refreshDownloads();
+            initWebSocket();
+        });
+
+        // --- Download Management ---
+        function refreshDownloads() {
+            const downloadsList = document.getElementById('downloadsList');
+            downloadsList.innerHTML = `<div class="loading-spinner"><div class="spinner"></div></div>`;
+            
+            fetch('/api/downloads/list')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        downloads = data.downloads || [];
+                        renderDownloadsList();
+                        updateStats();
+                    } else {
+                        throw new Error(data.error || '获取下载列表失败');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    downloadsList.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon"><i class="fas fa-exclamation-triangle"></i></div>
+                            <div class="empty-state-title">加载失败</div>
+                            <div class="empty-state-text">${error.message || '网络错误'}</div>
+                            <button class="btn btn-primary" onclick="refreshDownloads()">重试</button>
+                        </div>
+                    `;
+                });
+        }
+
+        function renderDownloadsList() {
+            const downloadsList = document.getElementById('downloadsList');
+            if (!downloads || downloads.length === 0) {
+                downloadsList.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon"><i class="fas fa-download"></i></div>
+                        <div class="empty-state-title">没有下载任务</div>
+                        <div class="empty-state-text">点击"创建下载任务"按钮添加新的下载任务</div>
+                        <button class="btn btn-primary" onclick="openCreateDownloadModal()">创建下载任务</button>
+                    </div>
+                `;
+                return;
+            }
+            
+            let html = '';
+            downloads.forEach(download => {
+                let status = download.state || 'IDLE';
+                let statusText = '未知';
+                let statusIcon = 'fa-question-circle';
+                let statusClass = 'status-idle';
+                
+                switch (status) {
+                    case 'DOWNLOADING':
+                        statusText = '下载中'; statusIcon = 'fa-spinner fa-spin'; statusClass = 'status-downloading';
+                        break;
+                    case 'IDLE':
+                        statusText = '等待中'; statusIcon = 'fa-clock'; statusClass = 'status-idle';
+                        break;
+                    case 'COMPLETED':
+                        statusText = '已完成'; statusIcon = 'fa-check-circle'; statusClass = 'status-completed';
+                        break;
+                    case 'FAILED':
+                        statusText = '失败'; statusIcon = 'fa-exclamation-circle'; statusClass = 'status-failed';
+                        break;
+                    case 'PAUSED':
+                        statusText = '已暂停'; statusIcon = 'fa-pause-circle'; statusClass = 'status-paused';
+                        break;
+                }
+                
+                let actionButtons = '';
+                if (status === 'DOWNLOADING') {
+                    actionButtons = `
+                        <button class="btn-icon" onclick="pauseDownload('${download.taskId}')" title="暂停">
+                            <i class="fas fa-pause"></i>
+                        </button>
+                        <button class="btn-icon danger" onclick="deleteDownload('${download.taskId}')" title="删除">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    `;
+                } else if (status === 'IDLE' || status === 'FAILED' || status === 'PAUSED') {
+                    actionButtons = `
+                        <button class="btn-icon primary" onclick="resumeDownload('${download.taskId}')" title="恢复">
+                            <i class="fas fa-play"></i>
+                        </button>
+                        <button class="btn-icon danger" onclick="deleteDownload('${download.taskId}')" title="删除">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    `;
+                } else if (status === 'COMPLETED') {
+                    actionButtons = `
+                        <button class="btn-icon danger" onclick="deleteDownload('${download.taskId}')" title="删除">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    `;
+                }
+                
+                const progressRatio = download.totalBytes > 0 ? (download.downloadedBytes / download.totalBytes) : 0;
+                const progressPercent = Math.round(progressRatio * 100);
+                
+                html += `
+                    <div class="download-item" id="download-${download.taskId}">
+                        <div class="download-icon-wrapper">
+                            <i class="fas fa-file-download"></i>
+                        </div>
+                        <div class="download-details">
+                            <div class="download-name" title="${download.fileName || download.url}">
+                                ${download.fileName || '未知文件'}
+                            </div>
+                            <div class="download-meta">
+                                <span><i class="fas fa-link"></i> ${download.url}</span>
+                                <span><i class="fas fa-folder"></i> ${download.targetPath}</span>
+                                ${download.totalBytes ? `<span><i class="fas fa-hdd"></i> ${formatFileSize(download.totalBytes)}</span>` : ''}
+                            </div>
+                            ${status === 'DOWNLOADING' ? `
+                                <div class="progress-bar">
+                                    <div class="progress-fill" style="width: ${progressPercent}%"></div>
+                                </div>
+                                <div class="download-meta" style="margin-top: 0.25rem;">
+                                    <span><i class="fas fa-percentage"></i> ${progressPercent}%</span>
+                                    ${download.downloadedBytes ? `<span><i class="fas fa-download"></i> ${formatFileSize(download.downloadedBytes)}</span>` : ''}
+                                </div>
+                            ` : ''}
+                        </div>
+                        <div class="download-status-badge ${statusClass}">
+                            <i class="fas ${statusIcon}"></i> <span>${statusText}</span>
+                        </div>
+                        <div class="download-actions">${actionButtons}</div>
+                    </div>
+                `;
+            });
+            downloadsList.innerHTML = html;
+        }
+
+        function updateDownloadItem(taskId, data) {
+            const index = downloads.findIndex(d => d.taskId === taskId);
+            if (index >= 0) {
+                downloads[index] = { ...downloads[index], ...data };
+                renderDownloadsList();
+                updateStats();
+            }
+        }
+
+        function updateStats() {
+            const activeCount = downloads.filter(d => d.state === 'DOWNLOADING').length;
+            const pendingCount = downloads.filter(d => d.state === 'IDLE').length;
+            const completedCount = downloads.filter(d => d.state === 'COMPLETED').length;
+            const totalCount = downloads.length;
+            
+            document.getElementById('activeDownloadsCount').textContent = activeCount;
+            document.getElementById('pendingDownloadsCount').textContent = pendingCount;
+            document.getElementById('completedDownloadsCount').textContent = completedCount;
+            document.getElementById('totalDownloadsCount').textContent = totalCount;
+        }
+
+        function formatFileSize(size) {
+            if (size < 1024) return size + ' B';
+            if (size < 1024 * 1024) return (size / 1024).toFixed(1) + ' KB';
+            if (size < 1024 * 1024 * 1024) return (size / (1024 * 1024)).toFixed(1) + ' MB';
+            return (size / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+        }
+
+        // --- Download Actions ---
+        function openCreateDownloadModal() {
+            document.getElementById('createDownloadModal').classList.add('show');
+        }
+
+        function submitCreateDownload() {
+            const url = document.getElementById('downloadUrl').value.trim();
+            const path = document.getElementById('downloadPath').value.trim();
+            const fileName = document.getElementById('downloadFileName').value.trim();
+            
+            if (!url) {
+                showToast('错误', '请输入下载URL', 'error');
+                return;
+            }
+            
+            if (!path) {
+                showToast('错误', '请输入保存路径', 'error');
+                return;
+            }
+            
+            const data = { url, path };
+            if (fileName) {
+                data.fileName = fileName;
+            }
+            
+            fetch('/api/downloads/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('成功', '下载任务创建成功', 'success');
+                    closeModal('createDownloadModal');
+                    refreshDownloads();
+                } else {
+                    showToast('错误', data.error || '创建下载任务失败', 'error');
+                }
+            })
+            .catch(error => {
+                showToast('错误', '网络请求失败', 'error');
+            });
+        }
+
+        function pauseDownload(taskId) {
+            fetch('/api/downloads/pause', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ taskId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('成功', '下载任务已暂停', 'success');
+                } else {
+                    showToast('错误', data.error || '暂停任务失败', 'error');
+                }
+            })
+            .catch(error => {
+                showToast('错误', '网络请求失败', 'error');
+            });
+        }
+
+        function resumeDownload(taskId) {
+            fetch('/api/downloads/resume', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ taskId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('成功', '下载任务已恢复', 'success');
+                } else {
+                    showToast('错误', data.error || '恢复任务失败', 'error');
+                }
+            })
+            .catch(error => {
+                showToast('错误', '网络请求失败', 'error');
+            });
+        }
+
+        function deleteDownload(taskId) {
+            if (!confirm('确定要删除这个下载任务吗？')) {
+                return;
+            }
+            
+            fetch('/api/downloads/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ taskId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('成功', '下载任务已删除', 'success');
+                    refreshDownloads();
+                } else {
+                    showToast('错误', data.error || '删除任务失败', 'error');
+                }
+            })
+            .catch(error => {
+                showToast('错误', '网络请求失败', 'error');
+            });
+        }
+
+        // --- Modal Functions ---
+        function closeModal(id) {
+            const el = document.getElementById(id);
+            if (el) el.classList.remove('show');
+            if (id === 'createDownloadModal') {
+                document.getElementById('createDownloadForm').reset();
+            }
+        }
+        
+        // Window clicks
+        window.onclick = function(e) {
+            if (e.target.classList.contains('modal')) {
+                closeModal(e.target.id);
+            }
+        };
+
+        function showToast(title, msg, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const id = 'toast-' + Date.now();
+            const html = `
+                <div class="toast ${type}" id="${id}">
+                    <div class="toast-icon"><i class="fas ${type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle'}"></i></div>
+                    <div class="toast-content"><div class="toast-title">${title}</div><div class="toast-message">${msg}</div></div>
+                    <button class="toast-close" onclick="document.getElementById('${id}').remove()">&times;</button>
+                </div>`;
+            container.insertAdjacentHTML('beforeend', html);
+            setTimeout(() => { const el = document.getElementById(id); if (el) el.remove(); }, 5000);
+        }
+        
+        // Placeholder functions for sidebar items
+        function openConsoleModal() {
+            showToast('提示', '功能开发中', 'info');
+        }
+        
+        function openSettingsModal() {
+            showToast('提示', '功能开发中', 'info');
+        }
+        
+        function shutdownService() {
+            if (confirm('确定要停止服务吗？')) {
+                fetch('/api/shutdown', { method: 'POST' }).then(r=>r.json()).then(d => {
+                    if (d.success) {
+                        document.body.innerHTML = '<div style="width: 100%;display:flex;justify-content:center;align-items:center;height:100vh;"><h1>服务已停止</h1></div>';
+                    }
+                });
+            }
+        }
+    </script>
+</body>
+</html>

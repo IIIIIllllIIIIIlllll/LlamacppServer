@@ -2,7 +2,6 @@ package org.mark.llamacpp.download;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
-import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -395,6 +394,7 @@ public class BasicDownloader {
 		this.finalUri = this.resolveFinalUri(this.sourceUri);
 		
 		HttpResponse<Void> headResponse = this.sendHeadOrFallback(this.finalUri);
+		
 		if (headResponse == null) {
 			throw new IOException("无法获取文件头信息");
 		}
@@ -410,6 +410,9 @@ public class BasicDownloader {
 		this.rangeSupported = rangeProbe != null && rangeProbe.statusCode() == 206;
 	}
 	
+	/**
+	 * 	重置进度
+	 */
 	private void resetProgress() {
 		this.downloadedBytes.set(0);
 		this.partsTotal.set(0);
@@ -490,6 +493,7 @@ public class BasicDownloader {
 				.uri(uri)
 				.timeout(this.requestTimeout)
 				.header("User-Agent", this.userAgent)
+				.header("Range", "bytes=0-0")
 				.method("HEAD", HttpRequest.BodyPublishers.noBody())
 				.build();
 		
@@ -497,19 +501,17 @@ public class BasicDownloader {
 		if (headResponse.statusCode() >= 200 && headResponse.statusCode() <= 299) {
 			return headResponse;
 		}
-		
-		HttpRequest rangeGet = HttpRequest.newBuilder()
-				.uri(uri)
-				.timeout(this.requestTimeout)
-				.header("User-Agent", this.userAgent)
-				.header("Range", "bytes=0-0")
-				.method("GET", HttpRequest.BodyPublishers.noBody())
-				.build();
-		HttpResponse<Void> rangeResponse = this.httpClient.send(rangeGet, BodyHandlers.discarding());
-		if (rangeResponse.statusCode() == 206 || rangeResponse.statusCode() == 200) {
-			return rangeResponse;
-		}
-		
+//		HttpRequest rangeGet = HttpRequest.newBuilder()
+//				.uri(uri)
+//				.timeout(this.requestTimeout)
+//				.header("User-Agent", this.userAgent)
+//				.header("Range", "bytes=0-0")
+//				.method("GET", HttpRequest.BodyPublishers.noBody())
+//				.build();
+//		HttpResponse<Void> rangeResponse = this.httpClient.send(rangeGet, BodyHandlers.discarding());
+//		if (rangeResponse.statusCode() == 206 || rangeResponse.statusCode() == 200) {
+//			return rangeResponse;
+//		}
 		return null;
 	}
 	
@@ -554,7 +556,7 @@ public class BasicDownloader {
 		}
 		
 		try (InputStream in = new BufferedInputStream(response.body());
-				OutputStream out = new BufferedOutputStream(new FileOutputStream(this.targetFile.toFile(), false))) {
+				OutputStream out = new BufferedOutputStream(new FileOutputStream(this.targetFile.toString(), false))) {
 			byte[] buffer = new byte[1024 * 256];
 			int read;
 			while ((read = in.read(buffer)) != -1) {
@@ -634,7 +636,7 @@ public class BasicDownloader {
 	 * @throws IOException
 	 */
 	private void preAllocateTargetFile(Path target, long size) throws IOException {
-		try (RandomAccessFile raf = new RandomAccessFile(target.toFile(), "rw")) {
+		try (RandomAccessFile raf = new RandomAccessFile(target.toString(), "rw")) {
 			raf.setLength(size);
 		}
 	}
@@ -653,7 +655,7 @@ public class BasicDownloader {
 		}
 		ordered.sort(Comparator.comparingLong(p -> p.part.startInclusive));
 		
-		try (RandomAccessFile raf = new RandomAccessFile(target.toFile(), "rw")) {
+		try (RandomAccessFile raf = new RandomAccessFile(target.toString(), "rw")) {
 			for (PartWithFile pwf : ordered) {
 				long expected = pwf.part.length();
 				long actual = Files.size(pwf.file);
@@ -714,22 +716,19 @@ public class BasicDownloader {
 	
 	private static long parseContentLength(Map<String, List<String>> headers) {
 		String value = firstHeaderValue(headers, "content-length");
+		String contentRange = firstHeaderValue(headers, "content-range");
+		long v1 = -1;
+		long v2 = -1;
 		if (value != null) {
 			try {
-				return Long.parseLong(value.trim());
+				v1 = Long.parseLong(value.trim());
 			} catch (NumberFormatException ignored) {
 			}
 		}
-		
-		String contentRange = firstHeaderValue(headers, "content-range");
 		if (contentRange != null) {
-			Long total = parseTotalFromContentRange(contentRange);
-			if (total != null) {
-				return total;
-			}
+			v2 = parseTotalFromContentRange(contentRange);
 		}
-		
-		return -1;
+		return v1 > v2 ? v1 : v2;
 	}
 	
 	private static Long parseTotalFromContentRange(String contentRange) {
@@ -919,9 +918,8 @@ public class BasicDownloader {
 			}
 			
 			long bytesWritten = 0;
-			File outFile = this.partFile.toFile();
 			try (InputStream in = new BufferedInputStream(response.body());
-					OutputStream out = new BufferedOutputStream(new FileOutputStream(outFile, false))) {
+					OutputStream out = new BufferedOutputStream(new FileOutputStream(this.partFile.toString(), false))) {
 				byte[] buffer = new byte[1024 * 256];
 				int read;
 				while ((read = in.read(buffer)) != -1) {
