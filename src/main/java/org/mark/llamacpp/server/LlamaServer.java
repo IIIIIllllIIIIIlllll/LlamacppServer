@@ -1,8 +1,10 @@
 package org.mark.llamacpp.server;
 
+import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -27,16 +29,27 @@ import com.google.gson.Gson;
 
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.handler.codec.http.DefaultFullHttpResponse;
+import io.netty.handler.codec.http.DefaultHttpResponse;
+import io.netty.handler.codec.http.FullHttpResponse;
+import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpObjectAggregator;
+import io.netty.handler.codec.http.HttpResponse;
+import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpServerCodec;
+import io.netty.handler.codec.http.HttpVersion;
+import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler;
+import io.netty.handler.stream.ChunkedFile;
 import io.netty.handler.stream.ChunkedWriteHandler;
+import io.netty.util.CharsetUtil;
 
 
 /**
@@ -335,5 +348,137 @@ public class LlamaServer {
 		String json = GSON.toJson(cfg);
 		Files.write(configFile, json.getBytes(StandardCharsets.UTF_8));
 		logger.info("llama.cpp配置已保存到文件: {}", configFile.toString());
+	}
+	
+	//================================================================================================
+	
+	/**
+	 * 	发送JSON响应。
+	 * @param ctx
+	 * @param data
+	 */
+	public static void sendJsonResponse(ChannelHandlerContext ctx, Object data) {
+		String json = GSON.toJson(data);
+		byte[] content = json.getBytes(CharsetUtil.UTF_8);
+	
+		FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
+		response.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/json; charset=UTF-8");
+		response.headers().set(HttpHeaderNames.CONTENT_LENGTH, content.length);
+		response.content().writeBytes(content);
+	
+		ctx.writeAndFlush(response).addListener(new ChannelFutureListener() {
+			@Override
+			public void operationComplete(ChannelFuture future) {
+				ctx.close();
+			}
+		});
+	}
+	
+	
+	
+	/**
+	 * 发送文件内容（原有方法，保留用于非API下载）
+	 */
+	public static void sendFile(ChannelHandlerContext ctx, File file) throws IOException {
+		RandomAccessFile raf = new RandomAccessFile(file, "r");
+		long fileLength = raf.length();
+
+		HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
+		response.headers().set(HttpHeaderNames.CONTENT_LENGTH, fileLength);
+		response.headers().set(HttpHeaderNames.CONTENT_TYPE, LlamaServer.getContentType(file.getName()));
+
+		// 设置缓存头
+		response.headers().set(HttpHeaderNames.CACHE_CONTROL, "max-age=3600");
+
+		ctx.write(response);
+
+		// 使用ChunkedFile传输文件内容
+		ctx.write(new ChunkedFile(raf, 0, fileLength, 8192), ctx.newProgressivePromise());
+
+		ChannelFuture lastContentFuture = ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
+
+		// 传输完成后关闭连接
+		lastContentFuture.addListener(new ChannelFutureListener() {
+			@Override
+			public void operationComplete(ChannelFuture future) {
+				ctx.close();
+			}
+		});
+	}
+	
+	/**
+	 * 	
+	 * @param ctx
+	 * @param status
+	 * @param message
+	 */
+    public static void sendErrorResponse(ChannelHandlerContext ctx, HttpResponseStatus status, String message) {
+        FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status);
+
+        byte[] content = message.getBytes(CharsetUtil.UTF_8);
+        response.headers().set(HttpHeaderNames.CONTENT_TYPE, "text/plain; charset=UTF-8");
+        response.headers().set(HttpHeaderNames.CONTENT_LENGTH, content.length);
+        response.content().writeBytes(content);
+
+        ctx.writeAndFlush(response).addListener(new ChannelFutureListener() {
+            @Override
+            public void operationComplete(ChannelFuture future) {
+                ctx.close();
+            }
+        });
+    }
+	
+    /**
+     * 	
+     * @param ctx
+     * @param text
+     */
+    public static  void sendTextResponse(ChannelHandlerContext ctx, String text) {
+		byte[] content = text.getBytes(StandardCharsets.UTF_8);
+		FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
+		response.headers().set(HttpHeaderNames.CONTENT_TYPE, "text/plain; charset=UTF-8");
+		response.headers().set(HttpHeaderNames.CONTENT_LENGTH, content.length);
+		response.content().writeBytes(content);
+		ctx.writeAndFlush(response).addListener(new ChannelFutureListener() {
+			@Override
+			public void operationComplete(ChannelFuture future) {
+				ctx.close();
+			}
+		});
+	}
+	
+	/**
+	 * 	判断文件类型
+	 * @param fileName
+	 * @return
+	 */
+	public static String getContentType(String fileName) {
+		String extension = fileName.substring(fileName.lastIndexOf('.') + 1).toLowerCase();
+		switch (extension) {
+		case "html":
+		case "htm":
+			return "text/html; charset=UTF-8";
+		case "css":
+			return "text/css";
+		case "js":
+			return "application/javascript";
+		case "json":
+			return "application/json";
+		case "xml":
+			return "application/xml";
+		case "pdf":
+			return "application/pdf";
+		case "jpg":
+		case "jpeg":
+			return "image/jpeg";
+		case "png":
+			return "image/png";
+		case "gif":
+			return "image/gif";
+		case "txt":
+			return "text/plain; charset=UTF-8";
+		default:
+			return "application/octet-stream";
+		}
 	}
 }

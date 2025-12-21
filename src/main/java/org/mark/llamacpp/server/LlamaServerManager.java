@@ -1,7 +1,13 @@
 package org.mark.llamacpp.server;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URI;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -25,13 +31,24 @@ import java.util.stream.Stream;
 import org.mark.llamacpp.gguf.GGUFBundle;
 import org.mark.llamacpp.gguf.GGUFMetaData;
 import org.mark.llamacpp.gguf.GGUFModel;
+import org.mark.llamacpp.server.struct.ApiResponse;
 import org.mark.llamacpp.server.struct.ModelLaunchOptions;
 import org.mark.llamacpp.server.tools.PortChecker;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
+/**
+ * 	
+ */
 public class LlamaServerManager {
+	
+	/**
+	 * 	
+	 */
+	private static final Logger LOGGER = LoggerFactory.getLogger(LlamaServerManager.class);
 
 	/**
 	 * 	
@@ -652,5 +669,149 @@ public class LlamaServerManager {
 		
 		// 退出Java进程
 		System.exit(0);
+	}
+	
+	
+	//##########################################################################################
+	
+	
+	/**
+	 * 	
+	 * @param modelId
+	 * @param slot
+	 * @param fileName
+	 * @return
+	 */
+	public ApiResponse handleModelSlotsSave(String modelId, int slot, String fileName) {
+		HttpURLConnection connection = null;
+		try {
+			// 两个判断
+			if (!this.getLoadedProcesses().containsKey(modelId)) {
+				return ApiResponse.error("模型未加载: " + modelId);
+			}
+			Integer port = this.getModelPort(modelId);
+			if (port == null) {
+				return ApiResponse.error("未找到模型端口: " + modelId);
+			}
+			
+			
+			String endpoint = String.format("/slots/%d?action=save", slot);
+			String targetUrl = String.format("http://localhost:%d%s", port, endpoint);
+			URL url = URI.create(targetUrl).toURL();
+			connection = (HttpURLConnection) url.openConnection();
+			connection.setRequestMethod("POST");
+			connection.setDoOutput(true);
+			connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+			connection.setConnectTimeout(36000 * 1000);
+			connection.setReadTimeout(36000 * 1000);
+			JsonObject body = new JsonObject();
+			body.addProperty("filename", fileName);
+			byte[] input = body.toString().getBytes(StandardCharsets.UTF_8);
+			try (OutputStream os = connection.getOutputStream()) {
+				os.write(input, 0, input.length);
+			}
+			int responseCode = connection.getResponseCode();
+			String responseBody;
+			if (responseCode >= 200 && responseCode < 300) {
+				try (BufferedReader br = new BufferedReader(
+						new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
+					StringBuilder sb = new StringBuilder();
+					String line;
+					while ((line = br.readLine()) != null) {
+						sb.append(line);
+					}
+					responseBody = sb.toString();
+				}
+				Object parsed = gson.fromJson(responseBody, Object.class);
+				Map<String, Object> data = new HashMap<>();
+				data.put("modelId", modelId);
+				data.put("result", parsed);
+				connection.disconnect();
+				return ApiResponse.success(data);
+			} else {
+				try (BufferedReader br = new BufferedReader(
+						new InputStreamReader(connection.getErrorStream(), StandardCharsets.UTF_8))) {
+					StringBuilder sb = new StringBuilder();
+					String line;
+					while ((line = br.readLine()) != null) {
+						sb.append(line);
+					}
+					responseBody = sb.toString();
+				}
+				connection.disconnect();
+				return ApiResponse.error("保存slot失败: " + responseBody);
+			}
+		} catch (Exception e) {
+			LOGGER.error("保存slot缓存时发生错误", e);
+			return ApiResponse.error("保存slot失败: " + e.getMessage());
+		}
+	}
+	
+	/**
+	 * 	
+	 * @param modelId
+	 * @param slot
+	 * @param fileName
+	 * @return
+	 */
+	public ApiResponse handleModelSlotsLoad(String modelId, int slot, String fileName) {
+		try {
+			LlamaServerManager manager = LlamaServerManager.getInstance();
+			if (!manager.getLoadedProcesses().containsKey(modelId)) {
+				return ApiResponse.error("模型未加载: " + modelId);
+			}
+			Integer port = manager.getModelPort(modelId);
+			if (port == null) {
+				return ApiResponse.error("未找到模型端口: " + modelId);
+			}
+			String endpoint = String.format("/slots/%d?action=restore", slot);
+			String targetUrl = String.format("http://localhost:%d%s", port, endpoint);
+			URL url = URI.create(targetUrl).toURL();
+			HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+			connection.setRequestMethod("POST");
+			connection.setDoOutput(true);
+			connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+			connection.setConnectTimeout(36000 * 1000);
+			connection.setReadTimeout(36000 * 1000);
+			JsonObject body = new JsonObject();
+			body.addProperty("filename", fileName);
+			byte[] input = body.toString().getBytes(StandardCharsets.UTF_8);
+			try (OutputStream os = connection.getOutputStream()) {
+				os.write(input, 0, input.length);
+			}
+			int responseCode = connection.getResponseCode();
+			String responseBody;
+			if (responseCode >= 200 && responseCode < 300) {
+				try (BufferedReader br = new BufferedReader(new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
+					StringBuilder sb = new StringBuilder();
+					String line;
+					while ((line = br.readLine()) != null) {
+						sb.append(line);
+					}
+					responseBody = sb.toString();
+				}
+				Object parsed = gson.fromJson(responseBody, Object.class);
+				Map<String, Object> data = new HashMap<>();
+				data.put("modelId", modelId);
+				data.put("result", parsed);
+				
+				connection.disconnect();
+				return ApiResponse.success(data);
+			} else {
+				try (BufferedReader br = new BufferedReader(new InputStreamReader(connection.getErrorStream(), StandardCharsets.UTF_8))) {
+					StringBuilder sb = new StringBuilder();
+					String line;
+					while ((line = br.readLine()) != null) {
+						sb.append(line);
+					}
+					responseBody = sb.toString();
+				}
+				connection.disconnect();
+				return ApiResponse.error("加载slot失败: " + responseBody);
+			}
+		} catch (Exception e) {
+			LOGGER.error("加载slot缓存时发生错误", e);
+			return ApiResponse.error("加载slot失败: " + e.getMessage());
+		}
 	}
 }
