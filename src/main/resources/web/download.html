@@ -692,17 +692,48 @@
                 const data = JSON.parse(message);
                 if (data.type) {
                     switch (data.type) {
-                        case 'notification': 
-                            showToast(data.title || '通知', data.message || '', data.level || 'info'); 
+                        case 'notification':
+                            showToast(data.title || '通知', data.message || '', data.level || 'info');
                             break;
                         case 'download_update':
                             if (data.taskId) {
                                 updateDownloadItem(data.taskId, data);
+                                // 如果是状态变化，显示通知
+                                if (data.state) {
+                                    let statusText = '';
+                                    switch (data.state) {
+                                        case 'DOWNLOADING':
+                                            statusText = '开始下载';
+                                            break;
+                                        case 'COMPLETED':
+                                            statusText = '下载完成';
+                                            showToast('下载完成', `文件 ${data.fileName || data.taskId} 下载完成`, 'success');
+                                            break;
+                                        case 'FAILED':
+                                            statusText = '下载失败';
+                                            showToast('下载失败', `文件 ${data.fileName || data.taskId} 下载失败: ${data.errorMessage || '未知错误'}`, 'error');
+                                            break;
+                                        case 'PAUSED':
+                                            statusText = '已暂停';
+                                            break;
+                                    }
+                                    if (statusText && data.state !== 'DOWNLOADING') {
+                                        console.log(`任务 ${data.taskId} 状态变更为: ${statusText}`);
+                                    }
+                                }
+                            }
+                            break;
+                        case 'download_progress':
+                            // 只处理正在下载的任务的进度更新
+                            if (data.taskId) {
+                                updateDownloadProgress(data.taskId, data);
                             }
                             break;
                     }
                 }
-            } catch (error) {}
+            } catch (error) {
+                console.error('处理WebSocket消息失败:', error);
+            }
         }
         
         // --- Initialization ---
@@ -757,7 +788,7 @@
             let html = '';
             downloads.forEach(download => {
                 let status = download.state || 'IDLE';
-                let statusText = '未知';
+                let statusText = '正在开始……';
                 let statusIcon = 'fa-question-circle';
                 let statusClass = 'status-idle';
                 
@@ -846,6 +877,46 @@
             if (index >= 0) {
                 downloads[index] = { ...downloads[index], ...data };
                 renderDownloadsList();
+                updateStats();
+            }
+        }
+
+        function updateDownloadProgress(taskId, data) {
+            const index = downloads.findIndex(d => d.taskId === taskId);
+            if (index >= 0) {
+                // 只更新进度相关字段，不改变其他状态
+                downloads[index] = {
+                    ...downloads[index],
+                    downloadedBytes: data.downloadedBytes,
+                    totalBytes: data.totalBytes,
+                    partsCompleted: data.partsCompleted,
+                    partsTotal: data.partsTotal,
+                    progressRatio: data.progressRatio
+                };
+                
+                // 只更新进度条和百分比，不重新渲染整个列表
+                const downloadElement = document.getElementById(`download-${taskId}`);
+                if (downloadElement) {
+                    const progressRatio = data.totalBytes > 0 ? (data.downloadedBytes / data.totalBytes) : 0;
+                    const progressPercent = Math.round(progressRatio * 100);
+                    
+                    // 更新进度条
+                    const progressFill = downloadElement.querySelector('.progress-fill');
+                    if (progressFill) {
+                        progressFill.style.width = `${progressPercent}%`;
+                    }
+                    
+                    // 更新百分比和已下载大小
+                    const progressMeta = downloadElement.querySelector('.download-meta[style*="margin-top: 0.25rem"]');
+                    if (progressMeta) {
+                        progressMeta.innerHTML = `
+                            <span><i class="fas fa-percentage"></i> ${progressPercent}%</span>
+                            <span><i class="fas fa-download"></i> ${formatFileSize(data.downloadedBytes)}</span>
+                        `;
+                    }
+                }
+                
+                // 更新统计信息
                 updateStats();
             }
         }

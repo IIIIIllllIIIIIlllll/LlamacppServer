@@ -48,6 +48,9 @@ public class DownloadManager {
 
 		// 恢复未完成的任务
 		this.resumePendingTasks();
+		
+		// 添加WebSocket监听器
+		this.addProgressListener(new DownloadWebSocketListener());
 	}
     
     /**

@@ -212,6 +212,46 @@ public class WebSocketManager {
     }
     
     /**
+     * 发送下载状态更新事件
+     */
+    public void sendDownloadStatusEvent(String taskId, String state, long downloadedBytes, long totalBytes,
+                                      int partsCompleted, int partsTotal, String fileName, String errorMessage) {
+        String eventMessage = String.format(
+            "{\"type\":\"download_update\",\"taskId\":\"%s\",\"state\":\"%s\",\"downloadedBytes\":%d,\"totalBytes\":%d,\"partsCompleted\":%d,\"partsTotal\":%d,\"fileName\":\"%s\",\"errorMessage\":\"%s\",\"timestamp\":%d}",
+            taskId != null ? taskId.replace("\"", "\\\"") : "",
+            state != null ? state.replace("\"", "\\\"") : "",
+            downloadedBytes,
+            totalBytes,
+            partsCompleted,
+            partsTotal,
+            fileName != null ? fileName.replace("\"", "\\\"") : "",
+            errorMessage != null ? errorMessage.replace("\"", "\\\"") : "",
+            System.currentTimeMillis()
+        );
+        
+        broadcast(eventMessage);
+    }
+    
+    /**
+     * 发送下载进度更新事件（仅针对正在下载的任务）
+     */
+    public void sendDownloadProgressEvent(String taskId, long downloadedBytes, long totalBytes,
+                                        int partsCompleted, int partsTotal, double progressRatio) {
+        String eventMessage = String.format(
+            "{\"type\":\"download_progress\",\"taskId\":\"%s\",\"downloadedBytes\":%d,\"totalBytes\":%d,\"partsCompleted\":%d,\"partsTotal\":%d,\"progressRatio\":%f,\"timestamp\":%d}",
+            taskId != null ? taskId.replace("\"", "\\\"") : "",
+            downloadedBytes,
+            totalBytes,
+            partsCompleted,
+            partsTotal,
+            progressRatio,
+            System.currentTimeMillis()
+        );
+        
+        broadcast(eventMessage);
+    }
+    
+    /**
      * 关闭管理器，释放资源
      */
     public void shutdown() {
