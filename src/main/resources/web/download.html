@@ -651,6 +651,29 @@
         </div>
     </div>
 
+    <!-- Settings Modal -->
+    <div class="modal" id="settingsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title"><i class="fas fa-cog"></i> 系统设置</h3>
+                <button class="modal-close" onclick="closeModal('settingsModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="settingsForm">
+                    <div class="form-group">
+                        <label class="form-label" for="defaultDownloadPath">默认下载目录</label>
+                        <input type="text" class="form-control" id="defaultDownloadPath" name="defaultDownloadPath" placeholder="download">
+                        <small class="form-text">设置默认的文件下载保存路径</small>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('settingsModal')">取消</button>
+                <button class="btn btn-primary" onclick="saveSettings()">保存设置</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Notification Container -->
     <div class="toast-container" id="toastContainer"></div>
 
@@ -975,6 +998,12 @@
 
         // --- Download Actions ---
         function openCreateDownloadModal() {
+            // 获取默认下载路径并填充到表单
+            getDownloadPath().then(path => {
+                if (path) {
+                    document.getElementById('downloadPath').value = path;
+                }
+            });
             document.getElementById('createDownloadModal').classList.add('show');
         }
 
@@ -1086,6 +1115,8 @@
             if (el) el.classList.remove('show');
             if (id === 'createDownloadModal') {
                 document.getElementById('createDownloadForm').reset();
+            } else if (id === 'settingsModal') {
+                document.getElementById('settingsForm').reset();
             }
         }
         
@@ -1115,7 +1146,52 @@
         }
         
         function openSettingsModal() {
-            showToast('提示', '功能开发中', 'info');
+            // 获取当前下载路径并填充到设置表单
+            getDownloadPath().then(path => {
+                if (path) {
+                    document.getElementById('defaultDownloadPath').value = path;
+                }
+            });
+            document.getElementById('settingsModal').classList.add('show');
+        }
+        
+        function saveSettings() {
+            const path = document.getElementById('defaultDownloadPath').value.trim();
+            
+            if (!path) {
+                showToast('错误', '请输入下载路径', 'error');
+                return;
+            }
+            
+            fetch('/api/downloads/path/set', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.path) {
+                    showToast('成功', '下载路径设置成功', 'success');
+                    closeModal('settingsModal');
+                } else {
+                    showToast('错误', '设置下载路径失败', 'error');
+                }
+            })
+            .catch(error => {
+                showToast('错误', '网络请求失败', 'error');
+            });
+        }
+        
+        function getDownloadPath() {
+            return fetch('/api/downloads/path/get')
+                .then(response => response.json())
+                .then(data => {
+                    return data.path || '';
+                })
+                .catch(error => {
+                    console.error('获取下载路径失败:', error);
+                    return '';
+                });
         }
         
         function shutdownService() {

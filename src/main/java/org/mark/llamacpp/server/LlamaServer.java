@@ -26,6 +26,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
@@ -58,22 +59,42 @@ import io.netty.util.CharsetUtil;
 public class LlamaServer {
     
 	private static final Logger logger = LoggerFactory.getLogger(LlamaServer.class);
-    
-    private static final int DEFAULT_WEB_PORT = 8080;
-    
-    private static final int DEFAULT_ANTHROPIC_PORT = 8070;
-    
-    private static final Path CONSOLE_LOG_PATH = Paths.get("logs", "console.log");
-    private static final String WEBSOCKET_PATH = "/ws";
-    
-    
-    public static final String SLOTS_SAVE_KEYWORD = "~SLOTSAVE";
-    
-    
-    public static final String SLOTS_LOAD_KEYWORD = "~SLOTLOAD";
-    
-    
-    public static final String HELP_KEYWORD = "~HELP";
+	
+	/**
+	 * 	默认端口：OpenAI + 程序主要业务
+	 */
+	private static final int DEFAULT_WEB_PORT = 8080;
+	
+	/**
+	 * 	默认端口：Anthropic API
+	 */
+	private static final int DEFAULT_ANTHROPIC_PORT = 8070;
+
+	/**
+	 * 默认下载目录
+	 */
+	private static final String DEFAULT_DOWNLOAD_DIRECTORY = Paths.get(System.getProperty("user.dir"), "downloads").toString();
+	
+	/**
+	 * 	日志的路径
+	 */
+	private static final Path CONSOLE_LOG_PATH = Paths.get("logs", "console.log");
+	
+	/**
+	 * 	WebSocket地址
+	 */
+	private static final String WEBSOCKET_PATH = "/ws";
+
+	// 配置缓存
+	private static int webPort = DEFAULT_WEB_PORT;
+	private static int anthropicPort = DEFAULT_ANTHROPIC_PORT;
+	private static String downloadDirectory = DEFAULT_DOWNLOAD_DIRECTORY;
+
+	public static final String SLOTS_SAVE_KEYWORD = "~SLOTSAVE";
+
+	public static final String SLOTS_LOAD_KEYWORD = "~SLOTLOAD";
+
+	public static final String HELP_KEYWORD = "~HELP";
     
     
     
@@ -85,47 +106,149 @@ public class LlamaServer {
     public static final PrintStream err = System.err;
     
     
-    public static void main(String[] args) {
-        try {
-            Files.createDirectories(CONSOLE_LOG_PATH.getParent());
-            ConsoleBroadcastOutputStream out = new ConsoleBroadcastOutputStream(new FileOutputStream(CONSOLE_LOG_PATH.toFile(), true), StandardCharsets.UTF_8);
-            PrintStream ps = new PrintStream(out, true, StandardCharsets.UTF_8.name());
-            System.setOut(ps);
-            System.setErr(ps);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        // 执行一次，创建缓存目录。
-        LlamaServer.getCachePath();
-        
-        // 初始化配置管理器并加载配置
-        logger.info("正在初始化配置管理器...");
-        ConfigManager configManager = ConfigManager.getInstance();
-        
-        // 预加载启动配置到内存中
-        logger.info("正在加载启动配置...");
-        configManager.loadAllLaunchConfigs();
-        
-        // 初始化LlamaServerManager并预加载模型列表
-        logger.info("正在初始化模型管理器...");
-        LlamaServerManager serverManager = LlamaServerManager.getInstance();
-        
-        // 预加载模型列表，这会同时保存模型信息到配置文件
-        logger.info("正在扫描模型目录...");
-        serverManager.listModel();
-        
-        logger.info("系统初始化完成，启动Web服务器...");
-        
-        Thread t1 = new Thread(() -> {
-        		LlamaServer.bindOpenAI(DEFAULT_WEB_PORT);
-        });
-        t1.start();
-        
-        Thread t2 = new Thread(() -> {
-    			LlamaServer.bindAnthropic(DEFAULT_ANTHROPIC_PORT);
-        });
-        t2.start();
+    /**
+     * 读取application.json配置文件
+     */
+	private static void loadApplicationConfig() {
+		try {
+			Path configPath = Paths.get("config/application.json");
+			
+			if (Files.exists(configPath)) {
+				String json = new String(Files.readAllBytes(configPath), StandardCharsets.UTF_8);
+				JsonObject root = GSON.fromJson(json, com.google.gson.JsonObject.class);
+
+				if (root != null) {
+					// 读取服务器端口配置
+					if (root.has("server")) {
+						JsonObject server = root.getAsJsonObject("server");
+						if (server.has("webPort")) {
+							webPort = server.get("webPort").getAsInt();
+						}
+						if (server.has("anthropicPort")) {
+							anthropicPort = server.get("anthropicPort").getAsInt();
+						}
+					}
+
+					// 读取下载目录配置
+					if (root.has("download")) {
+						JsonObject download = root.getAsJsonObject("download");
+						if (download.has("directory")) {
+							downloadDirectory = download.get("directory").getAsString();
+						}
+					}
+				}
+			} else {
+				logger.warn("配置文件不存在，使用默认配置");
+				// 创建默认的
+				LlamaServer.saveApplicationConfig();
+			}
+		} catch (Exception e) {
+			logger.warn("加载配置文件失败，使用默认配置: {}", e.getMessage());
+		}
+	}
+    
+    /**
+     * 保存配置到application.json文件
+     */
+	public static void saveApplicationConfig() {
+		try {
+			JsonObject root = new JsonObject();
+
+			JsonObject server = new JsonObject();
+			server.addProperty("webPort", webPort);
+			server.addProperty("anthropicPort", anthropicPort);
+			root.add("server", server);
+
+			JsonObject download = new JsonObject();
+			download.addProperty("directory", downloadDirectory);
+			root.add("download", download);
+
+			String json = GSON.toJson(root);
+
+			Path configPath = Paths.get("config/application.json");
+			Files.write(configPath, json.getBytes(StandardCharsets.UTF_8));
+
+			logger.info("配置已保存到文件: {}", configPath.toString());
+		} catch (IOException e) {
+			logger.error("保存配置文件失败", e);
+			throw new RuntimeException("保存配置文件失败: " + e.getMessage(), e);
+		}
+	}
+    
+    // ==================== 端口配置的get/set方法 ====================
+    
+    public static int getWebPort() {
+        return webPort;
     }
+    
+    public static void setWebPort(int webPort) {
+        LlamaServer.webPort = webPort;
+    }
+    
+    public static int getAnthropicPort() {
+        return anthropicPort;
+    }
+    
+    public static void setAnthropicPort(int anthropicPort) {
+        LlamaServer.anthropicPort = anthropicPort;
+    }
+    
+    // ==================== 下载目录配置的get/set方法 ====================
+    
+    public static String getDownloadDirectory() {
+        return downloadDirectory;
+    }
+    
+    public static void setDownloadDirectory(String downloadDirectory) {
+        LlamaServer.downloadDirectory = downloadDirectory;
+    }
+    
+	public static void main(String[] args) {
+		try {
+			Files.createDirectories(CONSOLE_LOG_PATH.getParent());
+			ConsoleBroadcastOutputStream out = new ConsoleBroadcastOutputStream(
+					new FileOutputStream(CONSOLE_LOG_PATH.toFile(), true), StandardCharsets.UTF_8);
+			PrintStream ps = new PrintStream(out, true, StandardCharsets.UTF_8.name());
+			System.setOut(ps);
+			System.setErr(ps);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		// 执行一次，创建缓存目录。
+		LlamaServer.getCachePath();
+
+		// 加载application.json配置文件
+		logger.info("正在加载application.json配置...");
+		loadApplicationConfig();
+
+		// 初始化配置管理器并加载配置
+		logger.info("正在初始化配置管理器...");
+		ConfigManager configManager = ConfigManager.getInstance();
+
+		// 预加载启动配置到内存中
+		logger.info("正在加载启动配置...");
+		configManager.loadAllLaunchConfigs();
+
+		// 初始化LlamaServerManager并预加载模型列表
+		logger.info("正在初始化模型管理器...");
+		LlamaServerManager serverManager = LlamaServerManager.getInstance();
+
+		// 预加载模型列表，这会同时保存模型信息到配置文件
+		logger.info("正在扫描模型目录...");
+		serverManager.listModel();
+
+		logger.info("系统初始化完成，启动Web服务器...");
+
+		Thread t1 = new Thread(() -> {
+			LlamaServer.bindOpenAI(webPort);
+		});
+		t1.start();
+
+		Thread t2 = new Thread(() -> {
+			LlamaServer.bindAnthropic(anthropicPort);
+		});
+		t2.start();
+	}
     
     
     private static void bindAnthropic(int port) {

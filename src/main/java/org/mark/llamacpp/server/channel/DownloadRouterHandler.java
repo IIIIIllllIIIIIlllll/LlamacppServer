@@ -58,7 +58,17 @@ public class DownloadRouterHandler extends SimpleChannelInboundHandler<FullHttpR
 		if (uri.startsWith("/api/downloads/stats")) {
 			this.handleGetStats(ctx);
 		}
-        ctx.fireChannelRead(request.retain());
+		
+		if (uri.startsWith("/api/downloads/path/get")) {
+			this.handleGetDownloadPath(ctx);
+			return;
+		}
+		
+		if (uri.startsWith("/api/downloads/path/set")) {
+			this.handleSetDownloadPath(ctx, request);
+			return;
+		}
+		      ctx.fireChannelRead(request.retain());
     }
     
 	/**
@@ -182,6 +192,51 @@ public class DownloadRouterHandler extends SimpleChannelInboundHandler<FullHttpR
 			LlamaServer.sendJsonResponse(ctx, result);
 		} catch (Exception e) {
 			LlamaServer.sendErrorResponse(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, "获取下载统计信息失败: " + e.getMessage());
+		}
+	}
+
+	/**
+	 * 处理获取下载路径请求
+	 */
+	private void handleGetDownloadPath(ChannelHandlerContext ctx) {
+		try {
+			String downloadPath = LlamaServer.getDownloadDirectory();
+			java.util.Map<String, String> result = new java.util.HashMap<>();
+			result.put("path", downloadPath);
+			LlamaServer.sendJsonResponse(ctx, result);
+		} catch (Exception e) {
+			LlamaServer.sendErrorResponse(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, "获取下载路径失败: " + e.getMessage());
+		}
+	}
+
+	/**
+	 * 处理设置下载路径请求
+	 */
+	private void handleSetDownloadPath(ChannelHandlerContext ctx, FullHttpRequest request) {
+		try {
+			String content = request.content().toString(CharsetUtil.UTF_8);
+			@SuppressWarnings("unchecked")
+			java.util.Map<String, Object> requestData = gson.fromJson(content, java.util.Map.class);
+
+			String path = (String) requestData.get("path");
+
+			if (path == null || path.trim().isEmpty()) {
+				LlamaServer.sendErrorResponse(ctx, HttpResponseStatus.BAD_REQUEST, "下载路径不能为空");
+				return;
+			}
+
+			// 设置下载路径
+			LlamaServer.setDownloadDirectory(path);
+			
+			// 保存配置到文件
+			LlamaServer.saveApplicationConfig();
+
+			java.util.Map<String, String> result = new java.util.HashMap<>();
+			result.put("path", path);
+			result.put("message", "下载路径设置成功");
+			LlamaServer.sendJsonResponse(ctx, result);
+		} catch (Exception e) {
+			LlamaServer.sendErrorResponse(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, "设置下载路径失败: " + e.getMessage());
 		}
 	}
 }
