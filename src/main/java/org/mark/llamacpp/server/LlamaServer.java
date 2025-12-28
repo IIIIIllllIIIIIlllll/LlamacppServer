@@ -166,6 +166,12 @@ public class LlamaServer {
 			String json = GSON.toJson(root);
 
 			Path configPath = Paths.get("config/application.json");
+			
+			// 确保config目录存在
+			if (!Files.exists(configPath.getParent())) {
+				Files.createDirectories(configPath.getParent());
+			}
+			
 			Files.write(configPath, json.getBytes(StandardCharsets.UTF_8));
 
 			logger.info("配置已保存到文件: {}", configPath.toString());
