@@ -791,12 +791,6 @@
 
 <body>
   <div class="app">
-    <div class="header">
-      <div class="brand">
-        <span></span>
-      </div>
-    </div>
-
     <div class="main">
       <div class="chat-shell">
         <div class="chat-top">
@@ -806,6 +800,7 @@
           <div class="chat-actions">
             <button id="toggleSettings" class="btn" type="button">设置</button>
             <button id="clearChat" class="btn" type="button">清空</button>
+            <button id="sessionsToggle" class="btn ghost" type="button">角色列表</button>
           </div>
         </div>
 
@@ -818,16 +813,11 @@
               <select id="modelSelect"></select>
               <button id="refreshModels" class="btn" type="button">刷新</button>
             </div>
-            <button id="sessionsToggle" class="btn ghost" type="button">角色列表</button>
-            <div class="pill">
-              <span class="hint" id="sessionBadge"></span>
-            </div>
             <div class="toggle">
               <input id="autoScroll" type="checkbox" checked />
               <label for="autoScroll" class="hint">自动滚动</label>
             </div>
-            <button id="saveKV" class="btn ghost" type="button">保存KV缓存</button>
-            <button id="loadKV" class="btn ghost" type="button">加载KV缓存</button>
+            <button id="kvCacheToggle" class="btn icon-btn ghost" type="button" title="KV缓存管理">💾</button>
           </div>
 
           <div id="settingsPanel" class="settings">
@@ -937,6 +927,25 @@
         </div>
       </div>
     </div>
+
+    <div id="kvCacheModal" class="modal-wrap" aria-hidden="true">
+      <div class="modal-card">
+        <div class="modal-head">
+          <div class="modal-title">KV缓存管理</div>
+          <button id="kvCacheClose" class="btn icon-btn" type="button" aria-label="Close">×</button>
+        </div>
+        <div class="modal-body">
+          <p style="color: var(--muted); font-size: 14px; margin: 0 0 16px 0;">管理当前模型的KV缓存，可以保存或加载缓存以加快推理速度。</p>
+          <div style="display: flex; gap: 12px; justify-content: center;">
+            <button id="saveKV" class="btn" type="button" style="min-width: 120px;">保存KV缓存</button>
+            <button id="loadKV" class="btn" type="button" style="min-width: 120px;">加载KV缓存</button>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button id="kvCacheCancel" class="btn" type="button">关闭</button>
+        </div>
+      </div>
+    </div>
   </div>
   <script src="/js/lz-string.js"></script>
   <script>
@@ -952,7 +961,6 @@
       drawerHint: document.getElementById('drawerHint'),
 
       titleInput: document.getElementById('titleInput'),
-      sessionBadge: document.getElementById('sessionBadge'),
       chatList: document.getElementById('chatList'),
       promptInput: document.getElementById('promptInput'),
 
@@ -984,6 +992,10 @@
       autoScroll: document.getElementById('autoScroll'),
       saveHint: document.getElementById('saveHint'),
 
+      kvCacheToggle: document.getElementById('kvCacheToggle'),
+      kvCacheModal: document.getElementById('kvCacheModal'),
+      kvCacheClose: document.getElementById('kvCacheClose'),
+      kvCacheCancel: document.getElementById('kvCacheCancel'),
       saveKV: document.getElementById('saveKV'),
       loadKV: document.getElementById('loadKV'),
 
@@ -1118,14 +1130,6 @@
       return name || '默认角色';
     }
 
-    function updateCompletionBadge() {
-      if (!state.currentCompletionId) {
-        els.sessionBadge.textContent = '';
-        return;
-      }
-      els.sessionBadge.textContent = getCurrentCompletionTitle();
-    }
-
     function refreshCompletionTitleInMessages() {
       if (!state.currentCompletionId) return;
       const taskName = getCurrentCompletionTitle();
@@ -1197,6 +1201,16 @@
       state.editingMessageId = null;
       els.editModal.classList.remove('show');
       els.editModal.setAttribute('aria-hidden', 'true');
+    }
+
+    function openKVCacheModal() {
+      els.kvCacheModal.classList.add('show');
+      els.kvCacheModal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeKVCacheModal() {
+      els.kvCacheModal.classList.remove('show');
+      els.kvCacheModal.setAttribute('aria-hidden', 'true');
     }
 
     function saveEditModal() {
@@ -1780,7 +1794,6 @@
           els.rolePrompt.value = '';
           state.messages = [];
           rerenderAll();
-          updateCompletionBadge();
         }
       } catch (e) {
         els.drawerHint.textContent = '删除失败：' + e.message;
@@ -1851,7 +1864,6 @@
 
       state.messages = normalizeHistory(ext?.history);
       rerenderAll();
-      updateCompletionBadge();
       setSaveHint('');
     }
 
@@ -1986,7 +1998,6 @@
       });
 
       els.titleInput.addEventListener('input', () => {
-        updateCompletionBadge();
         refreshCompletionTitleInMessages();
         scheduleSave('标题');
       });
@@ -2007,6 +2018,12 @@
       els.topP.addEventListener('input', () => scheduleSave('参数'));
 
       // KV缓存按钮事件
+      els.kvCacheToggle.addEventListener('click', openKVCacheModal);
+      els.kvCacheClose.addEventListener('click', closeKVCacheModal);
+      els.kvCacheCancel.addEventListener('click', closeKVCacheModal);
+      els.kvCacheModal.addEventListener('click', (e) => {
+        if (e.target === els.kvCacheModal) closeKVCacheModal();
+      });
       els.saveKV.addEventListener('click', saveKVCache);
       els.loadKV.addEventListener('click', loadKVCache);
 
@@ -2021,6 +2038,10 @@
         if (e.key === 'Escape') {
           if (els.editModal.classList.contains('show')) {
             closeEditModal();
+            return;
+          }
+          if (els.kvCacheModal.classList.contains('show')) {
+            closeKVCacheModal();
             return;
           }
           if (els.settingsPanel.classList.contains('open')) {
