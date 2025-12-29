@@ -35,6 +35,7 @@ import org.mark.llamacpp.server.struct.LoadModelRequest;
 import org.mark.llamacpp.server.struct.ModelLaunchOptions;
 import org.mark.llamacpp.server.struct.StopModelRequest;
 import org.mark.llamacpp.server.struct.VramEstimation;
+import org.mark.llamacpp.server.tools.CommandLineRunner;
 import org.mark.llamacpp.server.tools.VramEstimator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -213,6 +214,11 @@ public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequ
 		// 对应URL-GET：/props
 		if (uri.startsWith("/api/models/props")) {
 			this.handleModelProps(ctx, request);
+			return;
+		}
+		// 列出可用的设备，基于当前选择的llamacpp
+		if( uri.startsWith("/api/model/device/list")) {
+			this.handleDeviceListRequest(ctx, request);
 			return;
 		}
 		
@@ -1786,8 +1792,71 @@ public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequ
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("删除基准测试结果失败: " + e.getMessage()));
 		}
 	}
-    
-    
+	
+	/**
+	 * 	处理设备列表请求
+	 * 	执行 llama-bench --list-devices 命令获取可用设备列表
+	 * @param ctx
+	 * @param request
+	 */
+	private void handleDeviceListRequest(ChannelHandlerContext ctx, FullHttpRequest request) {
+		try {
+			// 只支持GET请求
+			if (request.method() != HttpMethod.GET) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("只支持GET请求"));
+				return;
+			}
+			
+			// 从URL参数中提取 llamaBinPath
+			String query = request.uri();
+			String llamaBinPath = null;
+			if (query.contains("?")) {
+				String q = query.substring(query.indexOf("?") + 1);
+				if (q.contains("llamaBinPath=")) {
+					String tmp = q.substring(q.indexOf("llamaBinPath=") + 13);
+					if (tmp.contains("&")) {
+						tmp = tmp.substring(0, tmp.indexOf("&"));
+					}
+					try {
+						llamaBinPath = URLDecoder.decode(tmp, "UTF-8");
+					} catch (UnsupportedEncodingException e) {
+						e.printStackTrace();
+					}
+				}
+			}
+			
+			// 验证必需的参数
+			if (llamaBinPath == null || llamaBinPath.trim().isEmpty()) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("缺少必需的llamaBinPath参数"));
+				return;
+			}
+			
+			List<String> devices = LlamaServerManager.getInstance().handleListDevices(llamaBinPath);
+			
+			String executableName = "llama-bench";
+			// 拼接完整命令路径
+			String command = llamaBinPath.trim();
+			command += File.separator;
+			
+			command += executableName + " --list-devices";
+			
+			// 执行命令
+			CommandLineRunner.CommandResult result = CommandLineRunner.execute(command, 30);
+			// 构建响应数据
+			Map<String, Object> data = new HashMap<>();
+			data.put("command", command);
+			data.put("exitCode", result.getExitCode());
+			data.put("output", result.getOutput());
+			data.put("error", result.getError());
+			data.put("devices", devices);
+			
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
+		} catch (Exception e) {
+			logger.error("获取设备列表时发生错误", e);
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("获取设备列表失败: " + e.getMessage()));
+		}
+	}
+	
 	
 	
 	@Override

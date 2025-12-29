@@ -33,6 +33,7 @@ import org.mark.llamacpp.gguf.GGUFMetaData;
 import org.mark.llamacpp.gguf.GGUFModel;
 import org.mark.llamacpp.server.struct.ApiResponse;
 import org.mark.llamacpp.server.struct.ModelLaunchOptions;
+import org.mark.llamacpp.server.tools.CommandLineRunner;
 import org.mark.llamacpp.server.tools.PortChecker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -872,5 +873,31 @@ public class LlamaServerManager {
 			LOGGER.error("加载slot缓存时发生错误", e);
 			return ApiResponse.error("加载slot失败: " + e.getMessage());
 		}
+	}
+	
+	
+	
+	
+	public List<String> handleListDevices(String llamaBinPath) {
+		List<String> list = new ArrayList<>(8);
+		
+		String executableName = "llama-bench";
+		// 拼接完整命令路径
+		String command = llamaBinPath.trim();
+		command += File.separator;
+		
+		command += executableName + " --list-devices";
+		
+		// 执行命令
+		CommandLineRunner.CommandResult result = CommandLineRunner.execute(command, 30);
+		// 根据list device的返回结果。拼凑设备
+		String output = result.getOutput();
+		if(output.contains("Available devices")) {
+			String[] lines = output.split("\n");
+			for(int i = 1; i < lines.length; i++) {
+				list.add(lines[i]);
+			}
+		}
+		return list;
 	}
 }
