@@ -24,7 +24,7 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import org.mark.llamacpp.server.LlamaCppProcess;
@@ -38,7 +38,10 @@ public class AnthropicService {
     private static final Logger logger = LoggerFactory.getLogger(AnthropicService.class);
     private static final Gson gson = new Gson();
     private static final String ANTHROPIC_API_KEY = "123456";
-    private static final Executor worker = Executors.newFixedThreadPool(4);
+	/**
+	 * 	线程池。
+	 */
+	private static final ExecutorService worker = Executors.newVirtualThreadPerTaskExecutor();
     
 	/**
 	 * 	存储当前通道正在处理的模型链接，用于在连接关闭时停止对应的模型进程

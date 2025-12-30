@@ -680,7 +680,7 @@ public class BasicDownloader {
 		}
 		
 		// 下载剩余的分片
-		ExecutorService pool = Executors.newFixedThreadPool(Math.min(this.parallelism, remainingParts.size()));
+		ExecutorService pool = Executors.newFixedThreadPool(Math.min(this.parallelism, remainingParts.size()), Thread.ofVirtual().factory());
 		this.activePool = pool;
 		try {
 			List<Future<Void>> futures = new ArrayList<>();
@@ -916,7 +916,7 @@ public class BasicDownloader {
 			partFiles.add(this.targetFile.resolveSibling(this.targetFile.getFileName().toString() + ".part" + i));
 		}
 		
-		ExecutorService pool = Executors.newFixedThreadPool(Math.min(this.parallelism, parts.size()));
+		ExecutorService pool = Executors.newFixedThreadPool(Math.min(this.parallelism, parts.size()), Thread.ofVirtual().factory());
 		this.activePool = pool;
 		try {
 			List<Future<Void>> futures = new ArrayList<>();

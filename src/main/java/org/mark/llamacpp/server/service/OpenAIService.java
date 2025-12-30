@@ -12,7 +12,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import org.mark.llamacpp.gguf.GGUFModel;
@@ -62,7 +62,7 @@ public class OpenAIService {
 	/**
 	 * 	线程池。
 	 */
-	private Executor worker = Executors.newFixedThreadPool(4);
+	private static final ExecutorService worker = Executors.newVirtualThreadPerTaskExecutor();
 
 	
 	public OpenAIService() {
