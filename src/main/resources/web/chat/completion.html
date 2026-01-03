@@ -796,6 +796,28 @@
         max-width: 86%;
       }
 
+      .model-row.visible {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .model-row.visible .pill {
+        grid-column: 1 / -1;
+        flex-wrap: wrap;
+      }
+
+      .model-row.visible .pill select {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .model-row.visible .toggle,
+      .model-row.visible .btn {
+        width: 100%;
+      }
+
       .settings-body {
         grid-template-columns: 1fr;
         grid-template-areas: "left" "center" "right";
@@ -840,6 +862,10 @@
             <div class="toggle">
               <input id="streamToggle" type="checkbox" checked />
               <label for="streamToggle" class="hint">流式传输</label>
+            </div>
+            <div class="toggle">
+              <input id="thinkingToggle" type="checkbox" checked />
+              <label for="thinkingToggle" class="hint">开启思考</label>
             </div>
             <button id="toggleSettings" class="btn" type="button">设置</button>
             <button id="clearChat" class="btn" type="button">清空</button>
@@ -1024,6 +1050,7 @@
 
       autoScroll: document.getElementById('autoScroll'),
       streamToggle: document.getElementById('streamToggle'),
+      thinkingToggle: document.getElementById('thinkingToggle'),
       saveHint: document.getElementById('saveHint'),
 
       kvCacheToggle: document.getElementById('kvCacheToggle'),
@@ -1198,6 +1225,7 @@
       els.modelSelect.disabled = isBusy;
       els.refreshModels.disabled = isBusy;
       els.streamToggle.disabled = isBusy;
+      els.thinkingToggle.disabled = isBusy;
       els.promptInput.disabled = isBusy ? false : false;
     }
 
@@ -1562,6 +1590,7 @@
             max_tokens: params.max_tokens,
             temperature: params.temperature,
             top_p: params.top_p,
+            enable_thinking: !!els.thinkingToggle.checked,
             stream: useStream
           }
           : {
@@ -1570,6 +1599,7 @@
             max_tokens: params.max_tokens,
             temperature: params.temperature,
             top_p: params.top_p,
+            enable_thinking: !!els.thinkingToggle.checked,
             stream: useStream,
             stop: ['\n' + getUserSpeakerName(), '\n***']
           };
@@ -1663,6 +1693,7 @@
         userSuffix: (els.userSuffix.value == null ? '' : String(els.userSuffix.value)),
         assistantPrefix: (els.assistantPrefix.value == null ? '' : String(els.assistantPrefix.value)),
         assistantSuffix: (els.assistantSuffix.value == null ? '' : String(els.assistantSuffix.value)),
+        enableThinking: !!els.thinkingToggle.checked,
         params: currentParams(),
         history: state.messages
       });
@@ -1892,6 +1923,8 @@
       if (ext?.params?.max_tokens != null) els.maxTokens.value = String(ext.params.max_tokens);
       if (ext?.params?.temperature != null) els.temperature.value = String(ext.params.temperature);
       if (ext?.params?.top_p != null) els.topP.value = String(ext.params.top_p);
+      if (ext?.enableThinking != null) els.thinkingToggle.checked = !!ext.enableThinking;
+      else els.thinkingToggle.checked = true;
 
       const loadedApiModel = (ext?.apiModel != null ? ext.apiModel : s.apiModel);
       if (loadedApiModel != null) {
@@ -2061,6 +2094,7 @@
       els.maxTokens.addEventListener('input', () => scheduleSave('参数'));
       els.temperature.addEventListener('input', () => scheduleSave('参数'));
       els.topP.addEventListener('input', () => scheduleSave('参数'));
+      els.thinkingToggle.addEventListener('change', () => scheduleSave('思考开关'));
 
       // KV缓存按钮事件
       els.kvCacheToggle.addEventListener('click', openKVCacheModal);
