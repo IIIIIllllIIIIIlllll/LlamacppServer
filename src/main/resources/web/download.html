@@ -808,8 +808,38 @@
                 return;
             }
             
+            const getDownloadCreatedAtMs = (download) => {
+                const value = download?.createdAt;
+                if (value === null || value === undefined) return 0;
+
+                if (typeof value === 'number' && Number.isFinite(value)) {
+                    return value < 1e12 ? value * 1000 : value;
+                }
+
+                if (typeof value === 'string') {
+                    const trimmed = value.trim();
+                    if (!trimmed) return 0;
+                    if (/^\d+$/.test(trimmed)) {
+                        const num = Number(trimmed);
+                        if (!Number.isFinite(num)) return 0;
+                        return num < 1e12 ? num * 1000 : num;
+                    }
+                    const ms = new Date(trimmed).getTime();
+                    return Number.isFinite(ms) ? ms : 0;
+                }
+
+                const ms = new Date(value).getTime();
+                return Number.isFinite(ms) ? ms : 0;
+            };
+
+            const sortedDownloads = [...downloads].sort((a, b) => {
+                const diff = getDownloadCreatedAtMs(b) - getDownloadCreatedAtMs(a);
+                if (diff !== 0) return diff;
+                return String(b.taskId || '').localeCompare(String(a.taskId || ''));
+            });
+
             let html = '';
-            downloads.forEach(download => {
+            sortedDownloads.forEach(download => {
                 let status = download.state || 'IDLE';
                 let statusText = '正在开始……';
                 let statusIcon = 'fa-question-circle';
