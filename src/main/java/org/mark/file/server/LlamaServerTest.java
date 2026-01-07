@@ -43,7 +43,12 @@ public class LlamaServerTest {
 		*/
 		
 		
-		
+		BasicDownloader basicDownloader = new BasicDownloader("https://hf-mirror.com/unsloth/GLM-4.6-GGUF/resolve/main/README.md?download=true");
+		try {
+			basicDownloader.download();
+		} catch (IOException | URISyntaxException | InterruptedException e) {
+			e.printStackTrace();
+		}
 	}
 
 }

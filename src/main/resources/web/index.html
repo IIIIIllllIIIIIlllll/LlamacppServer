@@ -807,6 +807,7 @@
             </div>
             <div class="modal-body">
                 <form id="loadModelForm">
+                    <!-- 上半部分：基础参数设置（左）和计算设备（右）各占50% -->
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; align-items: start;">
                         <div>
                             <div class="form-group">
@@ -853,52 +854,6 @@
                                     <label class="form-check-label" for="flashAttention">Flash Attention</label>
                                 </div>
                             </div>
-                            <details style="margin-top: 1rem; border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 0.5rem;">
-                                <summary style="cursor: pointer; font-size: 0.875rem; color: var(--primary-color); font-weight: 500;">高级参数 (Temperature, Top-P, etc.)</summary>
-                                <div style="padding-top: 1rem; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                                    <div class="form-group">
-                                        <label class="form-label" for="temperature">Temperature</label>
-                                        <input type="number" step="0.01" class="form-control" id="temperature" name="temperature" value="0.7">
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label" for="topP">Top P</label>
-                                        <input type="number" step="0.01" class="form-control" id="topP" name="topP" value="0.95">
-                                    </div>
-                                     <div class="form-group">
-                                        <label class="form-label" for="topK">Top K</label>
-                                        <input type="number" class="form-control" id="topK" name="topK" value="40">
-                                    </div>
-                                     <div class="form-group">
-                                        <label class="form-label" for="minP">Min P</label>
-                                        <input type="number" step="0.01" class="form-control" id="minP" name="minP" value="0.05">
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label" for="presencePenalty">Presence Penalty</label>
-                                        <input type="number" step="0.01" class="form-control" id="presencePenalty" name="presencePenalty" value="0.0">
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label" for="repeatPenalty">Repeat Penalty</label>
-                                        <input type="number" step="0.01" class="form-control" id="repeatPenalty" name="repeatPenalty" value="1.10">
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label" for="batchSize">batch-size</label>
-                                        <input type="number" class="form-control" id="batchSize" name="batchSize" min="1" placeholder="例如: 512" value="1024">
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label" for="ubatchSize">ubatch-size</label>
-                                        <input type="number" class="form-control" id="ubatchSize" name="ubatchSize" min="1" placeholder="例如: 512" value="2048">
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label" for="parallel">parallel</label>
-                                        <input type="number" class="form-control" id="parallel" name="parallel" min="1" placeholder="例如: 4" value="4">
-                                    </div>
-                                </div>
-                                <div class="form-group" style="margin-top: 1rem;">
-                                    <label class="form-label" for="extraParams">额外参数</label>
-                                    <textarea class="form-control" id="extraParams" name="extraParams" rows="2" placeholder="例如: --grp-attn-n 8 --grp-attn-w 512"></textarea>
-                                    <small class="form-text">输入额外的命令行参数，用空格分隔</small>
-                                </div>
-                            </details>
                         </div>
                         <div>
                             <div class="form-group">
@@ -916,6 +871,55 @@
                                 </div>
                             </div>
                         </div>
+                    </div>
+                    <!-- 下半部分：详细参数设置，占据100%宽度 -->
+                    <div style="margin-top: 1.25rem;">
+                        <details style="border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 0.5rem;">
+                            <summary style="cursor: pointer; font-size: 0.875rem; color: var(--primary-color); font-weight: 500;">高级参数 (Temperature, Top-P, etc.)</summary>
+                            <div style="padding-top: 1rem; display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1rem;">
+                                <div class="form-group">
+                                    <label class="form-label" for="temperature">Temperature</label>
+                                    <input type="number" step="0.01" class="form-control" id="temperature" name="temperature" value="0.7">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="topP">Top P</label>
+                                    <input type="number" step="0.01" class="form-control" id="topP" name="topP" value="0.95">
+                                </div>
+                                 <div class="form-group">
+                                    <label class="form-label" for="topK">Top K</label>
+                                    <input type="number" class="form-control" id="topK" name="topK" value="40">
+                                </div>
+                                 <div class="form-group">
+                                    <label class="form-label" for="minP">Min P</label>
+                                    <input type="number" step="0.01" class="form-control" id="minP" name="minP" value="0.05">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="presencePenalty">Presence Penalty</label>
+                                    <input type="number" step="0.01" class="form-control" id="presencePenalty" name="presencePenalty" value="0.0">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="repeatPenalty">Repeat Penalty</label>
+                                    <input type="number" step="0.01" class="form-control" id="repeatPenalty" name="repeatPenalty" value="1.10">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="batchSize">batch-size</label>
+                                    <input type="number" class="form-control" id="batchSize" name="batchSize" min="1" placeholder="例如: 512" value="1024">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="ubatchSize">ubatch-size</label>
+                                    <input type="number" class="form-control" id="ubatchSize" name="ubatchSize" min="1" placeholder="例如: 512" value="2048">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="parallel">parallel</label>
+                                    <input type="number" class="form-control" id="parallel" name="parallel" min="1" placeholder="例如: 4" value="4">
+                                </div>
+                            </div>
+                            <div class="form-group" style="margin-top: 1rem;">
+                                <label class="form-label" for="extraParams">额外参数</label>
+                                <textarea class="form-control" id="extraParams" name="extraParams" rows="2" placeholder="例如: --grp-attn-n 8 --grp-attn-w 512"></textarea>
+                                <small class="form-text">输入额外的命令行参数，用空格分隔</small>
+                            </div>
+                        </details>
                     </div>
                 </form>
             </div>
