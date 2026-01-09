@@ -65,12 +65,34 @@ jobs:
           echo "总文件数:"
           find build/classes -type f | wc -l
 
+      - name: 下载精简版 JRE (Linux)
+        run: |
+          mkdir -p build/jre-linux
+          curl -L -o build/jre-linux.zip https://github.com/IIIIIllllIIIIIlllll/Mini-JRE/releases/download/v1.0.0/mini-jre-21.08-linux-x64.zip
+          unzip -q build/jre-linux.zip -d build/jre-linux
+          JRE_NAME=$(ls build/jre-linux | head -1)
+          mv build/jre-linux/$JRE_NAME build/jre-linux/jre
+          rm build/jre-linux.zip
+          echo "Linux JRE 下载完成"
+          ls -la build/jre-linux/jre/
+
+      - name: 下载精简版 JRE (Windows)
+        run: |
+          mkdir -p build/jre-win
+          curl -L -o build/jre-win.zip https://github.com/IIIIIllllIIIIIlllll/Mini-JRE/releases/download/v1.0.0/mini-jre-21.08-win-x64.zip
+          unzip -q build/jre-win.zip -d build/jre-win
+          JRE_NAME=$(ls build/jre-win | head -1)
+          mv build/jre-win/$JRE_NAME build/jre-win/jre
+          rm build/jre-win.zip
+          echo "Windows JRE 下载完成"
+          ls -la build/jre-win/jre/
+
       - name: 创建启动脚本 (Linux/Mac)
         run: |
           cat > build/run.sh << 'EOF'
           #!/bin/bash
           cd "$(dirname "$0")"
-          java -Xms64m -Xmx96m -classpath "./classes:./lib/*" org.mark.llamacpp.server.LlamaServer "$@"
+          ./jre/bin/java -Xms64m -Xmx96m -classpath "./classes:./lib/*" org.mark.llamacpp.server.LlamaServer "$@"
           EOF
           chmod +x build/run.sh
 
@@ -79,7 +101,7 @@ jobs:
           cat > build/run.bat << 'EOF'
           @echo off
           cd /d "%~dp0"
-          java -Xms64m -Xmx96m -classpath "./classes;./lib/*" org.mark.llamacpp.server.LlamaServer %*
+          jre\bin\java.exe -Xms64m -Xmx96m -classpath "./classes;./lib/*" org.mark.llamacpp.server.LlamaServer %*
           EOF
 
       - name: 复制 README 到 build 目录
@@ -100,10 +122,21 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "版本号: $VERSION"
 
-      - name: 打包发布文件
+      - name: 打包 Linux 版本
         run: |
-          mv build llama-server-${{ steps.get_version.outputs.version }}
-          zip -r llama-server-${{ steps.get_version.outputs.version }}.zip llama-server-${{ steps.get_version.outputs.version }}
+          cp -r build build-linux
+          cp -r build/jre-linux/jre build-linux/jre
+          rm -rf build-linux/jre-linux build-linux/jre-win
+          mv build-linux llama-server-${{ steps.get_version.outputs.version }}-linux
+          zip -r llama-server-${{ steps.get_version.outputs.version }}-linux.zip llama-server-${{ steps.get_version.outputs.version }}-linux
+
+      - name: 打包 Windows 版本
+        run: |
+          cp -r build build-win
+          cp -r build/jre-win/jre build-win/jre
+          rm -rf build-win/jre-linux build-win/jre-win
+          mv build-win llama-server-${{ steps.get_version.outputs.version }}-windows
+          zip -r llama-server-${{ steps.get_version.outputs.version }}-windows.zip llama-server-${{ steps.get_version.outputs.version }}-windows
 
       - name: 生成 Release Notes
         id: release_notes
@@ -127,24 +160,27 @@ jobs:
           ### 📦 包含内容
           - 编译后的 class 文件
           - 所有依赖库（lib/*.jar）
-          - Linux/Mac 启动脚本（run.sh）
-          - Windows 启动脚本（run.bat）
+          - 精简版 JRE 21.08（内置，无需安装 Java）
+          - 启动脚本（run.sh / run.bat）
           
           ### 📝 使用方法
-          **Linux/Mac:**
+          
+          **Linux:**
           ```bash
-          unzip llama-server-${{ steps.get_version.outputs.version }}.zip
-          cd llama-server-${{ steps.get_version.outputs.version }}
+          unzip llama-server-${{ steps.get_version.outputs.version }}-linux.zip
+          cd llama-server-${{ steps.get_version.outputs.version }}-linux
           chmod +x run.sh
           ./run.sh
           ```
           
           **Windows:**
           ```cmd
-          unzip llama-server-${{ steps.get_version.outputs.version }}.zip
-          cd llama-server-${{ steps.get_version.outputs.version }}
+          unzip llama-server-${{ steps.get_version.outputs.version }}-windows.zip
+          cd llama-server-${{ steps.get_version.outputs.version }}-windows
           run.bat
           ```
+          
+          **注意：** 本版本已内置精简版 JRE，无需额外安装 Java 环境。
           
           ---
           
@@ -178,16 +214,25 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: llama-server-${{ steps.get_version.outputs.version }}.zip
+          files: |
+            llama-server-${{ steps.get_version.outputs.version }}-linux.zip
+            llama-server-${{ steps.get_version.outputs.version }}-windows.zip
           body: ${{ env.NOTES_CONTENT }}
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 上传构建产物
+      - name: 上传构建产物 (Linux)
         uses: actions/upload-artifact@v4
         with:
-          name: llama-server-${{ steps.get_version.outputs.version }}
-          path: llama-server-${{ steps.get_version.outputs.version }}.zip
+          name: llama-server-${{ steps.get_version.outputs.version }}-linux
+          path: llama-server-${{ steps.get_version.outputs.version }}-linux.zip
+          retention-days: 30
+
+      - name: 上传构建产物 (Windows)
+        uses: actions/upload-artifact@v4
+        with:
+          name: llama-server-${{ steps.get_version.outputs.version }}-windows
+          path: llama-server-${{ steps.get_version.outputs.version }}-windows.zip
           retention-days: 30
