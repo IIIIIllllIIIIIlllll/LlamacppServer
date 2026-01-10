@@ -225,7 +225,7 @@
     "sort": 21
   },
   {
-    "name": "DirectIO",
+    "name": "禁用DirectIO",
     "fullName": "--no-direct-io",
     "abbreviation": "-ndio",
     "type": "LOGIC",
