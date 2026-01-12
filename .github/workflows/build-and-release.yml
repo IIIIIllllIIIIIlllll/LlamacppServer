@@ -78,36 +78,33 @@ jobs:
 
       - name: 下载精简版 JRE (Linux)
         run: |
-          mkdir -p build/jre-linux
-          curl -L -o build/jre-linux.zip https://github.com/IIIIIllllIIIIIlllll/Mini-JRE/releases/download/v1.0.0/mini-jre-21.08-linux-x64.zip
-          unzip -q build/jre-linux.zip -d build/jre-linux
-          JRE_NAME=$(ls build/jre-linux | head -1)
-          mv build/jre-linux/$JRE_NAME build/jre-linux/jre
-          rm build/jre-linux.zip
+          mkdir -p jre-linux
+          curl -L -o jre-linux.zip https://github.com/IIIIIllllIIIIIlllll/Mini-JRE/releases/download/v1.0.0/mini-jre-21.08-linux-x64.zip
+          unzip -q jre-linux.zip -d jre-linux
+          JRE_NAME=$(ls jre-linux | head -1)
+          mv jre-linux/$JRE_NAME jre-linux/jre
+          rm jre-linux.zip
           echo "Linux JRE 下载完成"
-          ls -la build/jre-linux/jre/
 
       - name: 下载精简版 JRE (Windows)
         run: |
-          mkdir -p build/jre-win
-          curl -L -o build/jre-win.zip https://github.com/IIIIIllllIIIIIlllll/Mini-JRE/releases/download/v1.0.0/mini-jre-21.08-win-x64.zip
-          unzip -q build/jre-win.zip -d build/jre-win
-          JRE_NAME=$(ls build/jre-win | head -1)
-          mv build/jre-win/$JRE_NAME build/jre-win/jre
-          rm build/jre-win.zip
+          mkdir -p jre-win
+          curl -L -o jre-win.zip https://github.com/IIIIIllllIIIIIlllll/Mini-JRE/releases/download/v1.0.0/mini-jre-21.08-win-x64.zip
+          unzip -q jre-win.zip -d jre-win
+          JRE_NAME=$(ls jre-win | head -1)
+          mv jre-win/$JRE_NAME jre-win/jre
+          rm jre-win.zip
           echo "Windows JRE 下载完成"
-          ls -la build/jre-win/jre/
 
       - name: 下载精简版 JRE (macOS)
         run: |
-          mkdir -p build/jre-mac
-          curl -L -o build/jre-mac.zip https://github.com/IIIIIllllIIIIIlllll/Mini-JRE/releases/download/v1.0.0/mini-jre-21.06-mac-x64.zip
-          unzip -q build/jre-mac.zip -d build/jre-mac
-          JRE_NAME=$(ls build/jre-mac | head -1)
-          mv build/jre-mac/$JRE_NAME build/jre-mac/jre
-          rm build/jre-mac.zip
+          mkdir -p jre-mac
+          curl -L -o jre-mac.zip https://github.com/IIIIIllllIIIIIlllll/Mini-JRE/releases/download/v1.0.0/mini-jre-21.06-mac-x64.zip
+          unzip -q jre-mac.zip -d jre-mac
+          JRE_NAME=$(ls jre-mac | head -1)
+          mv jre-mac/$JRE_NAME jre-mac/jre
+          rm jre-mac.zip
           echo "macOS JRE 下载完成"
-          ls -la build/jre-mac/jre/
 
       - name: 创建启动脚本 (Linux/Mac)
         run: |
@@ -144,29 +141,105 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "版本号: $VERSION"
 
-      - name: 打包 Linux 版本
+      - name: 获取 llama.cpp 最新版本号
+        id: get_llamacpp_version
         run: |
-          cp -r build build-linux
-          cp -r build/jre-linux/jre build-linux/jre
-          rm -rf build-linux/jre-linux build-linux/jre-win build-linux/jre-mac
-          mv build-linux llama-server-${{ steps.get_version.outputs.version }}-linux
-          zip -r llama-server-${{ steps.get_version.outputs.version }}-linux.zip llama-server-${{ steps.get_version.outputs.version }}-linux
+          echo "正在获取 llama.cpp 最新版本号..."
+          LLAMACPP_VERSION=$(curl -s https://api.github.com/repos/ggml-org/llama.cpp/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "llama.cpp 最新版本: $LLAMACPP_VERSION"
+          echo "llamacpp_version=$LLAMACPP_VERSION" >> $GITHUB_OUTPUT
+          echo "LLAMACPP_VERSION=$LLAMACPP_VERSION" >> $GITHUB_ENV
+          mkdir -p build/llama.cpp
 
-      - name: 打包 Windows 版本
+      - name: 下载 llama.cpp 预编译版本 (Windows CUDA12)
         run: |
-          cp -r build build-win
-          cp -r build/jre-win/jre build-win/jre
-          rm -rf build-win/jre-linux build-win/jre-win build-win/jre-mac
-          mv build-win llama-server-${{ steps.get_version.outputs.version }}-windows
-          zip -r llama-server-${{ steps.get_version.outputs.version }}-windows.zip llama-server-${{ steps.get_version.outputs.version }}-windows
+          echo "下载 llama.cpp Windows CUDA12 版本..."
+          curl -L -o llama-cuda12.zip https://github.com/ggml-org/llama.cpp/releases/download/${{ steps.get_llamacpp_version.outputs.llamacpp_version }}/llama-${{ steps.get_llamacpp_version.outputs.llamacpp_version }}-bin-win-cuda-12.4-x64.zip
+          mkdir win-cuda12
+          unzip -q llama-cuda12.zip -d win-cuda12
+          rm llama-cuda12.zip
+          echo "Windows CUDA12 版本下载完成"
 
-      - name: 打包 macOS 版本
+      - name: 下载 llama.cpp 预编译版本 (Windows Vulkan)
         run: |
-          cp -r build build-mac
-          cp -r build/jre-mac/jre build-mac/jre
-          rm -rf build-mac/jre-linux build-mac/jre-win build-mac/jre-mac
-          mv build-mac llama-server-${{ steps.get_version.outputs.version }}-mac
-          zip -r llama-server-${{ steps.get_version.outputs.version }}-mac.zip llama-server-${{ steps.get_version.outputs.version }}-mac
+          echo "下载 llama.cpp Windows Vulkan 版本..."
+          curl -L -o llama-vulkan.zip https://github.com/ggml-org/llama.cpp/releases/download/${{ steps.get_llamacpp_version.outputs.llamacpp_version }}/llama-${{ steps.get_llamacpp_version.outputs.llamacpp_version }}-bin-win-vulkan-x64.zip
+          mkdir win-vulkan
+          unzip -q llama-vulkan.zip -d win-vulkan
+          rm llama-vulkan.zip
+          echo "Windows Vulkan 版本下载完成"
+
+      - name: 下载 llama.cpp 预编译版本 (Windows HIP)
+        run: |
+          echo "下载 llama.cpp Windows HIP 版本..."
+          curl -L -o llama-hip.zip https://github.com/ggml-org/llama.cpp/releases/download/${{ steps.get_llamacpp_version.outputs.llamacpp_version }}/llama-${{ steps.get_llamacpp_version.outputs.llamacpp_version }}-bin-win-hip-radeon-x64.zip
+          mkdir win-hip
+          unzip -q llama-hip.zip -d win-hip
+          rm llama-hip.zip
+          echo "Windows HIP 版本下载完成"
+
+      - name: 下载 llama.cpp 预编译版本 (Ubuntu Vulkan)
+        run: |
+          echo "下载 llama.cpp Ubuntu Vulkan 版本..."
+          curl -L -o llama-ubuntu-vulkan.tar.gz https://github.com/ggml-org/llama.cpp/releases/download/${{ steps.get_llamacpp_version.outputs.llamacpp_version }}/llama-${{ steps.get_llamacpp_version.outputs.llamacpp_version }}-bin-ubuntu-vulkan-x64.tar.gz
+          mkdir ubuntu-vulkan
+          tar -xzf llama-ubuntu-vulkan.tar.gz -C ubuntu-vulkan
+          rm llama-ubuntu-vulkan.tar.gz
+          echo "Ubuntu Vulkan 版本下载完成"
+
+      - name: 下载 llama.cpp 预编译版本 (macOS ARM64)
+        run: |
+          echo "下载 llama.cpp macOS ARM64 版本..."
+          curl -L -o llama-macos-arm64.tar.gz https://github.com/ggml-org/llama.cpp/releases/download/${{ steps.get_llamacpp_version.outputs.llamacpp_version }}/llama-${{ steps.get_llamacpp_version.outputs.llamacpp_version }}-bin-macos-arm64.tar.gz
+          mkdir macos-arm64
+          tar -xzf llama-macos-arm64.tar.gz -C macos-arm64
+          rm llama-macos-arm64.tar.gz
+          echo "macOS ARM64 版本下载完成"
+
+      - name: 打包 Linux Vulkan 版本
+        run: |
+          cp -r build build-linux-vulkan
+          cp -r jre-linux/jre build-linux-vulkan/jre
+          mkdir -p build-linux-vulkan/llama.cpp
+          cp -r ubuntu-vulkan build-linux-vulkan/llama.cpp/
+          mv build-linux-vulkan llama-server-${{ steps.get_version.outputs.version }}-linux-vulkan
+          zip -r llama-server-${{ steps.get_version.outputs.version }}-linux-vulkan.zip llama-server-${{ steps.get_version.outputs.version }}-linux-vulkan
+
+      - name: 打包 Windows CUDA12 版本
+        run: |
+          cp -r build build-win-cuda12
+          cp -r jre-win/jre build-win-cuda12/jre
+          mkdir -p build-win-cuda12/llama.cpp
+          cp -r win-cuda12 build-win-cuda12/llama.cpp/
+          mv build-win-cuda12 llama-server-${{ steps.get_version.outputs.version }}-windows-cuda12
+          zip -r llama-server-${{ steps.get_version.outputs.version }}-windows-cuda12.zip llama-server-${{ steps.get_version.outputs.version }}-windows-cuda12
+
+      - name: 打包 Windows Vulkan 版本
+        run: |
+          cp -r build build-win-vulkan
+          cp -r jre-win/jre build-win-vulkan/jre
+          mkdir -p build-win-vulkan/llama.cpp
+          cp -r win-vulkan build-win-vulkan/llama.cpp/
+          mv build-win-vulkan llama-server-${{ steps.get_version.outputs.version }}-windows-vulkan
+          zip -r llama-server-${{ steps.get_version.outputs.version }}-windows-vulkan.zip llama-server-${{ steps.get_version.outputs.version }}-windows-vulkan
+
+      - name: 打包 Windows HIP 版本
+        run: |
+          cp -r build build-win-hip
+          cp -r jre-win/jre build-win-hip/jre
+          mkdir -p build-win-hip/llama.cpp
+          cp -r win-hip build-win-hip/llama.cpp/
+          mv build-win-hip llama-server-${{ steps.get_version.outputs.version }}-windows-hip
+          zip -r llama-server-${{ steps.get_version.outputs.version }}-windows-hip.zip llama-server-${{ steps.get_version.outputs.version }}-windows-hip
+
+      - name: 打包 macOS ARM64 版本
+        run: |
+          cp -r build build-mac-arm64
+          cp -r jre-mac/jre build-mac-arm64/jre
+          mkdir -p build-mac-arm64/llama.cpp
+          cp -r macos-arm64 build-mac-arm64/llama.cpp/
+          mv build-mac-arm64 llama-server-${{ steps.get_version.outputs.version }}-macos-arm64
+          zip -r llama-server-${{ steps.get_version.outputs.version }}-macos-arm64.zip llama-server-${{ steps.get_version.outputs.version }}-macos-arm64
 
       - name: 生成 Release Notes
         id: release_notes
@@ -192,13 +265,27 @@ jobs:
           - 所有依赖库（lib/*.jar）
           - 精简版 JRE 21.08（内置，无需安装 Java）
           - 启动脚本（run.sh / run.bat）
+          - llama.cpp 预编译版本（$LLAMACPP_VERSION）
+          
+          ### 📦 可用版本
+          
+          **Linux:**
+          - `llama-server-${{ steps.get_version.outputs.version }}-linux-vulkan.zip` - Ubuntu Vulkan 版本
+          
+          **Windows:**
+          - `llama-server-${{ steps.get_version.outputs.version }}-windows-cuda12.zip` - CUDA 12.4 版本（NVIDIA GPU）
+          - `llama-server-${{ steps.get_version.outputs.version }}-windows-vulkan.zip` - Vulkan 版本（通用 GPU）
+          - `llama-server-${{ steps.get_version.outputs.version }}-windows-hip.zip` - HIP 版本（AMD GPU）
+          
+          **macOS:**
+          - `llama-server-${{ steps.get_version.outputs.version }}-macos-arm64.zip` - Apple Silicon (M1/M2/M3)
           
           ### 📝 使用方法
           
           **Linux:**
           ```bash
-          unzip llama-server-${{ steps.get_version.outputs.version }}-linux.zip
-          cd llama-server-${{ steps.get_version.outputs.version }}-linux
+          unzip llama-server-${{ steps.get_version.outputs.version }}-linux-vulkan.zip
+          cd llama-server-${{ steps.get_version.outputs.version }}-linux-vulkan
           chmod +x run.sh
           chmod +x jre/bin/java
           ./run.sh
@@ -206,15 +293,17 @@ jobs:
           
           **Windows:**
           ```cmd
-          unzip llama-server-${{ steps.get_version.outputs.version }}-windows.zip
-          cd llama-server-${{ steps.get_version.outputs.version }}-windows
+          REM 选择适合你 GPU 的版本
+          unzip llama-server-${{ steps.get_version.outputs.version }}-windows-cuda12.zip
+          cd llama-server-${{ steps.get_version.outputs.version }}-windows-cuda12
           run.bat
           ```
           
           **macOS:**
           ```bash
-          unzip llama-server-${{ steps.get_version.outputs.version }}-mac.zip
-          cd llama-server-${{ steps.get_version.outputs.version }}-mac
+          # Apple Silicon 用户
+          unzip llama-server-${{ steps.get_version.outputs.version }}-macos-arm64.zip
+          cd llama-server-${{ steps.get_version.outputs.version }}-macos-arm64
           chmod +x run.sh
           chmod +x jre/bin/java
           ./run.sh
@@ -223,6 +312,10 @@ jobs:
           **注意：**
           - 本版本已内置精简版 JRE，无需额外安装 Java 环境。
           - Linux 和 macOS 用户需要为 `run.sh` 和 `jre/bin/java` 添加执行权限。
+          - Windows 用户请根据你的 GPU 选择对应的版本：
+            - NVIDIA GPU: 使用 cuda12 版本
+            - AMD GPU: 使用 hip 版本
+            - 其他 GPU 或不确定: 使用 vulkan 版本
           
           ---
           
@@ -257,32 +350,48 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            llama-server-${{ steps.get_version.outputs.version }}-linux.zip
-            llama-server-${{ steps.get_version.outputs.version }}-windows.zip
-            llama-server-${{ steps.get_version.outputs.version }}-mac.zip
+            llama-server-${{ steps.get_version.outputs.version }}-linux-vulkan.zip
+            llama-server-${{ steps.get_version.outputs.version }}-windows-cuda12.zip
+            llama-server-${{ steps.get_version.outputs.version }}-windows-vulkan.zip
+            llama-server-${{ steps.get_version.outputs.version }}-windows-hip.zip
+            llama-server-${{ steps.get_version.outputs.version }}-macos-arm64.zip
           body: ${{ env.NOTES_CONTENT }}
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 上传构建产物 (Linux)
+      - name: 上传构建产物 (Linux Vulkan)
         uses: actions/upload-artifact@v4
         with:
-          name: llama-server-${{ steps.get_version.outputs.version }}-linux
-          path: llama-server-${{ steps.get_version.outputs.version }}-linux.zip
+          name: llama-server-${{ steps.get_version.outputs.version }}-linux-vulkan
+          path: llama-server-${{ steps.get_version.outputs.version }}-linux-vulkan.zip
           retention-days: 30
 
-      - name: 上传构建产物 (Windows)
+      - name: 上传构建产物 (Windows CUDA12)
         uses: actions/upload-artifact@v4
         with:
-          name: llama-server-${{ steps.get_version.outputs.version }}-windows
-          path: llama-server-${{ steps.get_version.outputs.version }}-windows.zip
+          name: llama-server-${{ steps.get_version.outputs.version }}-windows-cuda12
+          path: llama-server-${{ steps.get_version.outputs.version }}-windows-cuda12.zip
           retention-days: 30
 
-      - name: 上传构建产物 (macOS)
+      - name: 上传构建产物 (Windows Vulkan)
         uses: actions/upload-artifact@v4
         with:
-          name: llama-server-${{ steps.get_version.outputs.version }}-mac
-          path: llama-server-${{ steps.get_version.outputs.version }}-mac.zip
+          name: llama-server-${{ steps.get_version.outputs.version }}-windows-vulkan
+          path: llama-server-${{ steps.get_version.outputs.version }}-windows-vulkan.zip
+          retention-days: 30
+
+      - name: 上传构建产物 (Windows HIP)
+        uses: actions/upload-artifact@v4
+        with:
+          name: llama-server-${{ steps.get_version.outputs.version }}-windows-hip
+          path: llama-server-${{ steps.get_version.outputs.version }}-windows-hip.zip
+          retention-days: 30
+
+      - name: 上传构建产物 (macOS ARM64)
+        uses: actions/upload-artifact@v4
+        with:
+          name: llama-server-${{ steps.get_version.outputs.version }}-macos-arm64
+          path: llama-server-${{ steps.get_version.outputs.version }}-macos-arm64.zip
           retention-days: 30
