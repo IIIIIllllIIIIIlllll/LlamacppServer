@@ -8,3 +8,6 @@
 /.classpath
 /cache/
 /downloads/
+/models/
+/llama.cpp/
+/build/
