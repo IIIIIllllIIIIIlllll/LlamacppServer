@@ -134,7 +134,7 @@ public class LlamaServer {
     	// 
     	try {
     		String currentDir = System.getProperty("user.dir");
-        	Path configDir = Paths.get(currentDir, "llama.cpp");
+        	Path configDir = Paths.get(currentDir, "llamacpp");
     		if (!Files.exists(configDir)) {
     			Files.createDirectories(configDir);
     		}	
