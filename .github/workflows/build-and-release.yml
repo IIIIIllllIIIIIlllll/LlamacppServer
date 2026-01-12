@@ -83,6 +83,7 @@ jobs:
           unzip -q jre-linux.zip -d jre-linux
           JRE_NAME=$(ls jre-linux | head -1)
           mv jre-linux/$JRE_NAME jre-linux/jre
+          chmod +x jre-linux/jre/bin/java
           rm jre-linux.zip
           echo "Linux JRE 下载完成"
 
@@ -103,6 +104,7 @@ jobs:
           unzip -q jre-mac.zip -d jre-mac
           JRE_NAME=$(ls jre-mac | head -1)
           mv jre-mac/$JRE_NAME jre-mac/jre
+          chmod +x jre-mac/jre/bin/java
           rm jre-mac.zip
           echo "macOS JRE 下载完成"
 
@@ -111,6 +113,7 @@ jobs:
           cat > build/run.sh << 'EOF'
           #!/bin/bash
           cd "$(dirname "$0")"
+          chmod +x ./jre/bin/java
           ./jre/bin/java -Xms64m -Xmx64m -classpath "./classes:./lib/*" org.mark.llamacpp.server.LlamaServer "$@"
           EOF
           chmod +x build/run.sh
