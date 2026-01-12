@@ -149,7 +149,7 @@ jobs:
           echo "llama.cpp 最新版本: $LLAMACPP_VERSION"
           echo "llamacpp_version=$LLAMACPP_VERSION" >> $GITHUB_OUTPUT
           echo "LLAMACPP_VERSION=$LLAMACPP_VERSION" >> $GITHUB_ENV
-          mkdir -p build/llama.cpp
+          mkdir -p build/llamacpp
 
       - name: 下载 llama.cpp 预编译版本 (Windows CUDA12)
         run: |
@@ -200,8 +200,8 @@ jobs:
         run: |
           cp -r build build-linux-vulkan
           cp -r jre-linux/jre build-linux-vulkan/jre
-          mkdir -p build-linux-vulkan/llama.cpp
-          cp -r ubuntu-vulkan build-linux-vulkan/llama.cpp/
+          mkdir -p build-linux-vulkan/llamacpp
+          cp -r ubuntu-vulkan build-linux-vulkan/llamacpp/
           mv build-linux-vulkan llama-server-${{ steps.get_version.outputs.version }}-linux-vulkan
           zip -r llama-server-${{ steps.get_version.outputs.version }}-linux-vulkan.zip llama-server-${{ steps.get_version.outputs.version }}-linux-vulkan
 
@@ -209,8 +209,8 @@ jobs:
         run: |
           cp -r build build-win-cuda12
           cp -r jre-win/jre build-win-cuda12/jre
-          mkdir -p build-win-cuda12/llama.cpp
-          cp -r win-cuda12 build-win-cuda12/llama.cpp/
+          mkdir -p build-win-cuda12/llamacpp
+          cp -r win-cuda12 build-win-cuda12/llamacpp/
           mv build-win-cuda12 llama-server-${{ steps.get_version.outputs.version }}-windows-cuda12
           zip -r llama-server-${{ steps.get_version.outputs.version }}-windows-cuda12.zip llama-server-${{ steps.get_version.outputs.version }}-windows-cuda12
 
@@ -218,8 +218,8 @@ jobs:
         run: |
           cp -r build build-win-vulkan
           cp -r jre-win/jre build-win-vulkan/jre
-          mkdir -p build-win-vulkan/llama.cpp
-          cp -r win-vulkan build-win-vulkan/llama.cpp/
+          mkdir -p build-win-vulkan/llamacpp
+          cp -r win-vulkan build-win-vulkan/llamacpp/
           mv build-win-vulkan llama-server-${{ steps.get_version.outputs.version }}-windows-vulkan
           zip -r llama-server-${{ steps.get_version.outputs.version }}-windows-vulkan.zip llama-server-${{ steps.get_version.outputs.version }}-windows-vulkan
 
@@ -227,8 +227,8 @@ jobs:
         run: |
           cp -r build build-win-hip
           cp -r jre-win/jre build-win-hip/jre
-          mkdir -p build-win-hip/llama.cpp
-          cp -r win-hip build-win-hip/llama.cpp/
+          mkdir -p build-win-hip/llamacpp
+          cp -r win-hip build-win-hip/llamacpp/
           mv build-win-hip llama-server-${{ steps.get_version.outputs.version }}-windows-hip
           zip -r llama-server-${{ steps.get_version.outputs.version }}-windows-hip.zip llama-server-${{ steps.get_version.outputs.version }}-windows-hip
 
@@ -236,8 +236,8 @@ jobs:
         run: |
           cp -r build build-mac-arm64
           cp -r jre-mac/jre build-mac-arm64/jre
-          mkdir -p build-mac-arm64/llama.cpp
-          cp -r macos-arm64 build-mac-arm64/llama.cpp/
+          mkdir -p build-mac-arm64/llamacpp
+          cp -r macos-arm64 build-mac-arm64/llamacpp/
           mv build-mac-arm64 llama-server-${{ steps.get_version.outputs.version }}-macos-arm64
           zip -r llama-server-${{ steps.get_version.outputs.version }}-macos-arm64.zip llama-server-${{ steps.get_version.outputs.version }}-macos-arm64
 
