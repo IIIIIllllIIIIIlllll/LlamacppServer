@@ -522,12 +522,15 @@ public class LlamaServerManager {
 //		return true; // 表示成功提交加载任务
 //	}
 
-	public synchronized boolean loadModelAsyncFromCmd(String modelId, String llamaBinPath, List<String> device, Integer mg, String cmd) {
+	public synchronized boolean loadModelAsyncFromCmd(String modelId, String llamaBinPath, List<String> device, Integer mg, String cmd, String chatTemplateFilePath) {
 		Map<String, Object> launchConfig = new HashMap<>();
 		launchConfig.put("llamaBinPath", llamaBinPath);
 		launchConfig.put("device", device);
 		launchConfig.put("mg", mg);
 		launchConfig.put("cmd", cmd);
+		if (chatTemplateFilePath != null && !chatTemplateFilePath.trim().isEmpty()) {
+			launchConfig.put("chatTemplateFile", chatTemplateFilePath);
+		}
 		this.configManager.saveLaunchConfig(modelId, launchConfig);
 
 		if (this.loadedProcesses.containsKey(modelId)) {
@@ -557,9 +560,10 @@ public class LlamaServerManager {
 		final String binSafe = llamaBinPath.trim();
 		final List<String> devSafe = device;
 		final Integer mgSafe = mg;
+		final String chatTemplateFileSafe = chatTemplateFilePath == null ? "" : chatTemplateFilePath;
 
 		this.executorService.submit(() -> {
-			this.loadModelInBackgroundFromCmd(modelId, targetModel, binSafe, devSafe, mgSafe, cmdSafe);
+			this.loadModelInBackgroundFromCmd(modelId, targetModel, binSafe, devSafe, mgSafe, cmdSafe, chatTemplateFileSafe);
 		});
 		return true;
 	}
@@ -692,10 +696,10 @@ public class LlamaServerManager {
 //	}
 
 	private synchronized void loadModelInBackgroundFromCmd(String modelId, GGUFModel targetModel, String llamaBinPath, List<String> device,
-			Integer mg, String cmd) {
+			Integer mg, String cmd, String chatTemplateFilePath) {
 		int port = this.getNextAvailablePort();
 
-		String commandStr = buildCommandStr(targetModel, port, llamaBinPath, device, mg, cmd);
+		String commandStr = buildCommandStr(targetModel, port, llamaBinPath, device, mg, cmd, chatTemplateFilePath);
 
 		String processName = "llama-server-" + modelId;
 		LlamaCppProcess process = new LlamaCppProcess(processName, commandStr);
@@ -768,7 +772,7 @@ public class LlamaServerManager {
 		}
 	}
 
-	private static String buildCommandStr(GGUFModel targetModel, int port, String llamaBinPath, List<String> device, Integer mg, String cmd) {
+	private static String buildCommandStr(GGUFModel targetModel, int port, String llamaBinPath, List<String> device, Integer mg, String cmd, String chatTemplateFilePath) {
 		StringBuilder sb = new StringBuilder();
 
 		String exe = llamaBinPath + File.separator + "llama-server";
@@ -804,6 +808,10 @@ public class LlamaServerManager {
 		if (cmd != null && !cmd.trim().isEmpty()) {
 			sb.append(' ');
 			sb.append(cmd.trim());
+		}
+		if (chatTemplateFilePath != null && !chatTemplateFilePath.trim().isEmpty() && !cmdHasFlag(cmd, "--chat-template-file") && !cmdHasFlag(cmd, "--chat-template")) {
+			sb.append(" --chat-template-file ");
+			sb.append(quoteIfNeeded(chatTemplateFilePath.trim()));
 		}
 
 		if (!cmdHasFlag(cmd, "--no-webui") && !cmdHasFlag(cmd, "--webui")) {

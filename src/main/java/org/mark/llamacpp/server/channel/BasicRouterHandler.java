@@ -40,6 +40,7 @@ import org.mark.llamacpp.server.struct.ModelPathConfig;
 import org.mark.llamacpp.server.struct.ModelPathDataStruct;
 import org.mark.llamacpp.server.struct.StopModelRequest;
 import org.mark.llamacpp.server.tools.CommandLineRunner;
+import org.mark.llamacpp.server.tools.ChatTemplateFileTool;
 import org.mark.llamacpp.server.tools.JsonUtil;
 import org.mark.llamacpp.server.tools.VramEstimator;
 import org.mark.llamacpp.server.tools.struct.VramEstimation;
@@ -251,6 +252,24 @@ public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequ
 			this.handleDeviceListRequest(ctx, request);
 			return;
 		}
+		
+		// 
+		if (uri.startsWith("/api/model/template/get")) {
+			this.handleModelTemplateGetRequest(ctx, request);
+			return;
+		}
+		
+		
+		if (uri.startsWith("/api/model/template/set")) {
+			this.handleModelTemplateSetRequest(ctx, request);
+			return;
+		}
+
+		if (uri.startsWith("/api/model/template/default")) {
+			this.handleModelTemplateDefaultRequest(ctx, request);
+			return;
+		}
+		
 		// 停止服务API
 		if (uri.startsWith("/api/shutdown")) {
 			this.handleShutdownRequest(ctx, request);
@@ -1251,8 +1270,10 @@ public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequ
 				cfgManager.saveLaunchConfig(modelId, merged);
 			} catch (Exception ignore) {
 			}
+			//
+			String chatTemplateFilePath = ChatTemplateFileTool.getChatTemplateCacheFilePathIfExists(modelId);
 
-			boolean started = manager.loadModelAsyncFromCmd(modelId, llamaBinPathSelect, device, mg, cmd);
+			boolean started = manager.loadModelAsyncFromCmd(modelId, llamaBinPathSelect, device, mg, cmd, chatTemplateFilePath);
 			if (!started) {
 				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("提交加载任务失败"));
 				return;
@@ -1343,17 +1364,134 @@ public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequ
 				return;
 			}
 			ConfigManager configManager = ConfigManager.getInstance();
+			// 取出指定模型的启动参数
 			Map<String, Map<String, Object>> allConfigs = configManager.loadAllLaunchConfigs();
 			Map<String, Object> launchConfig = allConfigs.get(modelId);
 			if (launchConfig == null) {
 				launchConfig = new HashMap<>();
 			}
+			// 
 			Map<String, Object> data = new HashMap<>();
 			data.put(modelId, launchConfig);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
 		} catch (Exception e) {
 			logger.error("获取模型启动配置时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("获取模型启动配置失败: " + e.getMessage()));
+		}
+	}
+
+	private void handleModelTemplateGetRequest(ChannelHandlerContext ctx, FullHttpRequest request) throws RequestMethodException {
+		this.assertRequestMethod(request.method() != HttpMethod.GET, "只支持GET请求");
+		try {
+			Map<String, String> params = this.getQueryParam(request.uri());
+			String modelId = params.get("modelId");
+			if (modelId == null || modelId.trim().isEmpty()) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("缺少必需的modelId参数"));
+				return;
+			}
+			String chatTemplate = ChatTemplateFileTool.readChatTemplateFromCacheFile(modelId);
+			String filePath = ChatTemplateFileTool.getChatTemplateCacheFilePathIfExists(modelId);
+			Map<String, Object> data = new HashMap<>();
+			data.put("modelId", modelId);
+			data.put("exists", filePath != null && !filePath.isEmpty());
+			if (filePath != null && !filePath.isEmpty()) {
+				data.put("filePath", filePath);
+			}
+			data.put("chatTemplate", chatTemplate);
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
+		} catch (Exception e) {
+			logger.error("获取模型聊天模板时发生错误", e);
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("获取模型聊天模板失败: " + e.getMessage()));
+		}
+	}
+
+	private void handleModelTemplateSetRequest(ChannelHandlerContext ctx, FullHttpRequest request) throws RequestMethodException {
+		this.assertRequestMethod(request.method() != HttpMethod.POST, "只支持POST请求");
+		try {
+			String content = request.content().toString(CharsetUtil.UTF_8);
+			if (content == null || content.trim().isEmpty()) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("请求体为空"));
+				return;
+			}
+			JsonObject obj = gson.fromJson(content, JsonObject.class);
+			if (obj == null) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("请求体解析失败"));
+				return;
+			}
+			String modelId = JsonUtil.getJsonString(obj, "modelId", null);
+			if (modelId == null || modelId.trim().isEmpty()) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("缺少必需的modelId参数"));
+				return;
+			}
+			String chatTemplate = JsonUtil.getJsonString(obj, "chatTemplate", null);
+			if (chatTemplate == null) chatTemplate = JsonUtil.getJsonString(obj, "template", null);
+			if (chatTemplate == null) chatTemplate = JsonUtil.getJsonString(obj, "content", null);
+			if (chatTemplate == null) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("缺少必需的chatTemplate参数"));
+				return;
+			}
+
+			boolean deleted = false;
+			String filePath = null;
+			if (chatTemplate.trim().isEmpty()) {
+				deleted = ChatTemplateFileTool.deleteChatTemplateCacheFile(modelId);
+			} else {
+				filePath = ChatTemplateFileTool.writeChatTemplateToCacheFile(modelId, chatTemplate);
+			}
+
+			Map<String, Object> data = new HashMap<>();
+			data.put("modelId", modelId);
+			data.put("deleted", deleted);
+			if (filePath != null && !filePath.isEmpty()) {
+				data.put("filePath", filePath);
+			}
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
+		} catch (Exception e) {
+			logger.error("设置模型聊天模板时发生错误", e);
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("设置模型聊天模板失败: " + e.getMessage()));
+		}
+	}
+
+	private void handleModelTemplateDefaultRequest(ChannelHandlerContext ctx, FullHttpRequest request) throws RequestMethodException {
+		this.assertRequestMethod(request.method() != HttpMethod.GET, "只支持GET请求");
+		try {
+			Map<String, String> params = this.getQueryParam(request.uri());
+			String modelId = params.get("modelId");
+			if (modelId == null || modelId.trim().isEmpty()) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("缺少必需的modelId参数"));
+				return;
+			}
+
+			LlamaServerManager manager = LlamaServerManager.getInstance();
+			manager.listModel();
+			GGUFModel model = manager.findModelById(modelId);
+			if (model == null) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("未找到指定模型: " + modelId));
+				return;
+			}
+
+			boolean exists = false;
+			String chatTemplate = "";
+			GGUFMetaData primary = model.getPrimaryModel();
+			if (primary != null) {
+				Map<String, Object> m = GGUFMetaDataReader.read(new File(primary.getFilePath()));
+				if (m != null) {
+					Object tpl = m.get("tokenizer.chat_template");
+					if (tpl != null) {
+						exists = true;
+						chatTemplate = String.valueOf(tpl);
+					}
+				}
+			}
+
+			Map<String, Object> data = new HashMap<>();
+			data.put("modelId", modelId);
+			data.put("exists", exists);
+			data.put("chatTemplate", chatTemplate);
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
+		} catch (Exception e) {
+			logger.error("获取模型默认聊天模板时发生错误", e);
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("获取模型默认聊天模板失败: " + e.getMessage()));
 		}
 	}
 
@@ -1396,6 +1534,16 @@ public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequ
 				if (cfgMap == null) cfgMap = new HashMap<>();
 				cfgMap.remove("modelId");
 				cfgMap.remove("config");
+				if (cfgMap.containsKey("chatTemplate")) {
+					Object v = cfgMap.get("chatTemplate");
+					String s = v == null ? "" : String.valueOf(v);
+					if (s.trim().isEmpty()) {
+						ChatTemplateFileTool.deleteChatTemplateCacheFile(modelId);
+					} else {
+						ChatTemplateFileTool.writeChatTemplateToCacheFile(modelId, s);
+					}
+					cfgMap.remove("chatTemplate");
+				}
 				normalizeEnableVisionInConfigMap(cfgMap);
 				boolean saved = configManager.saveLaunchConfig(modelId, cfgMap);
 				if (!saved) {
@@ -1415,6 +1563,16 @@ public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequ
 				if (!cfgEl.isJsonObject()) continue;
 				Map<String, Object> cfgMap = gson.fromJson(cfgEl, mapType);
 				if (cfgMap == null) cfgMap = new HashMap<>();
+				if (cfgMap.containsKey("chatTemplate")) {
+					Object v = cfgMap.get("chatTemplate");
+					String s = v == null ? "" : String.valueOf(v);
+					if (s.trim().isEmpty()) {
+						ChatTemplateFileTool.deleteChatTemplateCacheFile(modelId);
+					} else {
+						ChatTemplateFileTool.writeChatTemplateToCacheFile(modelId, s);
+					}
+					cfgMap.remove("chatTemplate");
+				}
 				normalizeEnableVisionInConfigMap(cfgMap);
 				boolean saved = configManager.saveLaunchConfig(modelId, cfgMap);
 				if (!saved) {
@@ -1465,7 +1623,7 @@ public class BasicRouterHandler extends SimpleChannelInboundHandler<FullHttpRequ
 				Map<String, Object> m = GGUFMetaDataReader.read(new File(primary.getFilePath()));
 				if (m != null) {
 					m.remove("tokenizer.ggml.merges");
-					m.remove("tokenizer.chat_template");
+					//m.remove("tokenizer.chat_template");
 					m.remove("tokenizer.ggml.token_type");
 					metadata.putAll(m);
 				}
