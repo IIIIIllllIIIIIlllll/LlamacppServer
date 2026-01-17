@@ -209,8 +209,6 @@ public class FileDownloadRouterHandler extends SimpleChannelInboundHandler<FullH
 				Files.createDirectories(targetDir);
 			}
 			
-			System.err.println(content);
-
 			List<Map<String, Object>> taskResults = new ArrayList<>();
 			boolean allSuccess = true;
 			for (int i = 0; i < downloadUrl.length; i++) {
@@ -280,20 +278,20 @@ public class FileDownloadRouterHandler extends SimpleChannelInboundHandler<FullH
 		return v.isEmpty() ? null : v;
 	}
 
-	private static String sanitizeFileName(String fileName) {
-		String f = trimToNull(fileName);
-		if (f == null) {
-			return null;
-		}
-		try {
-			f = Paths.get(f).getFileName().toString();
-		} catch (Exception e) {
-			return null;
-		}
-		f = f.replaceAll("[<>:\"/\\\\|?*]", "_");
-		f = f.trim();
-		return f.isEmpty() ? null : f;
-	}
+//	private static String sanitizeFileName(String fileName) {
+//		String f = trimToNull(fileName);
+//		if (f == null) {
+//			return null;
+//		}
+//		try {
+//			f = Paths.get(f).getFileName().toString();
+//		} catch (Exception e) {
+//			return null;
+//		}
+//		f = f.replaceAll("[<>:\"/\\\\|?*]", "_");
+//		f = f.trim();
+//		return f.isEmpty() ? null : f;
+//	}
     
 	/**
 	 * 	处理获取下载列表请求

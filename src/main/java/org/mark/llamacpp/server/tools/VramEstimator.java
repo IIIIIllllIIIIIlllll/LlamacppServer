@@ -84,7 +84,7 @@ public final class VramEstimator {
 	}
 
 	private record ModelParams(String architecture, long nLayer, long nEmbd, long nHeadKv, long headDimK, long headDimV,
-			long slidingWindow) {
+			long slidingWindow, int[] headCountKvByLayer) {
 	}
 
 	private record ResolvedBundle(File primaryFile, List<File> parts) {
@@ -210,13 +210,28 @@ public final class VramEstimator {
 			weightsBytes = safeAdd(weightsBytes, estimateTensorDataBytes(part));
 		}
 
-		KvLayerScanResult kvScan = scanKvLayers(bundle.parts, params.nLayer);
-		long kvCacheBytes = estimateKvCacheBytes(params, contextLength, kvCacheTypeK, kvCacheTypeV, kvScan.kvLayerCount);
+		KvLayerScanResult kvScan = resolveKvLayers(bundle.parts, params);
+		long kvCacheBytes = estimateKvCacheBytes(params, contextLength, kvCacheTypeK, kvCacheTypeV, kvScan);
 		long runtimeOverhead = estimateRuntimeOverheadBytes(params, contextLength, kvCacheBytes, flashAttention);
 		long total = safeAdd(safeAdd(weightsBytes, kvCacheBytes), runtimeOverhead);
 
 		return new Estimate(weightsBytes, kvCacheBytes, runtimeOverhead, total, params.architecture, contextLength, kvCacheTypeK,
 				kvCacheTypeV, flashAttention, params.nLayer, kvScan.kvLayerCount, kvScan.heuristic, kvScan.layers);
+	}
+
+	private static KvLayerScanResult resolveKvLayers(List<File> ggufParts, ModelParams params) throws IOException {
+		if (params.headCountKvByLayer != null && params.headCountKvByLayer.length > 0) {
+			Set<Integer> out = new LinkedHashSet<>();
+			for (int i = 0; i < params.headCountKvByLayer.length; i++) {
+				if (params.headCountKvByLayer[i] > 0) {
+					out.add(i);
+				}
+			}
+			if (!out.isEmpty()) {
+				return new KvLayerScanResult(out.size(), "head_count_kv", Set.copyOf(out));
+			}
+		}
+		return scanKvLayers(ggufParts, params.nLayer);
 	}
 
 	private static KvLayerScanResult scanKvLayers(List<File> ggufParts, long expectedLayerCount) throws IOException {
@@ -362,14 +377,26 @@ public final class VramEstimator {
 	}
 
 	private static long estimateKvCacheBytes(ModelParams params, long contextLength, KvCacheType kvTypeK, KvCacheType kvTypeV,
-			long kvLayerCount) {
-		long layers = kvLayerCount > 0 ? kvLayerCount : params.nLayer;
+			KvLayerScanResult kvScan) {
+		long layers = (kvScan != null && kvScan.kvLayerCount > 0) ? kvScan.kvLayerCount : params.nLayer;
 		if (layers <= 0 || params.nHeadKv <= 0 || params.headDimK <= 0 || params.headDimV <= 0) {
 			return 0;
 		}
 
-		double bytesPerCell = params.nHeadKv
-				* (params.headDimK * kvTypeK.bytesPerElement() + params.headDimV * kvTypeV.bytesPerElement());
+		double bytesPerHeadCell = (params.headDimK * kvTypeK.bytesPerElement() + params.headDimV * kvTypeV.bytesPerElement());
+		long sumHeads = 0;
+		if (kvScan != null && kvScan.layers != null && !kvScan.layers.isEmpty()) {
+			for (int idx : kvScan.layers) {
+				int h = (params.headCountKvByLayer != null && idx >= 0 && idx < params.headCountKvByLayer.length)
+						? params.headCountKvByLayer[idx]
+						: (int) params.nHeadKv;
+				if (h <= 0) {
+					h = (int) params.nHeadKv;
+				}
+				sumHeads = safeAdd(sumHeads, h);
+			}
+		}
+		double bytesPerCell = (sumHeads > 0 ? sumHeads : params.nHeadKv * (double) layers) * bytesPerHeadCell;
 
 		double bytes;
 		if (params.slidingWindow > 0 && contextLength > params.slidingWindow && isGemmaSlidingWindow(params.architecture)) {
@@ -386,9 +413,10 @@ public final class VramEstimator {
 			}
 			long swaLayers = layers - globalLayers;
 			long swaCells = estimateGemmaSwaCells(params.slidingWindow, contextLength);
-			bytes = globalLayers * (double) contextLength * bytesPerCell + swaLayers * (double) swaCells * bytesPerCell;
+			double perLayerBytes = bytesPerCell / Math.max(1.0, layers);
+			bytes = globalLayers * (double) contextLength * perLayerBytes + swaLayers * (double) swaCells * perLayerBytes;
 		} else {
-			bytes = layers * (double) contextLength * bytesPerCell;
+			bytes = (double) contextLength * bytesPerCell;
 		}
 
 		if (bytes <= 0) {
@@ -560,7 +588,26 @@ public final class VramEstimator {
 		long nEmbd = firstLong(meta, arch + ".embedding_length", findKeyBySuffix(meta, ".embedding_length"));
 		long nLayer = firstLong(meta, arch + ".block_count", findKeyBySuffix(meta, ".block_count"));
 		long nHead = firstLong(meta, arch + ".attention.head_count", findKeyBySuffix(meta, ".attention.head_count"));
-		long nHeadKv = firstLong(meta, arch + ".attention.head_count_kv", findKeyBySuffix(meta, ".attention.head_count_kv"));
+		String headKvKey = arch + ".attention.head_count_kv";
+		String headKvFallbackKey = findKeyBySuffix(meta, ".attention.head_count_kv");
+		Object headKvObj = meta.get(headKvKey);
+		if (headKvObj == null && headKvFallbackKey != null && !headKvFallbackKey.isBlank()) {
+			headKvObj = meta.get(headKvFallbackKey);
+		}
+		int[] headCountKvByLayer = asIntArray(headKvObj);
+		if (headCountKvByLayer != null && nLayer > 0 && headCountKvByLayer.length != nLayer) {
+			headCountKvByLayer = Arrays.copyOf(headCountKvByLayer, (int) Math.min(nLayer, Integer.MAX_VALUE));
+		}
+		long nHeadKv = 0;
+		if (headCountKvByLayer != null && headCountKvByLayer.length > 0) {
+			for (int v : headCountKvByLayer) {
+				if (v > nHeadKv) {
+					nHeadKv = v;
+				}
+			}
+		} else {
+			nHeadKv = firstLong(meta, headKvKey, headKvFallbackKey);
+		}
 		if (nHeadKv == 0) {
 			nHeadKv = nHead;
 		}
@@ -582,7 +629,7 @@ public final class VramEstimator {
 			headDimV = headDimK;
 		}
 
-		return new ModelParams(arch, nLayer, nEmbd, nHeadKv, headDimK, headDimV, slidingWindow);
+		return new ModelParams(arch, nLayer, nEmbd, nHeadKv, headDimK, headDimV, slidingWindow, headCountKvByLayer);
 	}
 
 	private static long estimateTensorDataBytes(File ggufFile) throws IOException {
@@ -715,6 +762,28 @@ public final class VramEstimator {
 			}
 		}
 		return null;
+	}
+
+	private static int[] asIntArray(Object v) {
+		if (!(v instanceof List<?> list) || list.isEmpty()) {
+			return null;
+		}
+		int[] out = new int[list.size()];
+		for (int i = 0; i < list.size(); i++) {
+			Object e = list.get(i);
+			if (e instanceof Number n) {
+				out[i] = n.intValue();
+			} else if (e instanceof String s) {
+				try {
+					out[i] = Integer.parseInt(s.trim());
+				} catch (Exception ex) {
+					out[i] = 0;
+				}
+			} else {
+				out[i] = 0;
+			}
+		}
+		return out;
 	}
 
 	private static String findBySuffix(Map<String, Object> meta, String suffix) {
