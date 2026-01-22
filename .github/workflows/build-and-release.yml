@@ -6,9 +6,6 @@ on:
       - 'v*.*.*'
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -139,16 +136,9 @@ jobs:
 
       - name: 获取 llama.cpp 最新版本号
         id: get_llamacpp_version
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "正在获取 llama.cpp 最新版本号..."
-          LLAMACPP_VERSION=$(curl -s \
-            -H "Authorization: token $GITHUB_TOKEN" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/ggml-org/llama.cpp/releases/latest \
-            | grep '"tag_name":' \
-            | sed -E 's/.*"([^"]+)".*/\1/')
+          LLAMACPP_VERSION=$(curl -s https://api.github.com/repos/ggml-org/llama.cpp/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
           echo "llama.cpp 最新版本: $LLAMACPP_VERSION"
           echo "llamacpp_version=$LLAMACPP_VERSION" >> $GITHUB_OUTPUT
           echo "LLAMACPP_VERSION=$LLAMACPP_VERSION" >> $GITHUB_ENV
@@ -291,14 +281,14 @@ jobs:
           
           **Linux:**
           - `llama-server-${{ steps.get_version.outputs.version }}-${{ steps.get_llamacpp_version.outputs.llamacpp_version }}-linux-vulkan.zip` - Ubuntu Vulkan 版本
-          - `llama-server-${{ steps.get_version.outputs.version }}-linux.zip` - 无 llama.cpp 版本
-          
+          - `llama-server-${{ steps.get_version.outputs.version }}-linux.zip` - 无llamacpp
+
           **Windows:**
           - `llama-server-${{ steps.get_version.outputs.version }}-${{ steps.get_llamacpp_version.outputs.llamacpp_version }}-windows-cuda12.zip` - CUDA 12.4 版本（NVIDIA GPU）
           - `llama-server-${{ steps.get_version.outputs.version }}-${{ steps.get_llamacpp_version.outputs.llamacpp_version }}-windows-cuda13.zip` - CUDA 13.1 版本（NVIDIA GPU）
           - `llama-server-${{ steps.get_version.outputs.version }}-${{ steps.get_llamacpp_version.outputs.llamacpp_version }}-windows-vulkan.zip` - Vulkan 版本（通用 GPU）
           - `llama-server-${{ steps.get_version.outputs.version }}-${{ steps.get_llamacpp_version.outputs.llamacpp_version }}-windows-hip.zip` - HIP 版本（AMD GPU）
-          - `llama-server-${{ steps.get_version.outputs.version }}-windows.zip` - 无 llama.cpp 版本
+          - `llama-server-${{ steps.get_version.outputs.version }}-windows.zip` - 无llamacpp
           
           ### 📝 使用方法
           
@@ -325,7 +315,7 @@ jobs:
             - NVIDIA GPU: 使用 cuda12 或 cuda13 版本
             - AMD GPU: 使用 hip 版本
             - 其他 GPU（如核显） 或不确定: 使用 vulkan 版本
-          
+            - 不需要llamacpp：使用无 llamacpp 版本
           ---
           
           ### 📌 最新提交
@@ -366,7 +356,6 @@ jobs:
             llama-server-${{ steps.get_version.outputs.version }}-${{ steps.get_llamacpp_version.outputs.llamacpp_version }}-windows-vulkan.zip
             llama-server-${{ steps.get_version.outputs.version }}-${{ steps.get_llamacpp_version.outputs.llamacpp_version }}-windows-hip.zip
             llama-server-${{ steps.get_version.outputs.version }}-windows.zip
-            # llama-server-${{ steps.get_version.outputs.version }}-${{ steps.get_llamacpp_version.outputs.llamacpp_version }}-macos-arm64.zip
           body: ${{ env.NOTES_CONTENT }}
           draft: false
           prerelease: false
@@ -378,13 +367,6 @@ jobs:
         with:
           name: llama-server-${{ steps.get_version.outputs.version }}-${{ steps.get_llamacpp_version.outputs.llamacpp_version }}-linux-vulkan
           path: llama-server-${{ steps.get_version.outputs.version }}-${{ steps.get_llamacpp_version.outputs.llamacpp_version }}-linux-vulkan.zip
-          retention-days: 30
-
-      - name: 上传构建产物 (Linux 无llamacpp)
-        uses: actions/upload-artifact@v4
-        with:
-          name: llama-server-${{ steps.get_version.outputs.version }}-linux
-          path: llama-server-${{ steps.get_version.outputs.version }}-linux.zip
           retention-days: 30
 
       - name: 上传构建产物 (Windows CUDA12)
@@ -413,12 +395,5 @@ jobs:
         with:
           name: llama-server-${{ steps.get_version.outputs.version }}-${{ steps.get_llamacpp_version.outputs.llamacpp_version }}-windows-hip
           path: llama-server-${{ steps.get_version.outputs.version }}-${{ steps.get_llamacpp_version.outputs.llamacpp_version }}-windows-hip.zip
-          retention-days: 30
-
-      - name: 上传构建产物 (Windows 无llamacpp)
-        uses: actions/upload-artifact@v4
-        with:
-          name: llama-server-${{ steps.get_version.outputs.version }}-windows
-          path: llama-server-${{ steps.get_version.outputs.version }}-windows.zip
           retention-days: 30
 
