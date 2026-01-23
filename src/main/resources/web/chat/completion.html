@@ -395,12 +395,6 @@
       color: var(--text);
     }
 
-    .meta-left .model-id {
-      font-size: 12px;
-      font-weight: 650;
-      color: var(--muted);
-    }
-
     .meta-right {
       display: flex;
       align-items: center;
@@ -457,15 +451,14 @@
       text-align: left;
     }
 
-    .token-footer {
-      margin-top: 10px;
-      padding-top: 10px;
-      border-top: 1px dashed rgba(148, 163, 184, 0.25);
-      color: var(--muted);
+    .token-info {
+      margin-top: 6px;
+      color: rgba(148, 163, 184, 0.85);
       font-size: 12px;
-      line-height: 1.4;
+      line-height: 1.25;
+      text-align: left;
       user-select: text;
-      word-break: break-word;
+      white-space: pre-wrap;
     }
 
     .content.plain {
@@ -1453,6 +1446,7 @@
       lastSavedAt: 0,
       messages: [],
       systemLogs: [],
+      timingsLog: [],
       messageEls: new Map(),
       editingMessageId: null,
       msgSeq: 0,
@@ -1461,7 +1455,6 @@
       // 值为0时，用/v1/completions
       apiModel: 1,
       pendingAttachment: null,
-      lastTimings: null,
       avatarNonce: 0
     };
 
@@ -1888,40 +1881,8 @@
         if (!msg) continue;
         const left = msgEl.querySelector('.meta-left');
         if (!left) continue;
-        renderMetaLeft(left, msg, taskName, userName);
+        left.textContent = msg.role === 'user' ? userName : (msg.role === 'assistant' ? taskName : '系统');
       }
-    }
-
-    function getCurrentModelId() {
-      return (els.modelSelect && typeof els.modelSelect.value === 'string')
-        ? els.modelSelect.value.trim()
-        : '';
-    }
-
-    function renderMetaLeft(leftEl, msg, taskName, userName) {
-      if (!leftEl || !msg) return;
-      while (leftEl.firstChild) leftEl.removeChild(leftEl.firstChild);
-      const speaker = document.createElement('span');
-      speaker.textContent = msg.role === 'user' ? userName : (msg.role === 'assistant' ? taskName : '系统');
-      leftEl.appendChild(speaker);
-      const modelId = (typeof msg.modelId === 'string' ? msg.modelId.trim() : '');
-      if (modelId) {
-        const modelSpan = document.createElement('span');
-        modelSpan.className = 'model-id';
-        modelSpan.textContent = ' · ' + modelId;
-        leftEl.appendChild(modelSpan);
-      }
-    }
-
-    function refreshMessageMeta(id) {
-      if (!id) return;
-      const msgEl = els.chatList.querySelector('.msg[data-id="' + String(id) + '"]');
-      if (!msgEl) return;
-      const msg = state.messages.find(m => m && m.id === id);
-      if (!msg) return;
-      const left = msgEl.querySelector('.meta-left');
-      if (!left) return;
-      renderMetaLeft(left, msg, getCurrentCompletionTitle(), getUserSpeakerName());
     }
 
     function openDrawer() {
@@ -2130,6 +2091,17 @@
       } else {
         bubble.appendChild(content);
       }
+
+      const tokenInfoEl = (msg.role === 'assistant')
+        ? (() => {
+          const el = document.createElement('div');
+          el.className = 'token-info';
+          el.style.display = 'none';
+          bubble.appendChild(el);
+          return el;
+        })()
+        : null;
+
       const attachmentsEl = document.createElement('div');
       attachmentsEl.className = 'attachments';
       bubble.appendChild(attachmentsEl);
@@ -2138,8 +2110,9 @@
       wrap.appendChild(head);
       wrap.appendChild(bubble);
 
-      state.messageEls.set(msg.id, { contentEl: content, reasoningEl: reasoningPre, attachmentsEl, tokensEl });
+      state.messageEls.set(msg.id, { contentEl: content, reasoningEl: reasoningPre, attachmentsEl, tokenEl: tokenInfoEl });
       els.chatList.appendChild(wrap);
+      syncMessageTimingsUi(msg.id);
       maybeScrollToBottom();
     }
 
@@ -2478,6 +2451,7 @@
       if (m) m.content = content || '';
       const displayText = (m && typeof m.uiContent === 'string') ? m.uiContent : (content || '');
       if (el) requestRenderMessageContent(el, displayText);
+      syncMessageTimingsUi(id);
       maybeScrollToBottom();
     }
 
@@ -2487,6 +2461,7 @@
       const m = getMessageById(id);
       if (m) m.uiContent = (uiText == null ? '' : String(uiText));
       if (el) requestRenderMessageContent(el, (uiText == null ? '' : String(uiText)));
+      syncMessageTimingsUi(id);
       maybeScrollToBottom();
     }
 
@@ -2503,6 +2478,7 @@
       const m = getMessageById(id);
       if (!m) return;
       m.tool_calls = (Array.isArray(toolCalls) ? toolCalls : []);
+      syncMessageTimingsUi(id);
     }
 
     function updateAttachments(id) {
@@ -2518,7 +2494,7 @@
       if (!attachmentsEl) return;
       renderMessageAttachments(attachmentsEl, m);
       if (entry) {
-        state.messageEls.set(id, { contentEl: entry.contentEl, reasoningEl: entry.reasoningEl, attachmentsEl, tokensEl: entry.tokensEl });
+        state.messageEls.set(id, { contentEl: entry.contentEl, reasoningEl: entry.reasoningEl, attachmentsEl });
       }
       maybeScrollToBottom();
     }
@@ -2542,7 +2518,7 @@
           details.appendChild(summary);
           details.appendChild(newPre);
           bubble.insertBefore(details, bubble.firstChild);
-          state.messageEls.set(id, { contentEl: entry && entry.contentEl ? entry.contentEl : bubble.querySelector('.content'), reasoningEl: newPre, attachmentsEl: entry && entry.attachmentsEl ? entry.attachmentsEl : bubble.querySelector('.attachments'), tokensEl: entry && entry.tokensEl ? entry.tokensEl : bubble.querySelector('.token-footer') });
+          state.messageEls.set(id, { contentEl: entry && entry.contentEl ? entry.contentEl : bubble.querySelector('.content'), reasoningEl: newPre, attachmentsEl: entry && entry.attachmentsEl ? entry.attachmentsEl : bubble.querySelector('.attachments') });
         }
       }
       const m = getMessageById(id);
@@ -2666,6 +2642,92 @@
       return { content, reasoning };
     }
 
+    function getTimingsFromResponse(json) {
+      const t = json?.timings;
+      if (t && typeof t === 'object') return t;
+      return null;
+    }
+
+    function normalizeTimingsNumber(v) {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    }
+
+    function formatTimingsText(timings) {
+      if (!timings) return '';
+      const cacheN = normalizeTimingsNumber(timings.cache_n) ?? 0;
+      const promptN = normalizeTimingsNumber(timings.prompt_n) ?? 0;
+      const predictedN = normalizeTimingsNumber(timings.predicted_n) ?? 0;
+      const promptTotal = cacheN + promptN;
+      const total = promptTotal + predictedN;
+      if (!Number.isFinite(total) || total <= 0) return '';
+      return `令牌统计：提示词 ${promptTotal}（缓存 ${cacheN} + 新增 ${promptN}），生成 ${predictedN}，合计 ${total}`;
+    }
+
+    function upsertTimingsLog(messageId, timings) {
+      if (!messageId || !timings) return;
+      state.timingsLog = Array.isArray(state.timingsLog) ? state.timingsLog : [];
+      const id = String(messageId);
+      for (let i = state.timingsLog.length - 1; i >= 0; i--) {
+        const it = state.timingsLog[i];
+        if (it && String(it.messageId) === id) {
+          it.ts = Date.now();
+          it.timings = timings;
+          return;
+        }
+      }
+      state.timingsLog.push({ messageId: id, ts: Date.now(), timings });
+    }
+
+    function getLatestTimingsFromLog(messageId) {
+      const id = String(messageId || '');
+      const list = Array.isArray(state.timingsLog) ? state.timingsLog : [];
+      for (let i = list.length - 1; i >= 0; i--) {
+        const it = list[i];
+        if (it && String(it.messageId) === id && it.timings) return it.timings;
+      }
+      return null;
+    }
+
+    function shouldShowTimingsForMessage(m) {
+      if (!m || m.role !== 'assistant') return false;
+      if (Array.isArray(m.tool_calls) && m.tool_calls.length) return false;
+      const displayText = (m && typeof m.uiContent === 'string') ? m.uiContent : (m && m.content != null ? String(m.content) : '');
+      if (!String(displayText).trim()) return false;
+      return true;
+    }
+
+    function syncMessageTimingsUi(messageId) {
+      const id = String(messageId || '');
+      if (!id) return;
+      const m = getMessageById(id);
+      const timings = (m && m.timings) ? m.timings : getLatestTimingsFromLog(id);
+
+      const entry = state.messageEls.get(id);
+      let tokenEl = entry && entry.tokenEl ? entry.tokenEl : null;
+      if (!tokenEl) {
+        const wrap = els.chatList.querySelector('.msg[data-id="' + id + '"]');
+        tokenEl = wrap ? wrap.querySelector('.token-info') : null;
+        if (entry && tokenEl) {
+          state.messageEls.set(id, { contentEl: entry.contentEl, reasoningEl: entry.reasoningEl, attachmentsEl: entry.attachmentsEl, tokenEl });
+        }
+      }
+      if (!tokenEl) return;
+
+      const text = formatTimingsText(timings);
+      const show = !!text && shouldShowTimingsForMessage(m);
+      tokenEl.textContent = show ? text : '';
+      tokenEl.style.display = show ? '' : 'none';
+    }
+
+    function setMessageTimings(messageId, timings) {
+      if (!messageId || !timings) return;
+      const m = getMessageById(messageId);
+      if (m) m.timings = timings;
+      upsertTimingsLog(messageId, timings);
+      syncMessageTimingsUi(messageId);
+    }
+
     async function consumeSseStream(res, assistantMsgId) {
       const reader = res.body.getReader();
       const decoder = new TextDecoder('utf-8');
@@ -2673,6 +2735,7 @@
       let text = '';
       let reasoning = '';
       let toolCallsAgg = [];
+      let latestTimings = null;
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
@@ -2683,21 +2746,22 @@
           if (!line.startsWith('data: ')) continue;
           const data = line.slice(6).trim();
           if (data === '[DONE]') {
-            if (lastTimings) setMessageTimings(assistantMsgId, lastTimings);
+            if (latestTimings) {
+              setMessageTimings(assistantMsgId, latestTimings);
+            }
             updateMessage(assistantMsgId, text);
             if (reasoning) updateReasoning(assistantMsgId, reasoning);
-            return { content: text, reasoning, tool_calls: toolCallsAgg };
+            return { content: text, reasoning, tool_calls: toolCallsAgg, timings: latestTimings };
           }
           try {
             const json = JSON.parse(data);
-            if (json && json.timings) {
-              const t = normalizeTimings(json.timings);
-              if (t) lastTimings = t;
-            }
             const parts = extractDeltaParts(json);
             const tcs = getToolCallsFromResponse(json);
+            const timings = getTimingsFromResponse(json);
+            if (timings) latestTimings = timings;
             if (Array.isArray(tcs) && tcs.length) {
               toolCallsAgg = mergeToolCallsDelta(toolCallsAgg, tcs);
+              setMessageToolCalls(assistantMsgId, toolCallsAgg);
             }
             if (parts.reasoning) {
               reasoning += parts.reasoning;
@@ -2710,10 +2774,12 @@
           } catch (e) { }
         }
       }
-      if (lastTimings) setMessageTimings(assistantMsgId, lastTimings);
+      if (latestTimings) {
+        setMessageTimings(assistantMsgId, latestTimings);
+      }
       updateMessage(assistantMsgId, text);
       if (reasoning) updateReasoning(assistantMsgId, reasoning);
-      return { content: text, reasoning, tool_calls: toolCallsAgg };
+      return { content: text, reasoning, tool_calls: toolCallsAgg, timings: latestTimings };
     }
 
     function currentParams() {
@@ -2868,13 +2934,6 @@
 
     async function generateIntoMessage(contextMessages, assistantMsgId) {
       const model = els.modelSelect.value || '';
-      try {
-        const m = state.messages.find(x => x && x.id === assistantMsgId);
-        if (m) {
-          m.modelId = model;
-          refreshMessageMeta(assistantMsgId);
-        }
-      } catch (e) { }
       const params = currentParams();
       state.abortController = new AbortController();
       setStatus('生成中…');
@@ -2955,9 +3014,14 @@
           } else {
             const data = await res.json();
             const parts = extractDeltaParts(data);
+            toolCalls = getToolCallsFromResponse(data);
+            if (Array.isArray(toolCalls) && toolCalls.length) {
+              setMessageToolCalls(currentAssistantId, toolCalls);
+            }
             updateMessage(currentAssistantId, parts.content || '');
             if (parts.reasoning) updateReasoning(currentAssistantId, parts.reasoning);
-            toolCalls = getToolCallsFromResponse(data);
+            const timings = getTimingsFromResponse(data);
+            if (timings) setMessageTimings(currentAssistantId, timings);
           }
 
           if (stopAfterThisRequest) {
@@ -3043,7 +3107,6 @@
       }
 
       if (msg.role === 'assistant') {
-        msg.modelId = getCurrentModelId();
         state.messages = state.messages.slice(0, idx + 1);
         rerenderAll();
         updateMessage(msg.id, '');
@@ -3085,6 +3148,10 @@
       });
     }
 
+    function buildTimingsJson() {
+      return JSON.stringify(Array.isArray(state.timingsLog) ? state.timingsLog : []);
+    }
+
     async function saveCompletion(reason) {
       if (!state.currentCompletionId) return;
       const payload = {
@@ -3093,7 +3160,7 @@
         prompt: lzCompressIfNeeded(els.rolePrompt.value || ''),
         systemPrompt: lzCompressIfNeeded(els.systemPrompt.value || ''),
         paramsJson: lzCompressIfNeeded(buildParamsJson()),
-        timingsJson: lzCompressIfNeeded(state.lastTimings ? JSON.stringify(state.lastTimings) : ''),
+        timingsJson: lzCompressIfNeeded(buildTimingsJson()),
         apiModel: state.apiModel,
         createdAt: Number(state.currentCreatedAt || 0),
         updatedAt: Date.now()
@@ -3249,6 +3316,7 @@
           els.rolePrompt.value = '';
           state.messages = [];
           state.systemLogs = [];
+          state.timingsLog = [];
           state.msgSeq = 0;
           rerenderAll();
         }
@@ -3295,8 +3363,6 @@
               return { type: 'file', url: String(a.url), name: (a.name == null ? '' : String(a.name)), isImage: false };
             })
           : [];
-        const timings = normalizeTimings(m?.timings);
-        const modelId = (typeof m?.modelId === 'string' ? m.modelId : '');
         out.push({
           id: m?.id || uid(),
           role,
@@ -3358,11 +3424,12 @@
       els.systemPrompt.value = lzDecompressIfNeeded(s.systemPrompt || '');
       els.rolePrompt.value = lzDecompressIfNeeded(s.prompt || '');
       state.currentCreatedAt = Number(s.createdAt || 0);
-      try {
+      {
         const timingsText = lzDecompressIfNeeded(s.timingsJson || '');
-        state.lastTimings = timingsText ? normalizeTimings(JSON.parse(timingsText)) : null;
-      } catch (e) {
-        state.lastTimings = null;
+        let parsed = null;
+        try { parsed = timingsText ? JSON.parse(timingsText) : null; } catch (e) { parsed = null; }
+        if (Array.isArray(parsed)) state.timingsLog = parsed;
+        else state.timingsLog = [];
       }
 
       let ext = {};
@@ -3531,6 +3598,7 @@
       els.clearChat.addEventListener('click', () => {
         if (!confirm('确认清空当前角色的对话内容？')) return;
         state.messages = [];
+        state.timingsLog = [];
         rerenderAll();
         scheduleSave('清空对话');
       });
