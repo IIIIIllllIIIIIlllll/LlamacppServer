@@ -246,7 +246,7 @@ jobs:
             local root_name="$2"
             local zip_name="$3"
             mv "$work_dir" "$root_name"
-            zip -r "dist/$zip_name" "$root_name"
+            zip -r -9 -X "dist/$zip_name" "$root_name"
           }
 
           cp -r build build-linux-no-llamacpp
@@ -324,10 +324,11 @@ jobs:
           ### 📦 包含内容
           - 编译后的 class 文件
           - 所有依赖库（lib/*.jar）
-          - 精简版 JRE 21.08（内置，无需安装 Java）
+          - 精简版 JRE 21.08（内置，无需额外安装 Java 运行环境）
           - 启动脚本（run.sh / run.bat）
 
-          ### 🧩 llama.cpp 版本（按后端分别自动降级）
+          ### 🧩 llama.cpp 版本
+          - 本项目中打包的 llamacpp 二进制来自 llama.cpp 项目的 Release（最新版本发布页：https://github.com/ggml-org/llama.cpp/releases/latest）
           EOF
 
           ANY_BACKEND=0
@@ -400,6 +401,7 @@ jobs:
           
           **注意：**
           - 本版本已内置精简版 JRE，无需额外安装 Java 环境。
+          - Windows CUDA 版本文件较大，是因为使用了 `cudart` 包，包含了 CUDA 运行环境。
           - 请根据你的 GPU 选择对应的版本：
             - NVIDIA GPU: 使用 cuda12 或 cuda13 版本
             - AMD GPU: 使用 hip 版本
@@ -447,4 +449,3 @@ jobs:
             dist/*.zip
             release_notes.md
           retention-days: 30
-

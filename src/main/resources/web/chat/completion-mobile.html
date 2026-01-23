@@ -306,6 +306,12 @@
       flex: 1 1 auto;
     }
 
+    .meta-left .model-id {
+      font-size: 12px;
+      font-weight: 650;
+      color: var(--muted);
+    }
+
     .meta-right {
       display: flex;
       align-items: center;
@@ -321,6 +327,17 @@
       line-height: 1.55;
       font-size: 14px;
       text-align: left;
+    }
+
+    .token-footer {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px dashed rgba(148, 163, 184, 0.25);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+      user-select: text;
+      word-break: break-word;
     }
 
     .content.plain {
@@ -1252,6 +1269,7 @@
       msgSeq: 0,
       apiModel: 1,
       pendingAttachment: null,
+      lastTimings: null,
       avatarNonce: 0
     };
 
@@ -1667,8 +1685,40 @@
         if (!msg) continue;
         const left = msgEl.querySelector('.meta-left');
         if (!left) continue;
-        left.textContent = msg.role === 'user' ? userName : (msg.role === 'assistant' ? taskName : '系统');
+        renderMetaLeft(left, msg, taskName, userName);
       }
+    }
+
+    function getCurrentModelId() {
+      return (els.modelSelect && typeof els.modelSelect.value === 'string')
+        ? els.modelSelect.value.trim()
+        : '';
+    }
+
+    function renderMetaLeft(leftEl, msg, taskName, userName) {
+      if (!leftEl || !msg) return;
+      while (leftEl.firstChild) leftEl.removeChild(leftEl.firstChild);
+      const speaker = document.createElement('span');
+      speaker.textContent = msg.role === 'user' ? userName : (msg.role === 'assistant' ? taskName : '系统');
+      leftEl.appendChild(speaker);
+      const modelId = (typeof msg.modelId === 'string' ? msg.modelId.trim() : '');
+      if (modelId) {
+        const modelSpan = document.createElement('span');
+        modelSpan.className = 'model-id';
+        modelSpan.textContent = ' · ' + modelId;
+        leftEl.appendChild(modelSpan);
+      }
+    }
+
+    function refreshMessageMeta(id) {
+      if (!id) return;
+      const msgEl = els.chatList.querySelector('.msg[data-id="' + String(id) + '"]');
+      if (!msgEl) return;
+      const msg = state.messages.find(m => m && m.id === id);
+      if (!msg) return;
+      const left = msgEl.querySelector('.meta-left');
+      if (!left) return;
+      renderMetaLeft(left, msg, getCurrentCompletionTitle(), getUserSpeakerName());
     }
 
     function openDrawer() {
@@ -1882,7 +1932,7 @@
       wrap.appendChild(head);
       wrap.appendChild(bubble);
 
-      state.messageEls.set(msg.id, { contentEl: content, reasoningEl: reasoningPre, attachmentsEl });
+      state.messageEls.set(msg.id, { contentEl: content, reasoningEl: reasoningPre, attachmentsEl, tokensEl });
       els.chatList.appendChild(wrap);
       maybeScrollToBottom();
     }
@@ -2156,7 +2206,7 @@
       if (!attachmentsEl) return;
       renderMessageAttachments(attachmentsEl, m);
       if (entry) {
-        state.messageEls.set(id, { contentEl: entry.contentEl, reasoningEl: entry.reasoningEl, attachmentsEl });
+        state.messageEls.set(id, { contentEl: entry.contentEl, reasoningEl: entry.reasoningEl, attachmentsEl, tokensEl: entry.tokensEl });
       }
       maybeScrollToBottom();
     }
@@ -2180,7 +2230,7 @@
           details.appendChild(summary);
           details.appendChild(newPre);
           bubble.insertBefore(details, bubble.firstChild);
-          state.messageEls.set(id, { contentEl: entry && entry.contentEl ? entry.contentEl : bubble.querySelector('.content'), reasoningEl: newPre, attachmentsEl: entry && entry.attachmentsEl ? entry.attachmentsEl : bubble.querySelector('.attachments') });
+          state.messageEls.set(id, { contentEl: entry && entry.contentEl ? entry.contentEl : bubble.querySelector('.content'), reasoningEl: newPre, attachmentsEl: entry && entry.attachmentsEl ? entry.attachmentsEl : bubble.querySelector('.attachments'), tokensEl: entry && entry.tokensEl ? entry.tokensEl : bubble.querySelector('.token-footer') });
         }
       }
       const m = getMessageById(id);
@@ -2346,12 +2396,17 @@
           if (!line.startsWith('data: ')) continue;
           const data = line.slice(6).trim();
           if (data === '[DONE]') {
+            if (lastTimings) setMessageTimings(assistantMsgId, lastTimings);
             updateMessage(assistantMsgId, text);
             if (reasoning) updateReasoning(assistantMsgId, reasoning);
             return { content: text, reasoning, tool_calls: toolCallsAgg };
           }
           try {
             const json = JSON.parse(data);
+            if (json && json.timings) {
+              const t = normalizeTimings(json.timings);
+              if (t) lastTimings = t;
+            }
             const parts = extractDeltaParts(json);
             const tcs = getToolCallsFromResponse(json);
             if (Array.isArray(tcs) && tcs.length) {
@@ -2368,6 +2423,7 @@
           } catch (e) { }
         }
       }
+      if (lastTimings) setMessageTimings(assistantMsgId, lastTimings);
       updateMessage(assistantMsgId, text);
       if (reasoning) updateReasoning(assistantMsgId, reasoning);
       return { content: text, reasoning, tool_calls: toolCallsAgg };
@@ -2480,6 +2536,13 @@
 
     async function generateIntoMessage(contextMessages, assistantMsgId) {
       const model = els.modelSelect.value || '';
+      try {
+        const m = state.messages.find(x => x && x.id === assistantMsgId);
+        if (m) {
+          m.modelId = model;
+          refreshMessageMeta(assistantMsgId);
+        }
+      } catch (e) { }
       const params = currentParams();
       state.abortController = new AbortController();
       setStatus('生成中…');
@@ -2648,6 +2711,7 @@
       }
 
       if (msg.role === 'assistant') {
+        msg.modelId = getCurrentModelId();
         state.messages = state.messages.slice(0, idx + 1);
         rerenderAll();
         updateMessage(msg.id, '');
@@ -2696,6 +2760,7 @@
         prompt: lzCompressIfNeeded(els.rolePrompt.value || ''),
         systemPrompt: lzCompressIfNeeded(els.systemPrompt.value || ''),
         paramsJson: lzCompressIfNeeded(buildParamsJson()),
+        timingsJson: lzCompressIfNeeded(state.lastTimings ? JSON.stringify(state.lastTimings) : ''),
         apiModel: state.apiModel,
         createdAt: Number(state.currentCreatedAt || 0),
         updatedAt: Date.now()
@@ -2895,6 +2960,8 @@
               return { type: 'file', url: String(a.url), name: (a.name == null ? '' : String(a.name)), isImage: false };
             })
           : [];
+        const timings = normalizeTimings(m?.timings);
+        const modelId = (typeof m?.modelId === 'string' ? m.modelId : '');
         out.push({
           id: m?.id || uid(),
           role,
@@ -2956,6 +3023,12 @@
       els.systemPrompt.value = lzDecompressIfNeeded(s.systemPrompt || '');
       els.rolePrompt.value = lzDecompressIfNeeded(s.prompt || '');
       state.currentCreatedAt = Number(s.createdAt || 0);
+      try {
+        const timingsText = lzDecompressIfNeeded(s.timingsJson || '');
+        state.lastTimings = timingsText ? normalizeTimings(JSON.parse(timingsText)) : null;
+      } catch (e) {
+        state.lastTimings = null;
+      }
 
       let ext = {};
       const paramsJsonText = lzDecompressIfNeeded(s.paramsJson || '');

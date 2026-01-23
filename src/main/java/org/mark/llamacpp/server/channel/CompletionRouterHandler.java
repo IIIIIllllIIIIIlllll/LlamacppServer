@@ -477,6 +477,7 @@ public class CompletionRouterHandler extends SimpleChannelInboundHandler<FullHtt
 		charactorDataStruct.setPrompt(maybeCompress(charactorDataStruct.getPrompt()));
 		charactorDataStruct.setSystemPrompt(maybeCompress(charactorDataStruct.getSystemPrompt()));
 		charactorDataStruct.setParamsJson(maybeCompress(charactorDataStruct.getParamsJson()));
+		charactorDataStruct.setTimingsJson(maybeCompress(charactorDataStruct.getTimingsJson()));
 		
 		Map<String, Object> response = new HashMap<String, Object>();
 		response.put("success", true);
@@ -501,6 +502,7 @@ public class CompletionRouterHandler extends SimpleChannelInboundHandler<FullHtt
 				charactorDataStruct.setPrompt(maybeDecompress(charactorDataStruct.getPrompt()));
 				charactorDataStruct.setSystemPrompt(maybeDecompress(charactorDataStruct.getSystemPrompt()));
 				charactorDataStruct.setParamsJson(maybeDecompress(charactorDataStruct.getParamsJson()));
+				charactorDataStruct.setTimingsJson(maybeDecompress(charactorDataStruct.getTimingsJson()));
 			}
 			try {
 				Long id = name == null ? null : Long.parseLong(name.trim());

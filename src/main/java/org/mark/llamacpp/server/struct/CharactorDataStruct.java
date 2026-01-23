@@ -31,6 +31,7 @@ public class CharactorDataStruct {
 	 * 	参数
 	 */
 	private String paramsJson;
+	private String timingsJson;
 
 	/**
 	 * 	使用哪个 OpenAI 兼容端点：1=/v1/chat/completions, 0=/v1/completions
@@ -83,6 +84,12 @@ public class CharactorDataStruct {
 	}
 	public void setParamsJson(String paramsJson) {
 		this.paramsJson = paramsJson;
+	}
+	public String getTimingsJson() {
+		return timingsJson;
+	}
+	public void setTimingsJson(String timingsJson) {
+		this.timingsJson = timingsJson;
 	}
 	public int getApiModel() {
 		return apiModel;
