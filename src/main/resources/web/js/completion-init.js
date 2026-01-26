@@ -7,6 +7,14 @@ function bindEvents() {
     return hasDesktop && !hasMobile;
   }
 
+  function isMobileCompletionHtml() {
+    const links = Array.from(document.querySelectorAll('link[rel="stylesheet"]'));
+    const hrefs = links.map(l => (l.getAttribute('href') || '').toLowerCase());
+    const hasDesktop = hrefs.some(h => h.includes('completion.css'));
+    const hasMobile = hrefs.some(h => h.includes('completion-mobile.css'));
+    return hasMobile && !hasDesktop;
+  }
+
   function getFilesFromClipboardEvent(e) {
     const out = [];
     const dt = e && e.clipboardData ? e.clipboardData : null;
@@ -31,7 +39,63 @@ function bindEvents() {
     return out;
   }
 
+  const isMobilePage = isMobileCompletionHtml();
+  let lastTopicFocus = null;
+
+  function setTopicOpen(open) {
+    const isOpen = !!open;
+
+    if (isMobilePage) {
+      if (!els.topicOverlay) return;
+      if (isOpen) lastTopicFocus = document.activeElement;
+      if (!isOpen) {
+        const active = document.activeElement;
+        if (active && els.topicOverlay.contains(active)) {
+          const focusTarget = (els.topicToggle && typeof els.topicToggle.focus === 'function') ? els.topicToggle : null;
+          if (focusTarget) focusTarget.focus({ preventScroll: true });
+          else if (active && typeof active.blur === 'function') active.blur();
+        }
+      }
+      els.topicOverlay.classList.toggle('open', isOpen);
+      if (els.topicBackdrop) els.topicBackdrop.classList.toggle('show', isOpen);
+      els.topicOverlay.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+      if (isOpen) els.topicOverlay.removeAttribute('inert');
+      else els.topicOverlay.setAttribute('inert', '');
+      document.documentElement.style.overflow = isOpen ? 'hidden' : '';
+      if (isOpen) {
+        renderTopics();
+        if (els.topicOverlayClose && typeof els.topicOverlayClose.focus === 'function') {
+          els.topicOverlayClose.focus({ preventScroll: true });
+        }
+      } else {
+        const focusTarget = (lastTopicFocus && document.contains(lastTopicFocus)) ? lastTopicFocus : els.topicToggle;
+        if (focusTarget && typeof focusTarget.focus === 'function') focusTarget.focus({ preventScroll: true });
+        lastTopicFocus = null;
+      }
+      return;
+    }
+
+    if (!els.topicModal) return;
+    if (isOpen) lastTopicFocus = document.activeElement;
+    els.topicModal.classList.toggle('show', isOpen);
+    els.topicModal.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+    if (isOpen) {
+      els.topicModal.removeAttribute('inert');
+      renderTopics();
+      if (els.topicModalClose && typeof els.topicModalClose.focus === 'function') {
+        els.topicModalClose.focus({ preventScroll: true });
+      }
+    } else {
+      els.topicModal.setAttribute('inert', '');
+      const focusTarget = (lastTopicFocus && document.contains(lastTopicFocus)) ? lastTopicFocus : els.topicToggle;
+      if (focusTarget && typeof focusTarget.focus === 'function') focusTarget.focus({ preventScroll: true });
+      lastTopicFocus = null;
+    }
+  }
+
   els.sessionsToggle.addEventListener('click', () => {
+    if (els.topicOverlay && els.topicOverlay.classList.contains('open')) setTopicOpen(false);
+    if (els.topicModal && els.topicModal.classList.contains('show')) setTopicOpen(false);
     if (els.modelRow && els.modelRow.classList.contains('visible')) {
       els.modelRow.classList.remove('visible');
       if (els.modelRowBackdrop) els.modelRowBackdrop.classList.remove('show');
@@ -57,7 +121,37 @@ function bindEvents() {
     if (isOpen) renderTopics();
   }
 
+  if (els.topicToggle) {
+    els.topicToggle.addEventListener('click', () => {
+      if (els.drawer && els.drawer.classList.contains('open')) closeDrawer();
+      if (els.settingsPanel && els.settingsPanel.classList.contains('open')) setSettingsOpen(false);
+      if (els.modelRow && els.modelRow.classList.contains('visible')) setModelRowOpen(false);
+      const open = isMobilePage
+        ? !(els.topicOverlay && els.topicOverlay.classList.contains('open'))
+        : !(els.topicModal && els.topicModal.classList.contains('show'));
+      setTopicOpen(open);
+    });
+  }
+  if (els.topicOverlayClose) {
+    els.topicOverlayClose.addEventListener('click', () => setTopicOpen(false));
+  }
+  if (els.topicModalClose) {
+    els.topicModalClose.addEventListener('click', () => setTopicOpen(false));
+  }
+  if (els.topicBackdrop) {
+    els.topicBackdrop.addEventListener('click', () => {
+      if (isMobilePage && els.topicOverlay && els.topicOverlay.classList.contains('open')) setTopicOpen(false);
+    });
+  }
+  if (els.topicModal) {
+    els.topicModal.addEventListener('click', (e) => {
+      if (!isMobilePage && e.target === els.topicModal) setTopicOpen(false);
+    });
+  }
+
   els.modelRowToggle.addEventListener('click', () => {
+    if (els.topicOverlay && els.topicOverlay.classList.contains('open')) setTopicOpen(false);
+    if (els.topicModal && els.topicModal.classList.contains('show')) setTopicOpen(false);
     const open = !els.modelRow.classList.contains('visible');
     setModelRowOpen(open);
   });
@@ -236,6 +330,14 @@ function bindEvents() {
       }
       if (els.mcpToolsModal.classList.contains('show')) {
         closeMcpToolsModal();
+        return;
+      }
+      if (els.topicOverlay && els.topicOverlay.classList.contains('open')) {
+        setTopicOpen(false);
+        return;
+      }
+      if (els.topicModal && els.topicModal.classList.contains('show')) {
+        setTopicOpen(false);
         return;
       }
       if (els.settingsPanel.classList.contains('open')) {

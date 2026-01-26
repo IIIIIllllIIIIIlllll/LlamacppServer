@@ -11,6 +11,7 @@
 <body>
   <div class="app">
     <div class="header">
+      <button id="topicToggle" class="btn icon-btn ghost" type="button" aria-label="话题">🏷</button>
       <div class="chat-title">
         <input id="titleInput" class="title-input" type="text" placeholder="角色名称（自动保存）" />
       </div>
@@ -150,6 +151,20 @@
           <button id="attachClear" class="btn icon-btn clear" type="button" aria-label="清除附件">×</button>
         </div>
         <div class="spacer"></div>
+      </div>
+    </div>
+
+    <div id="topicBackdrop" class="backdrop"></div>
+    <div id="topicOverlay" class="topic-overlay" aria-hidden="true">
+      <div class="topic-overlay-head">
+        <div class="topic-title">话题</div>
+        <button id="topicOverlayClose" class="btn icon-btn" type="button" aria-label="关闭">×</button>
+      </div>
+      <div class="topic-overlay-actions">
+        <button id="newTopicBtn" class="btn" type="button">新建话题</button>
+      </div>
+      <div class="topic-overlay-body">
+        <div id="topicList" class="topic-list"></div>
       </div>
     </div>
 

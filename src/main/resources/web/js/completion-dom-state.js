@@ -9,6 +9,13 @@ const els = {
   reloadSessionsBtn: document.getElementById('reloadSessionsBtn'),
   drawerHint: document.getElementById('drawerHint'),
 
+  topicToggle: document.getElementById('topicToggle'),
+  topicOverlay: document.getElementById('topicOverlay'),
+  topicBackdrop: document.getElementById('topicBackdrop'),
+  topicOverlayClose: document.getElementById('topicOverlayClose'),
+  topicModal: document.getElementById('topicModal'),
+  topicModalClose: document.getElementById('topicModalClose'),
+
   titleInput: document.getElementById('titleInput'),
   chatList: document.getElementById('chatList'),
   promptInput: document.getElementById('promptInput'),

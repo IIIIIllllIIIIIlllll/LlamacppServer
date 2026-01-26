@@ -19,6 +19,13 @@
   --surface-2: #e2e8f0;
 }
 
+.chat-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
 * {
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
@@ -77,6 +84,7 @@ textarea {
   padding: 8px 10px;
   outline: none;
   height: 38px;
+  width: 100%;
 }
 
 .btn {
