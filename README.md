@@ -6,6 +6,8 @@
 ---
 > **注意**：Anthropic API 并不完善。
 ---
+> **注意**：关于Linux的编译脚本，请注意JAVA_HOME的配置，默认使用该路径：/opt/jdk-24.0.2/。请修改为你所使用的路径再进行编译，并且修改时请务必注意：Windows 使用 CRLF（\r\n）作为换行符，而 Linux 使用 LF（\n）。
+---
 
 ## 主要功能
 
@@ -108,6 +110,10 @@ javac-win.bat
 # Linux
 javac-linux.sh
 ```
+
+> **注意**：关于Linux的编译脚本，请注意JAVA_HOME的配置，默认使用该路径：/opt/jdk-24.0.2/。请修改为你所使用的路径再进行编译，并且修改时请务必注意：Windows 使用 CRLF（\r\n）作为换行符，而 Linux 使用 LF（\n）。
+---
+
 ### 直接下载
 直接从release下载编译好的程序使用
 
