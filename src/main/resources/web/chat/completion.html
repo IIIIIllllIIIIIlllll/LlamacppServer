@@ -62,6 +62,73 @@
       flex: 1;
       overflow-y: auto;
     }
+
+    #chatTitleTag.title-tag {
+      appearance: none;
+      border: 0;
+      background: linear-gradient(180deg, rgba(0, 0, 0, 0.03), rgba(0, 0, 0, 0.01));
+      text-align: left;
+      cursor: pointer;
+      padding: 6px 10px;
+      min-width: 0;
+      white-space: nowrap;
+      border-radius: 12px;
+      border: 1px solid rgba(0, 0, 0, 0.06);
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.05s ease;
+    }
+
+    #chatTitleTag.title-tag:hover {
+      background: linear-gradient(180deg, rgba(0, 0, 0, 0.06), rgba(0, 0, 0, 0.02));
+      border-color: rgba(0, 0, 0, 0.14);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    }
+
+    #chatTitleTag.title-tag:active {
+      transform: translateY(1px);
+    }
+
+    #chatTitleTag.title-tag:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 2px;
+    }
+
+    #chatTitleTag .title-tag-main {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 650;
+    }
+
+    #chatTitleTag .title-tag-hint {
+      flex: 0 0 auto;
+      white-space: nowrap;
+      font-size: 12px;
+      color: var(--muted);
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px dashed rgba(0, 0, 0, 0.18);
+      background: rgba(0, 0, 0, 0.02);
+    }
+
+    #chatTitleTag.title-tag:hover .title-tag-hint {
+      border-color: rgba(0, 0, 0, 0.28);
+      background: rgba(0, 0, 0, 0.04);
+      color: var(--text);
+    }
+
+    #titleInput.title-input.is-hidden {
+      display: none;
+    }
+
+    .settings-footer {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
   </style>
 </head>
 
@@ -71,7 +138,11 @@
       <div class="chat-shell">
         <div class="chat-top">
           <div class="chat-title">
-            <input id="titleInput" class="title-input" type="text" placeholder="角色名称（自动保存）" />
+            <button id="chatTitleTag" class="title-input title-tag" type="button" aria-label="编辑角色名称">
+              <span id="chatTitleMain" class="title-tag-main"></span>
+              <span id="chatTitleHint" class="title-tag-hint" aria-hidden="true"></span>
+            </button>
+            <input id="titleInput" class="title-input is-hidden" type="text" placeholder="角色名称（自动保存）" tabindex="-1" aria-hidden="true" />
           </div>
           <div class="chat-actions">
             <button id="sessionsToggle" class="btn ghost" type="button">角色列表</button>
@@ -122,6 +193,7 @@
                   <button class="nav-item" data-tab="template">对话模板</button>
                 </nav>
                 <div class="settings-footer">
+                  <button id="cancelSettings" class="btn full-width" type="button">取消</button>
                   <button id="closeSettings" class="btn primary full-width" type="button">完成</button>
                 </div>
               </div>
@@ -129,14 +201,7 @@
               <div class="settings-main">
                 <div id="tab-general" class="settings-tab active">
                   <div class="setting-group">
-                    <h3 class="group-title">个人信息</h3>
-                    <div class="setting-row">
-                      <label>头像</label>
-                      <div class="avatar-wrapper">
-                        <div id="avatarSettingPreview" class="avatar clickable" title="点击查看头像">AI</div>
-                        <button id="avatarSettingUpload" class="btn small" type="button">更换</button>
-                      </div>
-                    </div>
+                    <h3 class="group-title">用户设定</h3>
                     <div class="setting-row">
                       <label for="userName">用户昵称</label>
                       <input id="userName" type="text" placeholder="例如：我" class="input-styled" />
@@ -145,6 +210,17 @@
                   
                   <div class="setting-group">
                     <h3 class="group-title">角色设定</h3>
+                    <div class="setting-row">
+                      <label>头像</label>
+                      <div class="avatar-wrapper">
+                        <div id="avatarSettingPreview" class="avatar clickable" title="点击查看头像">AI</div>
+                        <button id="avatarSettingUpload" class="btn small" type="button">更换</button>
+                      </div>
+                    </div>
+                    <div class="setting-row">
+                      <label for="completionTitleSetting">角色名称</label>
+                      <input id="completionTitleSetting" type="text" placeholder="例如：默认角色" class="input-styled" />
+                    </div>
                     <div id="sysPromptBox" class="setting-block">
                       <label for="systemPrompt">系统描述 <span class="sub-label">（对话开头）</span></label>
                       <textarea id="systemPrompt" placeholder="例如：你是一个严谨的写作助手，输出中文，结构清晰…"></textarea>
@@ -378,6 +454,108 @@
         document.addEventListener('DOMContentLoaded', initDrawerTabs);
       } else {
         initDrawerTabs();
+      }
+    })();
+
+    (function() {
+      function safeCall(fn) {
+        try { return fn(); } catch (e) { return undefined; }
+      }
+
+      function initChatTitleSettings() {
+        const titleTag = document.getElementById('chatTitleTag');
+        const hiddenTitleInput = document.getElementById('titleInput');
+        const titleSettingInput = document.getElementById('completionTitleSetting');
+        const titleMain = document.getElementById('chatTitleMain');
+        const titleHint = document.getElementById('chatTitleHint');
+        const cancelBtn = document.getElementById('cancelSettings');
+        const doneBtn = document.getElementById('closeSettings');
+
+        if (!titleTag || !hiddenTitleInput || !titleSettingInput || !doneBtn || !titleMain || !titleHint) return;
+
+        function computeTitleDisplay(raw) {
+          const t = (raw == null ? '' : String(raw)).trim();
+          if (!t) return { main: '默认角色', hint: '点此修改名称' };
+          return { main: t, hint: '' };
+        }
+
+        function syncTagFromHidden() {
+          const d = computeTitleDisplay(hiddenTitleInput.value);
+          titleMain.textContent = d.main;
+          titleHint.textContent = d.hint;
+          titleTag.setAttribute('aria-label', d.hint ? (d.main + '，' + d.hint) : (d.main + '，点此修改名称'));
+          titleTag.title = d.hint ? (d.main + '，' + d.hint) : (d.main + '（点此修改名称）');
+        }
+
+        function syncSettingFromHidden() {
+          titleSettingInput.value = (hiddenTitleInput.value == null ? '' : String(hiddenTitleInput.value));
+        }
+
+        function activateGeneralTab() {
+          const panel = document.getElementById('settingsPanel');
+          if (!panel) return;
+          const nav = panel.querySelector('.nav-item[data-tab="general"]');
+          if (nav && typeof nav.click === 'function') nav.click();
+        }
+
+        function openSettingsAndFocusTitle() {
+          syncSettingFromHidden();
+          if (typeof window.setSettingsOpen === 'function') window.setSettingsOpen(true);
+          setTimeout(() => {
+            activateGeneralTab();
+            try { titleSettingInput.focus({ preventScroll: true }); } catch (e) {}
+            try { titleSettingInput.select(); } catch (e) {}
+          }, 0);
+        }
+
+        titleTag.addEventListener('click', openSettingsAndFocusTitle);
+
+        if (cancelBtn) {
+          cancelBtn.addEventListener('click', () => {
+            syncSettingFromHidden();
+            if (typeof window.setSettingsOpen === 'function') window.setSettingsOpen(false);
+          });
+        }
+
+        doneBtn.addEventListener('click', () => {
+          const newRaw = (titleSettingInput.value == null ? '' : String(titleSettingInput.value)).trim();
+          const currentRaw = (hiddenTitleInput.value == null ? '' : String(hiddenTitleInput.value)).trim();
+          if (newRaw !== currentRaw) {
+            hiddenTitleInput.value = newRaw;
+            safeCall(() => window.refreshCompletionTitleInMessages && window.refreshCompletionTitleInMessages());
+            safeCall(() => window.scheduleSave && window.scheduleSave('标题'));
+          }
+          syncTagFromHidden();
+        }, true);
+
+        const originalApplyCompletionData = window.applyCompletionData;
+        if (typeof originalApplyCompletionData === 'function') {
+          window.applyCompletionData = function() {
+            const ret = originalApplyCompletionData.apply(this, arguments);
+            syncTagFromHidden();
+            if (typeof window.setSettingsOpen === 'function') {
+              const panel = document.getElementById('settingsPanel');
+              if (panel && panel.classList.contains('open')) syncSettingFromHidden();
+            }
+            return ret;
+          };
+        }
+
+        const originalSetSettingsOpen = window.setSettingsOpen;
+        if (typeof originalSetSettingsOpen === 'function') {
+          window.setSettingsOpen = function(open) {
+            if (open) syncSettingFromHidden();
+            return originalSetSettingsOpen.apply(this, arguments);
+          };
+        }
+
+        syncTagFromHidden();
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initChatTitleSettings);
+      } else {
+        initChatTitleSettings();
       }
     })();
   </script>

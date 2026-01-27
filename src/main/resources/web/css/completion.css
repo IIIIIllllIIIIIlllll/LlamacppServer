@@ -207,7 +207,7 @@
       align-items: center;
       gap: 8px;
       padding: 4px 12px;
-      background: rgba(255, 255, 255, 0.6);
+      background: var(--panel-2);
       border-bottom: 1px solid var(--border);
       backdrop-filter: blur(8px);
       flex-shrink: 0;
@@ -702,7 +702,7 @@
       padding: 12px;
       border: 1px solid var(--border);
       border-radius: 18px 18px 0 0;
-      background: rgba(255, 255, 255, 0.98);
+      background: var(--panel-2);
       backdrop-filter: blur(10px);
       overflow: hidden;
     }
