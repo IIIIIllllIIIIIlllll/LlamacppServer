@@ -1,10 +1,11 @@
 #!/bin/bash
-# 设置Java目录，适合多JDK环境的用户
+# 设置Java目录，适合多JDK环境的用户，但是默认不要设置，我们默认用户的系统中有JAVA_HOME
 JAVA_HOME=/opt/jdk-24.0.2/
-#!/bin/bash
 # 设置项目根目录（确保从项目根路径执行）
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC_DIR="$PROJECT_ROOT/src/main/java"
+RES_DIR_1="$PROJECT_ROOT/src/main/resources"
+RES_DIR_2="$PROJECT_ROOT/resources"
 CLASSES_DIR="$PROJECT_ROOT/build/classes"
 LIB_DIR="$PROJECT_ROOT/lib"
 # === 1. 强制要求 JAVA_HOME 已设置且有效 ===
@@ -34,6 +35,14 @@ rm -rf "$CLASSES_DIR"
 mkdir -p "$CLASSES_DIR"
 mkdir -p "$PROJECT_ROOT/build/lib"
 cp "$LIB_DIR"/*.jar "$PROJECT_ROOT/build/lib/" 2>/dev/null || true
+if [ -d "$RES_DIR_1" ]; then
+    echo "📦 正在复制资源文件: $RES_DIR_1 -> $CLASSES_DIR"
+    cp -a "$RES_DIR_1/." "$CLASSES_DIR/" 2>/dev/null || true
+fi
+if [ -d "$RES_DIR_2" ]; then
+    echo "📦 正在复制资源文件: $RES_DIR_2 -> $CLASSES_DIR"
+    cp -a "$RES_DIR_2/." "$CLASSES_DIR/" 2>/dev/null || true
+fi
 # === 3. 构建 classpath（lib/ 下所有 .jar 文件）===
 CLASSPATH=""
 for jar in "$LIB_DIR"/*.jar; do
@@ -63,7 +72,7 @@ if [ $? -eq 0 ]; then
     RUN_SCRIPT="$PROJECT_ROOT/build/run.sh"
     cat > "$RUN_SCRIPT" << 'EOF'
     #!/bin/bash
-    java -Xms64m -Xmx96m -classpath "./classes:./lib/*" org.mark.llamacpp.server.LlamaServer
+    java -Xms64m -Xmx64m -classpath "./classes:./lib/*" org.mark.llamacpp.server.LlamaServer
 EOF
 
     chmod +x "$RUN_SCRIPT"

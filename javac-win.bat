@@ -7,7 +7,8 @@ cd /d "%PROJECT_ROOT%"
 set "EXITCODE=0"
 
 set "SRC_DIR=%PROJECT_ROOT%src\main\java"
-set "RES_DIR=%PROJECT_ROOT%src\main\resources"
+set "RES_DIR1=%PROJECT_ROOT%src\main\resources"
+set "RES_DIR2=%PROJECT_ROOT%resources"
 set "LIB_DIR=%PROJECT_ROOT%lib"
 set "BUILD_DIR=%PROJECT_ROOT%build"
 set "CLASSES_DIR=%BUILD_DIR%\classes"
@@ -94,13 +95,23 @@ if errorlevel 1 (
 echo Compilation succeeded.
 echo.
 
-if exist "%RES_DIR%" (
+set "COPIED_RES=0"
+if exist "%RES_DIR1%\" (
   echo Copying resources to %CLASSES_DIR% ...
-  xcopy "%RES_DIR%\*" "%CLASSES_DIR%\" /E /I /Y >nul
+  xcopy "%RES_DIR1%\*" "%CLASSES_DIR%\" /E /I /Y /H >nul
+  set "COPIED_RES=1"
+)
+if exist "%RES_DIR2%\" (
+  if "%COPIED_RES%"=="0" echo Copying resources to %CLASSES_DIR% ...
+  xcopy "%RES_DIR2%\*" "%CLASSES_DIR%\" /E /I /Y /H >nul
+  set "COPIED_RES=1"
+)
+if "%COPIED_RES%"=="1" (
   echo Resources copied.
   echo.
 ) else (
-  echo No resources directory found: %RES_DIR%
+  echo No resources directory found: %RES_DIR1%
+  echo No resources directory found: %RES_DIR2%
   echo.
 )
 
@@ -108,7 +119,7 @@ set "RUN_BAT=%BUILD_DIR%\run.bat"
 > "%RUN_BAT%" echo @echo off
 >>"%RUN_BAT%" echo setlocal EnableExtensions
 >>"%RUN_BAT%" echo cd /d "%%~dp0"
->>"%RUN_BAT%" echo java -Xms64m -Xmx96m -cp ".\classes;.\lib\*" org.mark.llamacpp.server.LlamaServer
+>>"%RUN_BAT%" echo start "" javaw.exe -Xms64m -Xmx64m -classpath "./classes;./lib/*" org.mark.llamacpp.server.LlamaServer %*
 >>"%RUN_BAT%" echo endlocal
 
 :END
