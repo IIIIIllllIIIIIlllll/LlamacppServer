@@ -314,7 +314,6 @@ function renderMessageAttachments(attachmentsEl, msg) {
     const urlObj = new URL(a.url);
     // 获取路径部分（包含查询参数和哈希）
     const path = urlObj.pathname + urlObj.search + urlObj.hash;
-    a.url = path;
 
     const item = document.createElement('div');
     item.className = 'attachment-item';
@@ -343,7 +342,7 @@ function renderMessageAttachments(attachmentsEl, msg) {
       const preview = document.createElement('div');
       preview.className = 'attachment-preview';
       const img = document.createElement('img');
-      img.src = String(a.url);
+      img.src = String(path);
       img.alt = a.name ? String(a.name) : 'image';
       preview.appendChild(img);
       item.appendChild(preview);
