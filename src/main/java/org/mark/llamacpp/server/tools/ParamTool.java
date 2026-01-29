@@ -3,11 +3,17 @@ package org.mark.llamacpp.server.tools;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 
@@ -15,6 +21,8 @@ import com.google.gson.JsonObject;
  * 	从URL中提取参数。
  */
 public class ParamTool {
+	
+	private static final SimpleDateFormat SDF = new SimpleDateFormat("EEE, d MMM yyyy HH:mm:ss 'GMT'", Locale.ENGLISH);
 	
 	/**
 	 * 安全解析 JSON 对象中的布尔值，支持多种格式的布尔值输入。
@@ -47,6 +55,28 @@ public class ParamTool {
 			} catch (Exception e2) {
 				return fallback;
 			}
+		}
+	}
+	
+	
+	/**
+	 * 	生成当前的时间（
+	 * @return
+	 */
+	public static String getDate() {
+		return SDF.format(new Date());
+	}
+	
+	
+	public static JsonObject tryParseObject(String s) {
+		try {
+			if (s == null || s.trim().isEmpty()) {
+				return null;
+			}
+			JsonElement el = JsonUtil.fromJson(s, JsonElement.class);
+			return el != null && el.isJsonObject() ? el.getAsJsonObject() : null;
+		} catch (Exception e) {
+			return null;
 		}
 	}
 	
@@ -163,6 +193,25 @@ public class ParamTool {
 		}
 	}
 	
-	
+	/**
+	 * 	创建etag
+	 * @param content
+	 * @return
+	 */
+	public static String buildEtag(byte[] content) {
+		try {
+			MessageDigest digest = MessageDigest.getInstance("SHA-256");
+			byte[] hash = digest.digest(content == null ? new byte[0] : content);
+			StringBuilder sb = new StringBuilder(hash.length * 2 + 2);
+			sb.append('"');
+			for (byte b : hash) {
+				sb.append(String.format("%02x", b));
+			}
+			sb.append('"');
+			return sb.toString();
+		} catch (Exception e) {
+			return "\"" + UUID.randomUUID().toString().replace("-", "") + "\"";
+		}
+	}
 	
 }

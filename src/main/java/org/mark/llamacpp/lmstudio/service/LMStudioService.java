@@ -8,10 +8,7 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -28,6 +25,7 @@ import org.mark.llamacpp.server.LlamaServerManager;
 import org.mark.llamacpp.server.exception.RequestMethodException;
 import org.mark.llamacpp.server.service.OpenAIService;
 import org.mark.llamacpp.server.tools.JsonUtil;
+import org.mark.llamacpp.server.tools.ParamTool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -74,12 +72,6 @@ public class LMStudioService {
 	 * 	
 	 */
 	private final Map<ChannelHandlerContext, HttpURLConnection> channelConnectionMap = new HashMap<>();
-	
-	/**
-	 * 	凑数时间
-	 */
-	private SimpleDateFormat sdf = new SimpleDateFormat("EEE, d MMM yyyy HH:mm:ss 'GMT'", Locale.ENGLISH);
-	
 	
 	/**
 	 * 	响应：/api/v0/models
@@ -343,12 +335,12 @@ public class LMStudioService {
 			FullHttpResponse rawResp = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.valueOf(responseCode));
 			rawResp.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/json; charset=utf-8");
 			rawResp.headers().set(HttpHeaderNames.CONTENT_LENGTH, rawBytes.length);
-			rawResp.headers().set(HttpHeaderNames.ETAG, buildEtag(rawBytes));
+			rawResp.headers().set(HttpHeaderNames.ETAG, ParamTool.buildEtag(rawBytes));
 			rawResp.headers().set("X-Powered-By", "Express");
 			rawResp.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN, "*");
 			rawResp.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_HEADERS, "*");
 			rawResp.headers().set(HttpHeaderNames.CONNECTION, "alive");
-			rawResp.headers().set(HttpHeaderNames.DATE, this.sdf.format(new Date()));
+			rawResp.headers().set(HttpHeaderNames.DATE, ParamTool.getDate());
 			rawResp.content().writeBytes(rawBytes);
 			ctx.writeAndFlush(rawResp).addListener(f -> ctx.close());
 			return;
@@ -366,12 +358,12 @@ public class LMStudioService {
 			FullHttpResponse rawResp = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
 			rawResp.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/json; charset=utf-8");
 			rawResp.headers().set(HttpHeaderNames.CONTENT_LENGTH, rawBytes.length);
-			rawResp.headers().set(HttpHeaderNames.ETAG, buildEtag(rawBytes));
+			rawResp.headers().set(HttpHeaderNames.ETAG, ParamTool.buildEtag(rawBytes));
 			rawResp.headers().set("X-Powered-By", "Express");
 			rawResp.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN, "*");
 			rawResp.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_HEADERS, "*");
 			rawResp.headers().set(HttpHeaderNames.CONNECTION, "alive");
-			rawResp.headers().set(HttpHeaderNames.DATE, this.sdf.format(new Date()));
+			rawResp.headers().set(HttpHeaderNames.DATE, ParamTool.getDate());
 			rawResp.content().writeBytes(rawBytes);
 			ctx.writeAndFlush(rawResp).addListener(f -> ctx.close());
 			return;
@@ -418,7 +410,7 @@ public class LMStudioService {
 		response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
 		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN, "*");
 		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_HEADERS, "*");
-		response.headers().set(HttpHeaderNames.ETAG, buildEtag((modelName + ":" + responseCode + ":" + System.nanoTime()).getBytes(StandardCharsets.UTF_8)));
+		response.headers().set(HttpHeaderNames.ETAG, ParamTool.buildEtag((modelName + ":" + responseCode + ":" + System.nanoTime()).getBytes(StandardCharsets.UTF_8)));
 		
 		// 发送响应头
 		ctx.write(response);
@@ -463,7 +455,7 @@ public class LMStudioService {
 					}
 					
 					String outLine = line;
-					JsonObject parsed = tryParseObject(data);
+					JsonObject parsed = ParamTool.tryParseObject(data);
 					if (parsed != null) {
 						if (completionId == null) {
 							completionId = safeString(parsed, "id");
@@ -595,19 +587,6 @@ public class LMStudioService {
 		});
 	}
 	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-
-	
 	/**
 	 * 发送OpenAI格式的错误响应并清理资源
 	 */
@@ -654,14 +633,14 @@ public class LMStudioService {
 		FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
 		response.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/json; charset=utf-8");
 		response.headers().set(HttpHeaderNames.CONTENT_LENGTH, content.length);
-		response.headers().set(HttpHeaderNames.ETAG, buildEtag(content));
-		response.headers().set("X-Powered-By", "Express");
 		// 添加CORS头
 		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN, "*");
-		//response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_METHODS, "GET, POST, PUT, DELETE, OPTIONS");
 		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_HEADERS, "*");
+		//
 		response.headers().set(HttpHeaderNames.CONNECTION, "alive");
-		response.headers().set(HttpHeaderNames.DATE, this.sdf.format(new Date()));
+		response.headers().set(HttpHeaderNames.DATE, ParamTool.getDate());
+		response.headers().set(HttpHeaderNames.ETAG, ParamTool.buildEtag(content));
+		response.headers().set("X-Powered-By", "Express");
 		
 		response.content().writeBytes(content);
 
@@ -686,14 +665,15 @@ public class LMStudioService {
 		FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, httpStatus);
 		response.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/json; charset=utf-8");
 		response.headers().set(HttpHeaderNames.CONTENT_LENGTH, content.length);
-		response.headers().set(HttpHeaderNames.ETAG, buildEtag(content));
-		response.headers().set("X-Powered-By", "Express");
 		// 添加CORS头
 		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN, "*");
 		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_METHODS, "*");
 		response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_HEADERS, "*");
+		//
 		response.headers().set(HttpHeaderNames.CONNECTION, "alive");
-		response.headers().set(HttpHeaderNames.DATE, this.sdf.format(new Date()));
+		response.headers().set(HttpHeaderNames.DATE, ParamTool.getDate());
+		response.headers().set(HttpHeaderNames.ETAG, ParamTool.buildEtag(content));
+		response.headers().set("X-Powered-By", "Express");
 		
 		
 		response.content().writeBytes(content);
@@ -725,45 +705,7 @@ public class LMStudioService {
 			}
 		}
 	}
-	
-	/**
-	 * 	创建etag
-	 * @param content
-	 * @return
-	 */
-	private static String buildEtag(byte[] content) {
-		try {
-			MessageDigest digest = MessageDigest.getInstance("SHA-256");
-			byte[] hash = digest.digest(content == null ? new byte[0] : content);
-			StringBuilder sb = new StringBuilder(hash.length * 2 + 2);
-			sb.append('"');
-			for (byte b : hash) {
-				sb.append(String.format("%02x", b));
-			}
-			sb.append('"');
-			return sb.toString();
-		} catch (Exception e) {
-			return "\"" + UUID.randomUUID().toString().replace("-", "") + "\"";
-		}
-	}
-	
-	/**
-	 * 	
-	 * @param s
-	 * @return
-	 */
-	private static JsonObject tryParseObject(String s) {
-		try {
-			if (s == null || s.trim().isEmpty()) {
-				return null;
-			}
-			JsonElement el = JsonUtil.fromJson(s, JsonElement.class);
-			return el != null && el.isJsonObject() ? el.getAsJsonObject() : null;
-		} catch (Exception e) {
-			return null;
-		}
-	}
-	
+
 	/**
 	 * 	
 	 * @param obj
