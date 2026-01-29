@@ -150,7 +150,10 @@ function persistActiveTopic() {
   };
   if (Array.isArray(state.topics)) {
     const t = state.topics.find(x => x && String(x.id) === String(id));
-    if (t) t.updatedAt = Date.now();
+    if (t) {
+      if (!Number.isFinite(t.createdAt) || Number(t.createdAt || 0) <= 0) t.createdAt = Date.now();
+      t.updatedAt = Date.now();
+    }
   }
 }
 
@@ -241,9 +244,18 @@ function renderTopics() {
     const item = document.createElement('div');
     item.className = 'topic-item' + (isActive ? ' active' : '');
     item.dataset.id = id;
+    const main = document.createElement('div');
+    main.className = 'topic-main';
     const name = document.createElement('div');
     name.className = 'name';
     name.textContent = normalizeTopicTitle(t.title);
+    const sub = document.createElement('div');
+    sub.className = 'topic-sub';
+    const createdAt = Number.isFinite(t.createdAt) ? t.createdAt : Number(t.createdAt || 0);
+    const updatedAt = Number.isFinite(t.updatedAt) ? t.updatedAt : Number(t.updatedAt || 0);
+    const cText = createdAt > 0 ? ('创建：' + formatTime(createdAt)) : '';
+    const uText = updatedAt > 0 ? ('更新：' + formatTime(updatedAt)) : '';
+    sub.textContent = (cText && uText) ? (cText + ' · ' + uText) : (cText || uText || '');
     const actions = document.createElement('div');
     actions.className = 'topic-actions';
     const meta = document.createElement('div');
@@ -260,7 +272,9 @@ function renderTopics() {
     });
     actions.appendChild(meta);
     actions.appendChild(del);
-    item.appendChild(name);
+    main.appendChild(name);
+    if (sub.textContent) main.appendChild(sub);
+    item.appendChild(main);
     item.appendChild(actions);
     item.addEventListener('click', () => {
       if (state.abortController) return;

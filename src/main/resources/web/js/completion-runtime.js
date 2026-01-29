@@ -1020,8 +1020,9 @@ async function loadModels() {
   try {
     setStatus('加载模型…');
     els.refreshModels.disabled = true;
-    const data = await fetchJson('/api/models/list', { method: 'GET' });
+    const data = await fetchJson('/v1/models', { method: 'GET' });
     const models = Array.isArray(data?.data) ? data.data : [];
+    //const models = data.data;
     const current = els.modelSelect.value;
     els.modelSelect.innerHTML = '';
     if (models.length === 0) {
@@ -1359,8 +1360,18 @@ function applyCompletionData(s) {
       .map(t => ({
         id: String(t.id || topicId()),
         title: normalizeTopicTitle(t.title),
-        createdAt: Number.isFinite(t.createdAt) ? t.createdAt : Number(t.createdAt || 0),
-        updatedAt: Number.isFinite(t.updatedAt) ? t.updatedAt : Number(t.updatedAt || 0)
+        createdAt: (() => {
+          const c = Number.isFinite(t.createdAt) ? t.createdAt : Number(t.createdAt || 0);
+          const u = Number.isFinite(t.updatedAt) ? t.updatedAt : Number(t.updatedAt || 0);
+          const base = c > 0 ? c : (u > 0 ? u : Date.now());
+          return base;
+        })(),
+        updatedAt: (() => {
+          const c = Number.isFinite(t.createdAt) ? t.createdAt : Number(t.createdAt || 0);
+          const u = Number.isFinite(t.updatedAt) ? t.updatedAt : Number(t.updatedAt || 0);
+          const base = u > 0 ? u : (c > 0 ? c : Date.now());
+          return base;
+        })()
       }));
     state.topicData = topicDataFromExt || {};
     const pick = (activeTopicIdFromExt && state.topics.some(t => String(t.id) === activeTopicIdFromExt))
