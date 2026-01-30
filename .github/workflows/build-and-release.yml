@@ -108,7 +108,7 @@ jobs:
           #!/bin/bash
           cd "$(dirname "$0")"
           chmod +x ./jre/bin/java
-          ./jre/bin/java -Xms64m -Xmx64m -classpath "./classes:./lib/*" org.mark.llamacpp.server.LlamaServer "$@"
+          ./jre/bin/java -Xms128m -Xmx128m -classpath "./classes:./lib/*" org.mark.llamacpp.server.LlamaServer "$@"
           EOF
           chmod +x build/run.sh
 
@@ -117,7 +117,7 @@ jobs:
           cat > build/run.bat << 'EOF'
           @echo off
           cd /d "%~dp0"
-          start "" jre\bin\javaw.exe -Xms64m -Xmx64m -classpath "./classes;./lib/*" org.mark.llamacpp.server.LlamaServer %*
+          start "" jre\bin\javaw.exe -Xms128m -Xmx128m -classpath "./classes;./lib/*" org.mark.llamacpp.server.LlamaServer %*
 
           EOF
 

@@ -119,7 +119,7 @@ set "RUN_BAT=%BUILD_DIR%\run.bat"
 > "%RUN_BAT%" echo @echo off
 >>"%RUN_BAT%" echo setlocal EnableExtensions
 >>"%RUN_BAT%" echo cd /d "%%~dp0"
->>"%RUN_BAT%" echo start "" javaw.exe -Xms64m -Xmx64m -classpath "./classes;./lib/*" org.mark.llamacpp.server.LlamaServer %*
+>>"%RUN_BAT%" echo start "" javaw.exe -Xms128m -Xmx128m -classpath "./classes;./lib/*" org.mark.llamacpp.server.LlamaServer %*
 >>"%RUN_BAT%" echo endlocal
 
 :END
@@ -135,6 +135,10 @@ if "%EXITCODE%"=="0" (
   echo Exit code: %EXITCODE%
 )
 echo ============================================================
+:NO_PAUSE_CHECK
+if /I "%CI%"=="true" goto :NO_PAUSE
+if /I "%NO_PAUSE%"=="1" goto :NO_PAUSE
 echo Press any key to close this window...
 pause >nul
+:NO_PAUSE
 endlocal & exit /b %EXITCODE%

@@ -72,7 +72,7 @@ if [ $? -eq 0 ]; then
     RUN_SCRIPT="$PROJECT_ROOT/build/run.sh"
     cat > "$RUN_SCRIPT" << 'EOF'
     #!/bin/bash
-    java -Xms64m -Xmx64m -classpath "./classes:./lib/*" org.mark.llamacpp.server.LlamaServer
+    java -Xms128m -Xmx128m -classpath "./classes:./lib/*" org.mark.llamacpp.server.LlamaServer
 EOF
 
     chmod +x "$RUN_SCRIPT"
