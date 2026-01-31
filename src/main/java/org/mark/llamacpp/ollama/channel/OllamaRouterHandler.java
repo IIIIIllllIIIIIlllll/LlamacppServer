@@ -1,5 +1,6 @@
 package org.mark.llamacpp.ollama.channel;
 
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -14,6 +15,7 @@ import org.mark.llamacpp.server.tools.ParamTool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
@@ -86,6 +88,23 @@ public class OllamaRouterHandler extends SimpleChannelInboundHandler<FullHttpReq
 		// 傻逼浏览器不知道为什么一直在他妈的访问/.well-known/appspecific/com.chrome.devtools.json
 		if ("/.well-known/appspecific/com.chrome.devtools.json".equals(uri)) {
 			ctx.close();
+			return;
+		}
+		// 如果是首页
+		if(uri.startsWith("/")) {
+			String responseContent = "Ollama is running";
+			// 构建响应内容
+			byte[] contentBytes = responseContent.getBytes(StandardCharsets.UTF_8);
+			FullHttpResponse response = new DefaultFullHttpResponse(
+		            HttpVersion.HTTP_1_1, 
+		            HttpResponseStatus.OK,
+		            Unpooled.copiedBuffer(contentBytes)
+		        );
+			// 设置响应头
+			response.headers().set(HttpHeaderNames.CONTENT_TYPE, "text/plain; charset=utf-8");
+	        response.headers().set(HttpHeaderNames.CONTENT_LENGTH, contentBytes.length);
+	        // 发送响应
+	        ctx.writeAndFlush(response);
 			return;
 		}
 		//
