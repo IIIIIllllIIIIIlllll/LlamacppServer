@@ -12,7 +12,7 @@
 |------|----------|------|
 | 兼容 Ollama | `/api/tags`<br>`/api/show`<br>`/api/chat`<br>`/api/embed`<br>`/api/ps` | 支持 Ollama 兼容接口，可用于模型查看、聊天、嵌入向量等操作 |
 | 不兼容 Ollama | `/api/copy`<br>`/api/delete`<br>`/api/pull`<br>`/api/push`<br>`/api/generate` | 不支持 Ollama 的相关操作，如模型复制、删除、拉取、推送和生成 |
-| 兼容 lmStudio | `/api/v0/models`<br>`/api/v0/chat/completions`<br>`/api/v0/completions`<br>`/api/v0/embeddings` | 支持 lmStudio 的模型查询、对话、嵌入和生成功能 |
+| 兼容 LM Studio | `/api/v0/models`<br>`/api/v0/chat/completions`<br>`/api/v0/completions`<br>`/api/v0/embeddings` | 支持 lmStudio 的模型查询、对话、嵌入和生成功能 |
 
 
 
@@ -21,13 +21,14 @@
 ### 📦 模型管理
 
 - **模型扫描与管理**：自动扫描指定目录下的所有 GGUF 格式模型，支持多个模型根目录
-- **模型加载与停止**：一键加载或停止模型，支持异步加载和状态监控
 - **模型收藏与别名**：为常用模型设置收藏标记和自定义别名，方便快速识别
-- **模型详情查看**：查看模型的详细信息，包括元数据、运行指标（metrics）和属性（props）
+- **模型详情查看**：查看模型的详细信息，包括元数据、运行指标（metrics）、属性（props）和聊天模板（可编辑模板）
 - **分卷模型支持**：自动识别和处理分卷模型文件（如 `*-00001-of-*.gguf`）
 - **多模态模型支持**：支持带视觉组件的模型（mmproj 文件）
 
-![屏幕截图_26-1-2026_16367_10 8 0 10](https://github.com/user-attachments/assets/66d62ff2-7136-4164-823f-3b52f2dea327)
+<img width="2880" height="1800" alt="14f92988319d6ed4d4280bc41f350803" src="https://github.com/user-attachments/assets/b5dacf12-c0ca-4200-992a-b4f2b8eab727" />
+<img width="2880" height="1800" alt="e7db8db4c33a1f27f312b83a1c0d2d62" src="https://github.com/user-attachments/assets/957128a5-79eb-4e78-8bc3-329d415ce329" />
+<img width="2880" height="1800" alt="60bab939c769d2ac0988c7fbb4773d38" src="https://github.com/user-attachments/assets/49443d49-3fdb-488e-9192-ee0f7a4a5f31" />
 
 
 
@@ -37,7 +38,7 @@
 - **并发下载**：最多支持 4 个任务同时下载，其余任务进入等待队列
 - **进度监控**：通过 WebSocket 实时推送下载进度
 - **任务管理**：支持任务的暂停、恢复、删除和状态持久化
-- 
+- **已知缺陷**：下载过程中，程序如果因意外停止，会导致下载进度丢失，如需重启程序请手动暂停下载任务
 ![屏幕截图_18-1-2026_173859_192 168 5 12](https://github.com/user-attachments/assets/06d3688d-9e33-443a-8993-7ef539b7f8fb)
 ![屏幕截图_18-1-2026_17395_192 168 5 12](https://github.com/user-attachments/assets/d8efe2a3-6439-4a11-9252-5ade3a48387b)
 
@@ -45,21 +46,23 @@
 
 - **模型列表**：直观展示所有模型，支持搜索、排序（按名称、大小、参数量）
 - **加载配置**：配置模型启动参数，包括上下文大小、批处理、温度、Top-P、Top-K 等
-- **对话界面**：内置聊天界面，可直接与加载的模型进行对话
+- **对话界面**：内置聊天界面，可直接与加载的模型进行对话，用于快捷测试和验证
 - **下载管理**：管理下载任务，查看进度和状态
 - **控制台日志**：实时查看系统日志，支持自动刷新
-- **系统设置**：配置模型目录和 llama.cpp 可执行文件路径
+- **系统设置**：配置模型目录和 llama.cpp 可执行文件路径，设置Ollama和LM Studio兼容API，配置MCP服务，进行并发测试
+<img width="2880" height="1800" alt="87c9dc5e8213035e79c859f2fabfed08" src="https://github.com/user-attachments/assets/f887c78b-79d9-428c-abe9-5d053ba77a54" />
+<img width="2880" height="1800" alt="3b60ca902a477b258c2b32450f4ce219" src="https://github.com/user-attachments/assets/5249ef7e-122f-4774-9146-1476f5b282c9" />
+<img width="2880" height="1800" alt="bd3f923f8c557fc93f8013930be3ed71" src="https://github.com/user-attachments/assets/8de9f79c-4e38-478a-9fbd-9cd32aebb8bb" />
+<img width="2880" height="1800" alt="452ea5375b3034405af95654512b98db" src="https://github.com/user-attachments/assets/cf0884fc-1456-42ac-aedf-56e2d1701542" />
 
-![屏幕截图_26-1-2026_16342_127 0 0 1](https://github.com/user-attachments/assets/47af570e-8623-4f53-a1d6-c7f2cec072fb)
-![屏幕截图_26-1-2026_163419_127 0 0 1](https://github.com/user-attachments/assets/1c33e4bc-84db-45e6-ac89-133bd83bc6b9)
-
-![屏幕截图_18-1-2026_173926_192 168 5 12](https://github.com/user-attachments/assets/25cfffe2-7637-4f51-8a50-26c90bf250ae)
 
 
 ### 🔌 API 兼容性
 
 - **OpenAI API**：兼容 OpenAI API 格式（默认端口 8080），可直接接入现有应用
-- **Anthropic API**：兼容 Anthropic API 格式（端口 8070），理论可用，但是程序写死无法配置密钥
+- **Anthropic API**：兼容 Anthropic API 格式（端口 8070）
+- **Ollama API**： 兼容Ollama部分API，可以用于那些只支持Ollama的应用
+- **LM Studio**：兼容LM Studio的/api/v0/** API，目前实际意义不明
 
 ### ⚡ 性能测试
 
@@ -68,19 +71,13 @@
 - **结果对比**：保存和对比多次测试结果，分析性能差异
 - **测试结果管理**：查看、追加、删除测试结果文件
 
-![屏幕截图_18-1-2026_174319_192 168 5 12](https://github.com/user-attachments/assets/732b85ac-b980-458d-bc4f-20a2094f10c0)
-
-
-
+<img width="2880" height="1800" alt="259ac4d62ad19ebacd299395acccb488" src="https://github.com/user-attachments/assets/499d9d9b-d73e-4d06-b43c-92f2dc320036" />
 
 ### 📊 系统监控
 
 - **实时状态**：通过 WebSocket 实时推送模型加载/停止事件
 - **日志广播**：控制台日志实时广播到 Web 界面
-- **进程管理**：监控模型进程的运行状态和端口分配
-
-![屏幕截图_18-1-2026_174355_192 168 5 12](https://github.com/user-attachments/assets/c7091caa-78ef-47aa-862d-2d396ed80385)
-![屏幕截图_18-1-2026_174425_192 168 5 12](https://github.com/user-attachments/assets/0ce94222-6d1f-4912-b811-f3fe13d6c792)
+<img width="2880" height="1800" alt="8a9a6ebc449d15f9daef74aa5d47ab93" src="https://github.com/user-attachments/assets/2e8984c7-f90c-4cdf-a2a0-0407b3b1013d" />
 
 
 ### ⚙️ 配置管理
@@ -100,10 +97,6 @@
 ### 🔧 其它功能
 
 - **显存估算**：根据上下文大小、批处理等参数估算所需的显存占用（对于视觉模型不准确）
-- **KV 缓存管理**：可使用llama.cpp的KV保存本地功能
-- **Embedding 模式**：支持将模型用于文本嵌入
-- **Reranking 模式**：支持将模型用于重排序任务
-
 ---
 
 ## 使用说明
@@ -133,7 +126,6 @@ javac-linux.sh
 
 - 主界面：`http://localhost:8080`
 - 对话界面：`http://localhost:8080/chat/completion.html`
-- 下载管理：`http://localhost:8080/download.html`
 
 ### 配置模型目录和 llama.cpp 路径
 
@@ -156,16 +148,6 @@ javac-linux.sh
 - **OpenAI API**：`http://localhost:8080/v1/chat/completions`
 - **Anthropic API**：`http://localhost:8070/v1/messages`
 - **Completion API**：`http://localhost:8080/completion`
-
----
-
-## 技术特点
-
-- 基于 Netty 构建 Web 服务器
-- WebSocket 实现实时通信
-- 支持 GGUF 模型元数据读取
-- 进程管理和端口自动分配
-- 完整的配置持久化机制
 
 ---
 
