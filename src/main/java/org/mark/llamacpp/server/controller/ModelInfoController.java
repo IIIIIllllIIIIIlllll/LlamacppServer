@@ -563,9 +563,15 @@ public class ModelInfoController implements BaseController {
 					}
 				}
 			}
-			boolean isLoaded = manager.getLoadedProcesses().containsKey(modelId);
+			// 检查模型是否真的已加载（进程必须存在且正在运行）
+			boolean isLoaded = false;
+			LlamaCppProcess loadedProcess = manager.getLoadedProcesses().get(modelId);
+			if (loadedProcess != null && loadedProcess.isRunning()) {
+				isLoaded = true;
+			}
+
 			String startCmd = isLoaded ? manager.getModelStartCmd(modelId) : null;
-			Integer port = manager.getModelPort(modelId);
+			Integer port = isLoaded ? manager.getModelPort(modelId) : null;
 			Map<String, Object> modelMap = new HashMap<>();
 			String alias = model.getAlias();
 			modelMap.put("name", alias != null && !alias.isEmpty() ? alias : modelId);
