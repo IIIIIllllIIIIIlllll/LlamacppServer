@@ -1,6 +1,6 @@
 #!/bin/bash
 # 设置Java目录，适合多JDK环境的用户，但是默认不要设置，我们默认用户的系统中有JAVA_HOME
-JAVA_HOME=/opt/jdk-24.0.2/
+JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
 # 设置项目根目录（确保从项目根路径执行）
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC_DIR="$PROJECT_ROOT/src/main/java"
