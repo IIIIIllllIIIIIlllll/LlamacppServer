@@ -217,39 +217,48 @@ public class OpenAIService {
 
 			// 解析JSON请求体
 			JsonObject requestJson = JsonUtil.fromJson(content, JsonObject.class);
-			
+
 			// 获取模型名称
 			if (!requestJson.has("model")) {
 				this.sendOpenAIErrorResponseWithCleanup(ctx, 400, null, "Missing required parameter: model", "model");
 				return;
 			}
-			
+
 			String modelName = requestJson.get("model").getAsString();
-			
+
 			// 检查是否为流式请求
 			boolean isStream = false;
 			if (requestJson.has("stream")) {
 				isStream = requestJson.get("stream").getAsBoolean();
 			}
-			
+
 			// 获取LlamaServerManager实例
 			LlamaServerManager manager = LlamaServerManager.getInstance();
-			
+
 			// 检查模型是否已加载
-			if (!manager.getLoadedProcesses().containsKey(modelName)) {
-				this.sendOpenAIErrorResponseWithCleanup(ctx, 404, null, "Model not found: " + modelName, "model");
-				return;
+			String actualModelId = null;
+			if (manager.getLoadedProcesses().containsKey(modelName)) {
+				actualModelId = modelName;
+			} else {
+				// 模糊匹配：查找所有已加载模型的详细信息
+				logger.info("模型 {} 未在 loadedProcesses 中找到，尝试模糊匹配", modelName);
+				actualModelId = this.findModelIdByName(manager, modelName);
+				if (actualModelId == null) {
+					this.sendOpenAIErrorResponseWithCleanup(ctx, 404, null, "Model not found: " + modelName, "model");
+					return;
+				}
+				logger.info("模糊匹配成功: {} -> {}", modelName, actualModelId);
 			}
 
 			String body = content;
 			// 获取模型端口
-			Integer modelPort = manager.getModelPort(modelName);
+			Integer modelPort = manager.getModelPort(actualModelId);
 			if (modelPort == null) {
-				this.sendOpenAIErrorResponseWithCleanup(ctx, 500, null, "Model port not found: " + modelName, null);
+				this.sendOpenAIErrorResponseWithCleanup(ctx, 500, null, "Model port not found: " + actualModelId, null);
 				return;
 			}
 			// 转发请求到对应的llama.cpp进程
-			this.forwardRequestToLlamaCpp(ctx, request, modelName, modelPort, "/v1/chat/completions", isStream, body);
+			this.forwardRequestToLlamaCpp(ctx, request, actualModelId, modelPort, "/v1/chat/completions", isStream, body);
 		} catch (Exception e) {
 			logger.info("处理OpenAI聊天补全请求时发生错误", e);
 			this.sendOpenAIErrorResponseWithCleanup(ctx, 500, null, e.getMessage(), null);
@@ -775,7 +784,7 @@ public class OpenAIService {
 	
 	/**
 	 * 	当连接断开时调用，用于清理{@link #channelConnectionMap}
-	 * 
+	 *
 	 * @param ctx
 	 * @throws Exception
 	 */
@@ -790,6 +799,74 @@ public class OpenAIService {
 					e.printStackTrace();
 				}
 			}
+		}
+	}
+
+	/**
+	 * 	通过模型名称查找实际的 modelId
+	 * 	支持模糊匹配：当用户传入的 model 是完整文件名时，查找对应的 modelId
+	 *
+	 * @param manager LlamaServerManager 实例
+	 * @param modelName 用户请求中的模型名称
+	 * @return 实际的 modelId，如果未找到返回 null
+	 */
+	private String findModelIdByName(LlamaServerManager manager, String modelName) {
+		try {
+			// 遍历所有已加载的模型
+			for (String modelId : manager.getLoadedProcesses().keySet()) {
+				// 尝试获取模型信息
+				JsonObject info = manager.getLoadedModelInfo(modelId);
+				if (info == null) {
+					try {
+						info = manager.handleModelInfo(modelId);
+					} catch (Exception ignore) {
+						continue;
+					}
+				}
+				if (info == null || !info.has("items")) {
+					continue;
+				}
+
+				// 检查 items 数组
+				JsonArray items = info.getAsJsonArray("items");
+				if (items == null) {
+					continue;
+				}
+
+				// 遍历 items 查找匹配
+				for (JsonElement itemEl : items) {
+					if (itemEl == null || !itemEl.isJsonObject()) {
+						continue;
+					}
+					JsonObject item = itemEl.getAsJsonObject();
+
+					// 检查 model 字段
+					if (item.has("model") && item.get("model").isJsonObject()) {
+						JsonObject m = item.getAsJsonObject("model");
+						String modelField = JsonUtil.getJsonString(m, "model");
+						String nameField = JsonUtil.getJsonString(m, "name");
+
+						// 精确匹配
+						if (modelName.equals(modelField) || modelName.equals(nameField)) {
+							return modelId;
+						}
+					}
+
+					// 检查 data 字段
+					if (item.has("data") && item.get("data").isJsonObject()) {
+						JsonObject d = item.getAsJsonObject("data");
+						String idField = JsonUtil.getJsonString(d, "id");
+
+						if (modelName.equals(idField)) {
+							return modelId;
+						}
+					}
+				}
+			}
+			return null;
+		} catch (Exception e) {
+			logger.info("模糊匹配模型时发生错误", e);
+			return null;
 		}
 	}
 }
