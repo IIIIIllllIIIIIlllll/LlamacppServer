@@ -160,7 +160,6 @@ public class OllamaShowService {
 			if(process != null) {
 				// 修改上下文长度，以实际设定为准
 				String key = family + ".context_length";
-				System.err.println(key);
 				m.put(key, process.getCtxSize());
 			}
 			modelInfo.putAll(m);
