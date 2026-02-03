@@ -172,11 +172,13 @@ function renderBenchmarkFieldFromParam(param, opts) {
     const desc = p.description != null ? String(p.description) : '';
     const fullName = p.fullName != null ? String(p.fullName) : '';
     const abbr = p.abbreviation != null ? String(p.abbreviation) : '';
+    const displayName = (typeof t === 'function') ? t(name, abbr || fullName) : name;
+    const description = (typeof t === 'function') ? t(desc, '') : desc;
     const dataFullNameAttr = fullName ? ` data-benchmark-fullname="${escapeAttrCompat(fullName)}"` : '';
     const labelSuffix = (abbr || fullName) ? ` (${escapeHtmlCompat(abbr || fullName)})` : '';
-    const labelHtml = desc
-        ? `<label class="form-label" for="${escapeAttrCompat(id)}">${escapeHtmlCompat(name)}${labelSuffix} <i class="fas fa-question-circle" style="color: #DCDCDC; cursor: help; margin-left: 4px;" title="${escapeAttrCompat(desc)}"></i></label>`
-        : `<label class="form-label" for="${escapeAttrCompat(id)}">${escapeHtmlCompat(name)}${labelSuffix}</label>`;
+    const labelHtml = description
+        ? `<label class="form-label" for="${escapeAttrCompat(id)}">${escapeHtmlCompat(displayName)}${labelSuffix} <i class="fas fa-question-circle" style="color: #DCDCDC; cursor: help; margin-left: 4px;" title="${escapeAttrCompat(description)}"></i></label>`
+        : `<label class="form-label" for="${escapeAttrCompat(id)}">${escapeHtmlCompat(displayName)}${labelSuffix}</label>`;
 
     const groupStyle = opts && opts.groupStyle ? ` style="${opts.groupStyle}"` : '';
     let html = `<div class="form-group"${groupStyle}>${labelHtml}`;

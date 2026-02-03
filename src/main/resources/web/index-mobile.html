@@ -757,6 +757,7 @@
     <div id="dynamicModalRoot"></div>
     <div class="toast-container" id="toastContainer"></div>
 
+    <script src="js/i18n.js"></script>
     <script src="js/websocket.js"></script>
     <script src="js/model-detail.js"></script>
     <script src="js/model-list.js"></script>
@@ -772,10 +773,18 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            loadModels();
-            initWebSocket();
-            initModelSearch();
-            loadParamConfig();
+            let didInit = false;
+            function initOnce() {
+                if (didInit) return;
+                didInit = true;
+                window.removeEventListener('i18n:ready', initOnce);
+                loadModels();
+                initWebSocket();
+                initModelSearch();
+                loadParamConfig();
+            }
+            window.addEventListener('i18n:ready', initOnce);
+            if (window.I18N) initOnce();
         });
 
         let paramConfig = [];
@@ -791,7 +800,7 @@
                         const container = document.getElementById('dynamicParamsContainer');
                         if (container) {
                             container.innerHTML =
-                                '<div class="empty-state"><div class="empty-state-icon"><i class="fas fa-exclamation-triangle"></i></div><div class="empty-state-title">加载失败</div><div class="empty-state-text">无法加载参数配置</div></div>';
+                                `<div class="empty-state"><div class="empty-state-icon"><i class="fas fa-exclamation-triangle"></i></div><div class="empty-state-title">${t('common.load_failed', '加载失败')}</div><div class="empty-state-text">${t('page.params.unable_load', '无法加载参数配置')}</div></div>`;
                         }
                     }
                 })
@@ -799,7 +808,7 @@
                     const container = document.getElementById('dynamicParamsContainer');
                     if (container) {
                         container.innerHTML =
-                            '<div class="empty-state"><div class="empty-state-icon"><i class="fas fa-exclamation-triangle"></i></div><div class="empty-state-title">网络错误</div><div class="empty-state-text">无法连接到服务器</div></div>';
+                            `<div class="empty-state"><div class="empty-state-icon"><i class="fas fa-exclamation-triangle"></i></div><div class="empty-state-title">${t('common.network_error', '网络错误')}</div><div class="empty-state-text">${t('common.unable_connect_server', '无法连接到服务器')}</div></div>`;
                     }
                 });
         }
@@ -817,9 +826,9 @@
                 html += '</div>';
             }
             html += '<div class="form-group" style="margin-top: 1rem;">';
-            html += '<label class="form-label" for="extraParams">额外参数</label>';
-            html += '<textarea class="form-control" id="extraParams" name="extraParams" rows="2" placeholder="例如: --grp-attn-n 8 --grp-attn-w 512"></textarea>';
-            html += '<small class="form-text">输入额外的命令行参数，用空格分隔</small>';
+            html += `<label class="form-label" for="extraParams">${t('page.params.extra_params', '额外参数')}</label>`;
+            html += `<textarea class="form-control" id="extraParams" name="extraParams" rows="2" placeholder="${t('page.params.extra_params_placeholder', '例如: --grp-attn-n 8 --grp-attn-w 512')}"></textarea>`;
+            html += `<small class="form-text">${t('page.params.extra_params_desc', '输入额外的命令行参数，用空格分隔')}</small>`;
             html += '</div>';
             container.innerHTML = html;
         }
@@ -837,8 +846,9 @@
                 fieldName = 'unnamed_' + (base || 'param') + (sortRaw ? '_' + sortRaw : '');
             }
             const fieldId = 'param_' + fieldName;
-            const displayName = param.name;
-            const description = param.description || '';
+            // 也改为国际化的格式
+            const displayName = t(param.name, param.fullName);
+            const description = t(param.description, '');
             const defaultValue = param.defaultValue || '';
             const type = param.type || 'STRING';
             const values = param.values || [];

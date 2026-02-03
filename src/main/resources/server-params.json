@@ -1,20 +1,20 @@
 [
   {
-    "name": "上下文窗口大小",
+    "name": "param.server.ctx_size.name",
     "fullName": "--ctx-size",
     "abbreviation": "-c",
     "type": "INTEGER",
     "defaultValue": "8192",
-    "description": "设置模型可用的上下文窗口大小（单位：token）。上下文窗口需要同时容纳提示词（prompt）和后续生成的 token；值越大，长对话/长文档能力越强，但 KV 缓存占用的内存/显存也会随之增长，预填充（prefill）和解码（decode）的计算量也可能上升。设置为 0 表示从模型文件的元数据读取默认上下文大小。",
+    "description": "param.server.ctx_size.desc",
     "sort": 0
   },
   {
-    "name": "Flash Attention 加速",
+    "name": "param.server.flash_attn.name",
     "fullName": "--flash-attn",
     "abbreviation": "-fa",
     "type": "STRING",
     "defaultValue": "on",
-    "description": "控制是否启用 Flash Attention（注意力计算融合优化）：on=强制开启，off=强制关闭，auto=自动检测后端能力并选择。开启通常会降低注意力计算的显存带宽开销、提升吞吐（尤其是长上下文/大 batch 预填充时），并可能减少显存占用；但在部分硬件/驱动/后端组合下可能出现性能回退或不稳定。遇到速度异常、显存峰值过高、或需要做性能对比测试时，可切到 off 进行验证；不确定时建议使用 auto。",
+    "description": "param.server.flash_attn.desc",
     "values": [
       "on",
       "off",
@@ -23,156 +23,156 @@
     "sort": 1
   },
   {
-    "name": "禁用内存映射加载",
+    "name": "param.server.no_mmap.name",
     "fullName": "--no-mmap",
     "abbreviation": "--no-mmap",
     "type": "LOGIC",
     "defaultValue": "1",
-    "description": "启用后不使用内存映射（mmap）方式加载模型文件，而是将权重数据以常规方式读入内存。mmap 通常能减少启动时的拷贝并让操作系统按需分页加载，启动更快且对内存更友好；禁用 mmap 在某些文件系统/网络盘/权限限制/容器环境下可避免映射失败、SIGBUS、或异常卡顿，但往往会增加一次性内存占用并延长加载时间。建议在“加载慢、加载失败或运行不稳定”时切换该选项做对比测试，选择更稳定/更快的组合。",
+    "description": "param.server.no_mmap.desc",
     "sort": 2
   },
   {
-    "name": "锁定模型到物理内存",
+    "name": "param.server.mlock.name",
     "fullName": "--mlock",
     "abbreviation": "",
     "type": "LOGIC",
     "defaultValue": "0",
-    "description": "将模型权重锁定在物理内存（RAM）中，尽量避免被操作系统换出到交换分区或被压缩，从而降低“推理过程中偶发变慢”的风险，提升延迟稳定性。该选项会显著增加对可用内存的硬性占用，且在部分系统上需要更高权限/配额，设置后若内存不足可能导致启动失败或触发系统内存压力。",
+    "description": "param.server.mlock.desc",
     "sort": 3
   },
   {
-    "name": "嵌入向量模式",
+    "name": "param.server.embedding.name",
     "fullName": "--embedding",
     "abbreviation": "--embeddings",
     "type": "LOGIC",
     "defaultValue": "0",
-    "description": "启用嵌入（Embeddings）能力，用于把输入文本编码为向量表示，便于语义检索、聚类、相似度匹配与 RAG。该模式通常用于专门的嵌入模型或支持嵌入输出的模型；与文本生成相比，它关注向量输出而非续写文本，吞吐/内存占用特征也会不同。仅在你需要提供 embeddings 接口或向量输出时开启。",
+    "description": "param.server.embedding.desc",
     "sort": 4
   },
   {
-    "name": "重排序模式",
+    "name": "param.server.rerank.name",
     "fullName": "--rerank",
     "abbreviation": "--reranking",
     "type": "LOGIC",
     "defaultValue": "0",
-    "description": "启用重排序（Rerank）能力，用于对“查询 + 候选文档/段落”的相关性进行打分并按分数排序，常用于检索后再排序（RAG rerank）以提高答案引用质量。该模式通常适配专门的重排序模型（多为交叉编码器风格），与常规生成模型的推理路径不同；开启后通常会增加一次打分计算开销，但能显著提升召回结果的精排质量。仅在需要 rerank 接口/功能时启用。",
+    "description": "param.server.rerank.desc",
     "sort": 5
   },
   {
-    "name": "温度（随机性）",
+    "name": "param.server.temp.name",
     "fullName": "--temp",
     "abbreviation": "--temp",
     "type": "FLOAT",
     "defaultValue": "0.7",
-    "description": "控制采样随机性的温度参数。温度越低，输出越确定、更贴近高概率 token（更保守、重复更少但可能更“死板”）；温度越高，分布越平坦，生成更发散、更有创意但也更容易跑题或出现不可靠内容。常见范围约 0.1–1.2；设置为 0 时通常接近贪心/确定性选择（具体行为依实现而定）。",
+    "description": "param.server.temp.desc",
     "sort": 6
   },
   {
-    "name": "Top-P（核采样）",
+    "name": "param.server.top_p.name",
     "fullName": "--top-p",
     "abbreviation": "--top-p",
     "type": "FLOAT",
     "defaultValue": "0.95",
-    "description": "核采样（Top-P / Nucleus Sampling）：每一步只在“按概率从高到低累加，直到累计概率达到 P”的最小 token 集合中进行采样。P 越小，候选集合越窄、输出越稳；P 越大，候选更丰富、表达更灵活。设置为 1.0 表示不做 Top-P 截断（等价于禁用）。",
+    "description": "param.server.top_p.desc",
     "sort": 7
   },
   {
-    "name": "Top-K（截断采样）",
+    "name": "param.server.top_k.name",
     "fullName": "--top-k",
     "abbreviation": "--top-k",
     "type": "INTEGER",
     "defaultValue": "40",
-    "description": "截断采样（Top-K）：每一步只从概率最高的 K 个 token 中进行采样。K 越小越保守，K 越大越发散；K 过小可能导致措辞单一，过大则可能增加离题风险。设置为 0 表示禁用 Top-K 截断。",
+    "description": "param.server.top_k.desc",
     "sort": 8
   },
   {
-    "name": "Min-P（最小概率阈值）",
+    "name": "param.server.min_p.name",
     "fullName": "--min-p",
     "abbreviation": "--min-p",
     "type": "FLOAT",
     "defaultValue": "0.05",
-    "description": "最小概率阈值（Min-P）：仅保留概率不低于“当前最可能 token 概率 × P”的 token 作为候选，用于过滤尾部极低概率 token，从而减少怪词/乱码/极端跳跃。P 越大过滤越强、输出越稳，但也更容易变得保守。设置为 0.0 表示禁用。",
+    "description": "param.server.min_p.desc",
     "sort": 9
   },
   {
-    "name": "存在惩罚（Presence Penalty）",
+    "name": "param.server.presence_penalty.name",
     "fullName": "--presence-penalty",
     "abbreviation": "--presence-penalty",
     "type": "FLOAT",
     "defaultValue": "0.0",
-    "description": "存在惩罚：只要某个 token 在当前上下文中出现过，就对其施加惩罚，从而鼓励模型引入新词/新信息，减少“反复提到同一词”的情况。值越大，越倾向于避免重复与话题循环，但过高可能导致用词跳跃或偏离主题。设置为 0.0 表示禁用。",
+    "description": "param.server.presence_penalty.desc",
     "sort": 10
   },
   {
-    "name": "重复惩罚（Repeat Penalty）",
+    "name": "param.server.repeat_penalty.name",
     "fullName": "--repeat-penalty",
     "abbreviation": "--repeat-penalty",
     "type": "FLOAT",
     "defaultValue": "1.0",
-    "description": "重复惩罚系数：对近期已经出现/生成过的 token 降低其再次被采样的概率，用于抑制“复读机”现象。1.0 表示不惩罚；大于 1.0 会逐步增强抑制效果，通常 1.05–1.2 之间较常见。设置过高可能导致语句不通顺或强行换词。",
+    "description": "param.server.repeat_penalty.desc",
     "sort": 11
   },
   {
-    "name": "频率惩罚（Frequency Penalty）",
+    "name": "param.server.frequency_penalty.name",
     "fullName": "--frequency-penalty",
     "abbreviation": "--frequency-penalty",
     "type": "FLOAT",
     "defaultValue": "0.0",
-    "description": "频率惩罚：根据 token 在当前上下文中的出现次数施加惩罚，出现越频繁惩罚越强，从而抑制高频重复与模板化表达。与“存在惩罚”不同，它会随出现次数累积增强；值越大抑制越明显，但过高可能破坏用词连贯性。设置为 0.0 表示禁用。",
+    "description": "param.server.frequency_penalty.desc",
     "sort": 12
   },
   {
-    "name": "批大小（Batch Size）",
+    "name": "param.server.batch_size.name",
     "fullName": "--batch-size",
     "abbreviation": "-b",
     "type": "INTEGER",
     "defaultValue": "2048",
-    "description": "逻辑批大小：主要影响提示词预填充（prefill）阶段一次能并行处理的 token 数量。适当增大通常能提升吞吐、加速长 prompt 的处理，但会提高瞬时显存/内存占用，并可能在部分后端触发 OOM 或性能回退。该值偏向“理论/逻辑上限”，实际执行还会受到微批大小、后端实现与可用显存的限制。",
+    "description": "param.server.batch_size.desc",
     "sort": 13
   },
   {
-    "name": "微批大小（uBatch Size）",
+    "name": "param.server.ubatch_size.name",
     "fullName": "--ubatch-size",
     "abbreviation": "-ub",
     "type": "INTEGER",
     "defaultValue": "512",
-    "description": "物理微批大小：用于把大的逻辑 batch 拆分为多个更小的 micro-batch 逐次执行，以在吞吐与显存峰值之间做权衡。增大可减少拆分次数、提升预填充速度，但会抬高显存峰值；减小则更省显存、更稳，但可能降低吞吐。通常在显存紧张或并发较高时，通过调小该值来避免 OOM。",
+    "description": "param.server.ubatch_size.desc",
     "sort": 14
   },
   {
-    "name": "并行槽位数（并发）",
+    "name": "param.server.parallel.name",
     "fullName": "--parallel",
     "abbreviation": "-np",
     "type": "INTEGER",
     "defaultValue": "4",
-    "description": "服务器可同时处理的并行槽位（slot）数量，本质上决定并发会话数上限。值越大，并发能力越强，但每个 slot 都会占用一定 KV 缓存与运行时资源，导致内存/显存占用上升，并可能降低单请求吞吐或增加整体延迟。设置为 -1 表示自动决定（通常会结合上下文大小与可用资源）。对于上下文较短、模型较小、且需要高并发的场景可适当调高；长上下文或显存紧张时建议保守设置。",
+    "description": "param.server.parallel.desc",
     "sort": 15
   },
   {
-    "name": "KV 缓存内存上限",
+    "name": "param.server.cache_ram.name",
     "fullName": "--cache-ram",
     "abbreviation": "-cram",
     "type": "INTEGER",
     "defaultValue": "8192",
-    "description": "限制 KV 缓存可占用的最大内存/显存预算（单位：MiB）。KV 缓存用于保存注意力所需的 K/V 状态，是长上下文与多并发的主要内存消耗来源；上限越大，越能支撑更长上下文或更多并发槽位，但占用也越高。设置为 -1 表示不设上限；设置为 0 表示禁用 KV 缓存（通常会导致无法正常自回归生成或性能极差，仅用于特殊测试）。",
+    "description": "param.server.cache_ram.desc",
     "sort": 16
   },
   {
-    "name": "统一 KV 缓冲区（共享）",
+    "name": "param.server.kv_unified.name",
     "fullName": "--kv-unified",
     "abbreviation": "-kvu",
     "type": "LOGIC",
     "defaultValue": "0",
-    "description": "让多个序列/会话共享统一的 KV 缓冲区管理方式，用于在多并发场景下更高效地复用与分配 KV 内存，通常有助于降低碎片与峰值占用，并改善并发下的稳定性。开启后在极端情况下可能影响某些工作负载的吞吐或带来不同的内存布局表现。若 slot（parallel）为自动模式，通常会默认启用以获得更稳的资源管理。",
+    "description": "param.server.kv_unified.desc",
     "sort": 17
   },
   {
-    "name": "KV 缓存类型（K）",
+    "name": "param.server.cache_type_k.name",
     "fullName": "--cache-type-k",
     "abbreviation": "-ctk",
     "type": "STRING",
     "defaultValue": "f16",
-    "description": "设置 KV 缓存中 K 向量的数据类型（精度/量化方式）。更高精度（如 f32）占用更大、通常更稳；更低精度或量化（如 q8/q5/q4/iq4）可显著节省显存并可能提升带宽受限场景的速度，但在部分模型/场景下可能带来轻微质量变化或数值稳定性差异，且不同后端对某些类型的支持程度不同。可选：f32, f16, bf16, q8_0, q4_0, q4_1, iq4_nl, q5_0, q5_1。",
+    "description": "param.server.cache_type_k.desc",
     "values": [
       "f32",
       "f16",
@@ -187,12 +187,12 @@
     "sort": 18
   },
   {
-    "name": "KV 缓存类型（V）",
+    "name": "param.server.cache_type_v.name",
     "fullName": "--cache-type-v",
     "abbreviation": "-ctv",
     "type": "STRING",
     "defaultValue": "f16",
-    "description": "设置 KV 缓存中 V 向量的数据类型（精度/量化方式）。该选项与 K 类型类似，主要影响 KV 缓存的显存占用与带宽开销：更低精度/量化可减少内存占用、提高可承载的上下文长度或并发数，但也可能带来轻微质量差异或在少数环境下不稳定。建议在显存紧张或需要更长上下文/更高并发时尝试更低精度，并对效果做对比验证。可选：f32, f16, bf16, q8_0, q4_0, q4_1, iq4_nl, q5_0, q5_1。",
+    "description": "param.server.cache_type_v.desc",
     "values": [
       "f32",
       "f16",
@@ -207,30 +207,30 @@
     "sort": 19
   },
   {
-    "name": "线程数",
+    "name": "param.server.threads.name",
     "fullName": "--threads",
     "abbreviation": "-t",
     "type": "INTEGER",
     "defaultValue": "-1",
-    "description": "推理过程中使用的 CPU 线程数（主要影响 CPU 计算与部分后端的调度）。线程数越高不一定越快：过高可能导致线程争用、缓存抖动或抢占系统资源，反而增加延迟。设置为 -1 表示自动检测（通常按物理核心数或系统推荐值选择）。在 CPU 推理或需要稳定延迟时，建议围绕物理核心数做小范围测试选出最优值。",
+    "description": "param.server.threads.desc",
     "sort": 20
   },
   {
-    "name": "随机种子",
+    "name": "param.server.seed.name",
     "fullName": "--seed",
     "abbreviation": "-s",
     "type": "INTEGER",
     "defaultValue": "-1",
-    "description": "随机数生成器种子，用于控制采样的可复现性：在相同模型、相同提示词与相同采样参数下，固定 seed 通常能得到一致或高度一致的输出，便于回归测试与问题复现。设置为 -1 表示每次启动/请求使用随机种子，从而获得更多样化结果。",
+    "description": "param.server.seed.desc",
     "sort": 21
   },
   {
-    "name": "DirectIO",
+    "name": "param.server.directio.name",
 	"fullName": "",
 	"abbreviation": "",
 	"type": "STRING",
 	"defaultValue": "default",
-	"description": "是否启用DirectIO，影响模型的加载速度。默认开启，llamacpp的这项功能可能会存在问题，如果出现加载问题请关闭。",
+	"description": "param.server.directio.desc",
 	"values": [
 		"default",
 	    "-ndio",
@@ -239,31 +239,31 @@
     "sort": 22
   },
   {
-	"name": "禁用Jinja",
+	"name": "param.server.no_jinja.name",
 	"fullName": "--no-jinja",
 	"abbreviation": "--no-jinja",
 	"type": "LOGIC",
 	"defaultValue": "0",
-	"description": "是否使用Jinja模板引擎进行聊天（默认启用jinja模板，所以该值为false）",
+	"description": "param.server.no_jinja.desc",
 	"sort": 23
   },
   {
-	"name": "内置聊天模板",
+	"name": "param.server.chat_template.name",
 	"fullName": "--chat-template",
 	"abbreviation": "--chat-template",
 	"type": "STRING",
 	"defaultValue": "",
-	"description": "一般情况下不要使用，除非你使用的GGUF模型没有内置的聊天模板。如果要使用，请将‘禁用Jinja’设置为1，否则目前的llamacpp，是不会让内置聊天模板生效的。默认为空值，即使用模型的内置聊天模板，如果模型的内置模板不准确，则再尝试修改模板。",
+	"description": "param.server.chat_template.desc",
 	"values": ["", "bailing", "bailing-think", "bailing2", "chatglm3", "chatglm4", "chatml", "command-r", "deepseek", "deepseek2", "deepseek3", "exaone3", "exaone4", "falcon3", "gemma", "gigachat", "glmedge", "gpt-oss", "granite", "grok-2", "hunyuan-dense", "hunyuan-moe", "kimi-k2", "llama2", "llama2-sys", "llama2-sys-bos", "llama2-sys-strip", "llama3", "llama4", "megrez", "minicpm", "mistral-v1", "mistral-v3", "mistral-v3-tekken", "mistral-v7", "mistral-v7-tekken", "monarch", "openchat", "orion", "pangu-embedded", "phi3", "phi4", "rwkv-world", "seed_oss", "smolvlm", "solar-open", "vicuna", "vicuna-orca", "yandex", "zephyr"],
 	"sort": 24
   },
   {
-    "name": "--context-shift", 
+    "name": "param.server.context_shift.name", 
     "fullName": "--context-shift",
     "abbreviation": "--context-shift", 
     "type": "LOGIC",
     "defaultValue": "0", 
-    "description":"该功能 默认禁用。启用 KV Cache 的滑动窗口机制（也叫“上下文移位”或“上下文压缩”）。当上下文超出 --ctx-size 时，系统会自动丢弃最旧的 tokens（从左侧），保留最近的 tokens，而不是直接报错。", 
+    "description":"param.server.context_shift.desc", 
     "sort": 25
   }
 ]

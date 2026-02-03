@@ -764,7 +764,15 @@
                 .then(data => {
                     if (data.success && data.params) {
                         paramConfig = data.params;
-                        renderDynamicParams();
+                        if (window.I18N) {
+                            renderDynamicParams();
+                        } else {
+                            const renderOnce = () => {
+                                window.removeEventListener('i18n:ready', renderOnce);
+                                renderDynamicParams();
+                            };
+                            window.addEventListener('i18n:ready', renderOnce);
+                        }
                     } else {
                         console.error(t('log.params.load_failed', '加载参数配置失败:'), data.error || t('common.unknown_error', '未知错误'));
                         document.getElementById('dynamicParamsContainer').innerHTML =
@@ -821,8 +829,9 @@
                 fieldName = 'unnamed_' + (base || 'param') + (sortRaw ? '_' + sortRaw : '');
             }
             const fieldId = 'param_' + fieldName;
-            const displayName = param.name;
-            const description = param.description || '';
+            // 也改为国际化的格式
+            const displayName = t(param.name, param.fullName);
+            const description = t(param.description, '');
             const defaultValue = param.defaultValue || '';
             const type = param.type || 'STRING';
             const values = param.values || [];

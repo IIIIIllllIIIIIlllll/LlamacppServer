@@ -663,7 +663,7 @@ function loadModel(modelId, modelName, mode = 'load') {
             });
         });
 }
-
+// 在这动态构建要提交的参数
 function buildLoadModelPayload(modal) {
     const modelId = getFieldString(modal, ['modelId']);
     const modelName = getFieldString(modal, ['modelName']);
