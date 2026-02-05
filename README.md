@@ -10,7 +10,8 @@
 ---
 > **提醒**：最新开源的Step-3.5-Flash，似乎无法通过Ollama兼容API调用，存在聊天模板的问题，待解决。
 ---
-
+> **提醒**：我在使用RTX 4080S + GTX 1080时发现，基于CUDA的llamacpp会非常非常卡顿（如--list-devices），似乎是异构的问题，换vulkan没有这个情况，因此多GPU的兄弟请注意，如果本软件卡顿（因为要调用llamacpp），可能是CUDA版llamacpp的问题。
+---
 
 ## API兼容情况（llamacpp自身支持OpenAI Compatible和Anthropic API）
 | 类型 | 接口路径 | 说明 |
