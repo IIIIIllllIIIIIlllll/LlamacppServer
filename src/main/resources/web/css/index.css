@@ -1035,3 +1035,179 @@
             padding: 0.45rem 0.7rem;
             font-size: 0.8125rem;
         }
+
+        .dir-browse-input-row {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        .dir-browse-input-row .form-control {
+            flex: 1;
+        }
+        .dir-browse-btn {
+            width: 40px;
+            height: 40px;
+            padding: 0;
+            border-radius: 0.5rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        #directoryBrowserModal .modal-content {
+            max-width: 980px;
+            height: 85vh;
+        }
+        #directoryBrowserModal .modal-body {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            min-height: 0;
+            overflow: hidden;
+            padding: 1.25rem 1.25rem;
+        }
+        #directoryBrowserModal .modal-footer {
+            background-color: #f8fafc;
+        }
+        
+        .dir-browser-toolbar {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .dir-browser-path {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            font-weight: 700;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex: 1;
+            min-width: 260px;
+            text-align: center;
+            line-height: 38px;
+            padding: 0 0.5rem;
+        }
+        .dir-browser-grid {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 0.75rem;
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
+        }
+        @media (max-width: 900px) {
+            .dir-browser-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .dir-browser-panel {
+            border: 1px solid var(--border-color);
+            border-radius: 0.75rem;
+            background: #ffffff;
+            min-height: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-shadow: var(--shadow-sm);
+        }
+        .dir-browser-panel-header {
+            padding: 0.75rem 0.875rem;
+            border-bottom: 1px solid var(--border-color);
+            font-weight: 700;
+            font-size: 0.875rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .dir-browser-panel-list {
+            padding: 0.625rem;
+            overflow: auto;
+            min-height: 0;
+        }
+        .dir-browser-panel-list .empty-state {
+            padding: 1.5rem 0.75rem;
+        }
+        .dir-browser-panel-hint {
+            padding: 0.625rem 0.875rem;
+            border-top: 1px solid var(--border-color);
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            display: none;
+        }
+        
+        .dir-browser-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 0.75rem;
+            margin-bottom: 0.5rem;
+            cursor: pointer;
+            background: #ffffff;
+            transition: border-color 0.15s, background-color 0.15s, transform 0.15s;
+        }
+        .dir-browser-item:last-child {
+            margin-bottom: 0;
+        }
+        .dir-browser-item:hover {
+            background-color: #f9fafb;
+            border-color: rgba(79, 70, 229, 0.35);
+            transform: translateY(-1px);
+        }
+        .dir-browser-item:focus-visible {
+            outline: none;
+            border-color: rgba(79, 70, 229, 0.55);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.18);
+        }
+        .dir-browser-item.file {
+            cursor: default;
+        }
+        .dir-browser-item.file:hover {
+            background: #ffffff;
+            border-color: var(--border-color);
+            transform: none;
+        }
+        .dir-browser-item-icon {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #eff6ff;
+            color: var(--primary-color);
+            flex-shrink: 0;
+        }
+        .dir-browser-item-icon.file {
+            background: #f3f4f6;
+            color: var(--text-secondary);
+        }
+        .dir-browser-item-body {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+        }
+        .dir-browser-item-title {
+            font-weight: 700;
+            font-size: 0.9rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: var(--text-primary);
+        }
+        .dir-browser-item-subtitle {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-top: 0.125rem;
+        }
+        .dir-browser-item-chevron {
+            color: var(--text-secondary);
+            flex-shrink: 0;
+        }

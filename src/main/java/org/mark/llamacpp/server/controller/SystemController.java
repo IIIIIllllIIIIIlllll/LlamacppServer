@@ -6,11 +6,14 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import org.mark.llamacpp.lmstudio.LMStudio;
 import org.mark.llamacpp.ollama.Ollama;
@@ -92,8 +95,168 @@ public class SystemController implements BaseController {
 			return true;
 		}
 		
+		// 文件系统：目录浏览
+		if (uri.startsWith("/api/sys/fs/list")) {
+			this.handleFsListRequest(ctx, request);
+			return true;
+		}
+		
 		
 		return false;
+	}
+
+	private void handleFsListRequest(ChannelHandlerContext ctx, FullHttpRequest request) throws RequestMethodException {
+		if (request.method() == HttpMethod.OPTIONS) {
+			LlamaServer.sendCorsResponse(ctx);
+			return;
+		}
+		this.assertRequestMethod(request.method() != HttpMethod.GET, "只支持GET请求");
+		try {
+			Map<String, String> params = ParamTool.getQueryParam(request.uri());
+			String in = params.get("path");
+			if (in != null) in = in.trim();
+			
+			int fileLimit = 10;
+			int dirLimit = 500;
+			
+			Map<String, Object> data = new HashMap<>();
+			
+			if (in == null || in.isEmpty()) {
+				List<Map<String, Object>> dirs = new ArrayList<>();
+				File[] roots = File.listRoots();
+				if (roots != null) {
+					for (File r : roots) {
+						if (r == null) continue;
+						String p = r.getAbsolutePath();
+						Map<String, Object> item = new HashMap<>();
+						item.put("name", p);
+						item.put("path", p);
+						dirs.add(item);
+					}
+				}
+				dirs.sort(Comparator.comparing(o -> String.valueOf(o.getOrDefault("name", "")), String.CASE_INSENSITIVE_ORDER));
+				
+				data.put("path", null);
+				data.put("parent", null);
+				data.put("directories", dirs);
+				data.put("files", new ArrayList<>());
+				data.put("truncatedDirs", false);
+				data.put("truncatedFiles", false);
+				data.put("mode", "roots");
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
+				return;
+			}
+			
+			Path raw;
+			try {
+				raw = Paths.get(in);
+			} catch (Exception e) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("非法路径"));
+				return;
+			}
+			Path abs = raw.toAbsolutePath().normalize();
+			if (!Files.exists(abs)) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("目录不存在"));
+				return;
+			}
+			if (!Files.isDirectory(abs)) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("不是目录"));
+				return;
+			}
+			if (this.pathHasSymlink(abs)) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("不允许使用符号链接目录"));
+				return;
+			}
+			
+			Path base;
+			try {
+				base = abs.toRealPath();
+			} catch (Exception e) {
+				base = abs;
+			}
+			if (!Files.isDirectory(base)) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("不是目录"));
+				return;
+			}
+			
+			final List<Map<String, Object>> dirs = new ArrayList<>();
+			final List<Map<String, Object>> files = new ArrayList<>();
+			boolean truncatedDirs = false;
+			boolean truncatedFiles = false;
+			
+			try (Stream<Path> stream = Files.list(base)) {
+				stream.forEach(p -> {
+					if (p == null) return;
+					try {
+						String name = p.getFileName() == null ? p.toString() : p.getFileName().toString();
+						if (Files.isDirectory(p)) {
+							Map<String, Object> item = new HashMap<>();
+							item.put("name", name);
+							item.put("path", p.toAbsolutePath().normalize().toString());
+							dirs.add(item);
+							return;
+						}
+						Map<String, Object> item = new HashMap<>();
+						item.put("name", name);
+						files.add(item);
+					} catch (Exception ignore) {
+					}
+				});
+			}
+			
+			dirs.sort(Comparator.comparing(o -> String.valueOf(o.getOrDefault("name", "")), String.CASE_INSENSITIVE_ORDER));
+			files.sort(Comparator.comparing(o -> String.valueOf(o.getOrDefault("name", "")), String.CASE_INSENSITIVE_ORDER));
+			
+			List<Map<String, Object>> outDirs = dirs;
+			List<Map<String, Object>> outFiles = files;
+			
+			if (outDirs.size() > dirLimit) {
+				outDirs = new ArrayList<>(outDirs.subList(0, dirLimit));
+				truncatedDirs = true;
+			}
+			if (outFiles.size() > fileLimit) {
+				outFiles = new ArrayList<>(outFiles.subList(0, fileLimit));
+				truncatedFiles = true;
+			}
+			
+			Path parent = base.getParent();
+			data.put("path", base.toString());
+			data.put("parent", parent == null ? null : parent.toString());
+			data.put("directories", outDirs);
+			data.put("files", outFiles);
+			data.put("truncatedDirs", truncatedDirs);
+			data.put("truncatedFiles", truncatedFiles);
+			data.put("mode", "directory");
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
+		} catch (Exception e) {
+			logger.info("处理目录浏览请求时发生错误", e);
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("目录浏览失败: " + e.getMessage()));
+		}
+	}
+	
+	private boolean pathHasSymlink(Path p) {
+		if (p == null) return false;
+		try {
+			Path abs = p.toAbsolutePath().normalize();
+			Path root = abs.getRoot();
+			if (root == null) {
+				return Files.isSymbolicLink(abs);
+			}
+			Path cur = root;
+			for (Path part : abs) {
+				if (part == null) continue;
+				cur = cur.resolve(part);
+				try {
+					if (Files.isSymbolicLink(cur)) {
+						return true;
+					}
+				} catch (Exception ignore) {
+				}
+			}
+			return false;
+		} catch (Exception e) {
+			return false;
+		}
 	}
 	
 	private void handleCompatStatusRequest(ChannelHandlerContext ctx, FullHttpRequest request) throws RequestMethodException {

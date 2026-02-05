@@ -440,7 +440,12 @@
             <div class="modal-body">
                 <div class="form-group">
                     <label class="form-label"><span data-i18n="modal.llamacpp_add.path">modal.llamacpp_add.path</span> <span style="color: red;">*</span></label>
-                    <input class="form-control" id="addLlamaCppPathInput" placeholder="/path/to/llama.cpp">
+                    <div class="dir-browse-input-row">
+                        <input class="form-control" id="addLlamaCppPathInput" placeholder="/path/to/llama.cpp">
+                        <button class="btn btn-secondary btn-sm dir-browse-btn" type="button" onclick="openDirectoryBrowser('addLlamaCppPathInput')" data-i18n="common.browse" data-i18n-attr="title" title="common.browse">
+                            <i class="fas fa-folder-open"></i>
+                        </button>
+                    </div>
                     <small class="form-text" data-i18n="modal.llamacpp_add.path_desc">modal.llamacpp_add.path_desc</small>
                 </div>
                 <div class="form-group">
@@ -572,7 +577,12 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label" data-i18n="common.directory_path">common.directory_path</label>
-                    <input class="form-control" id="addModelPathInput" placeholder="/path/to/models">
+                    <div class="dir-browse-input-row">
+                        <input class="form-control" id="addModelPathInput" placeholder="/path/to/models">
+                        <button class="btn btn-secondary btn-sm dir-browse-btn" type="button" onclick="openDirectoryBrowser('addModelPathInput')" data-i18n="common.browse" data-i18n-attr="title" title="common.browse">
+                            <i class="fas fa-folder-open"></i>
+                        </button>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label class="form-label" data-i18n="common.description">common.description</label>
@@ -736,6 +746,248 @@
             }
             return fallback == null ? key : fallback;
         }
+
+        function applyI18nToSubtree(root) {
+            if (!root || !root.querySelectorAll) return;
+            if (!window.I18N || typeof window.I18N.t !== 'function') return;
+            const nodes = root.querySelectorAll('[data-i18n]');
+            nodes.forEach((node) => {
+                const key = node.getAttribute('data-i18n');
+                if (!key) return;
+                const attr = node.getAttribute('data-i18n-attr');
+                if (attr) {
+                    const current = node.getAttribute(attr) || '';
+                    node.setAttribute(attr, window.I18N.t(key, current));
+                    return;
+                }
+                const currentText = node.textContent || '';
+                node.textContent = window.I18N.t(key, currentText);
+            });
+        }
+
+        function escapeHtml(value) {
+            const s = value == null ? '' : String(value);
+            return s
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function escapeAttr(value) {
+            return escapeHtml(value);
+        }
+        
+        function ensureDirectoryBrowserModal() {
+            let modal = document.getElementById('directoryBrowserModal');
+            if (modal) return modal;
+            
+            modal = document.createElement('div');
+            modal.className = 'modal';
+            modal.id = 'directoryBrowserModal';
+            modal.innerHTML = `
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3 class="modal-title"><i class="fas fa-folder-open"></i> <span data-i18n="modal.dir_browser.title">modal.dir_browser.title</span></h3>
+                        <button class="modal-close" onclick="closeModal('directoryBrowserModal')">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="dir-browser-toolbar">
+                            <button class="btn btn-secondary btn-sm" type="button" onclick="directoryBrowserGoRoots()" data-i18n="modal.dir_browser.roots">modal.dir_browser.roots</button>
+                            <button class="btn btn-secondary btn-sm" type="button" onclick="directoryBrowserGoUp()" data-i18n="modal.dir_browser.up">modal.dir_browser.up</button>
+                            <div class="mono dir-browser-path" id="directoryBrowserPathText"></div>
+                        </div>
+                        <div id="directoryBrowserContent" class="dir-browser-grid">
+                            <div class="dir-browser-panel">
+                                <div class="dir-browser-panel-header"><i class="fas fa-folder"></i> <span data-i18n="modal.dir_browser.folders">modal.dir_browser.folders</span></div>
+                                <div id="directoryBrowserDirList" class="dir-browser-panel-list"></div>
+                                <div id="directoryBrowserDirHint" class="dir-browser-panel-hint"></div>
+                            </div>
+                            <div class="dir-browser-panel">
+                                <div class="dir-browser-panel-header"><i class="fas fa-file"></i> <span data-i18n="modal.dir_browser.files">modal.dir_browser.files</span></div>
+                                <div id="directoryBrowserFileList" class="dir-browser-panel-list"></div>
+                                <div id="directoryBrowserFileHint" class="dir-browser-panel-hint"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" type="button" onclick="closeModal('directoryBrowserModal')" data-i18n="common.cancel">common.cancel</button>
+                        <button class="btn btn-primary" type="button" onclick="directoryBrowserConfirm()" data-i18n="modal.dir_browser.select">modal.dir_browser.select</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(modal);
+            applyI18nToSubtree(modal);
+            return modal;
+        }
+        
+        function openDirectoryBrowser(targetInputId) {
+            const el = document.getElementById(targetInputId);
+            if (!el) return;
+            ensureDirectoryBrowserModal();
+            
+            const current = (el.value || '').trim();
+            window.__directoryBrowserState = {
+                targetInputId,
+                currentPath: current || null
+            };
+            directoryBrowserLoad(current || null);
+            document.getElementById('directoryBrowserModal').classList.add('show');
+        }
+        
+        function directoryBrowserSetPathText(text) {
+            const el = document.getElementById('directoryBrowserPathText');
+            if (!el) return;
+            el.textContent = text || t('modal.dir_browser.roots');
+            el.title = text || '';
+        }
+        
+        async function directoryBrowserLoad(path) {
+            const state = window.__directoryBrowserState || {};
+            state.currentPath = path || null;
+            window.__directoryBrowserState = state;
+            
+            directoryBrowserSetPathText(state.currentPath);
+            const dirListEl = document.getElementById('directoryBrowserDirList');
+            const fileListEl = document.getElementById('directoryBrowserFileList');
+            const dirHintEl = document.getElementById('directoryBrowserDirHint');
+            const fileHintEl = document.getElementById('directoryBrowserFileHint');
+            if (dirHintEl) dirHintEl.style.display = 'none';
+            if (fileHintEl) fileHintEl.style.display = 'none';
+            if (dirListEl) dirListEl.innerHTML = `<div class="loading-spinner"><div class="spinner"></div></div>`;
+            if (fileListEl) fileListEl.innerHTML = `<div class="loading-spinner"><div class="spinner"></div></div>`;
+            
+            try {
+                const url = state.currentPath
+                    ? `/api/sys/fs/list?path=${encodeURIComponent(state.currentPath)}`
+                    : `/api/sys/fs/list`;
+                const response = await fetch(url, { method: 'GET' });
+                const payload = await response.json();
+                if (!payload || !payload.success) {
+                    showToast(t('toast.error'), (payload && payload.error) ? payload.error : t('common.network_request_failed'), 'error');
+                    directoryBrowserSetPathText(state.currentPath);
+                    if (dirListEl) dirListEl.innerHTML = `<div class="empty-state">${t('modal.dir_browser.empty')}</div>`;
+                    if (fileListEl) fileListEl.innerHTML = `<div class="empty-state">${t('modal.dir_browser.empty')}</div>`;
+                    return;
+                }
+                
+                const data = payload.data || {};
+                window.__directoryBrowserState.parent = data.parent || null;
+                window.__directoryBrowserState.currentPath = data.path || null;
+                directoryBrowserSetPathText(window.__directoryBrowserState.currentPath);
+                
+                const directories = Array.isArray(data.directories) ? data.directories : [];
+                const files = Array.isArray(data.files) ? data.files : [];
+                const truncatedDirs = !!data.truncatedDirs;
+                const truncatedFiles = !!data.truncatedFiles;
+                
+                if (dirListEl) {
+                    if (directories.length === 0) {
+                        dirListEl.innerHTML = `<div class="empty-state">${t('modal.dir_browser.no_dirs')}</div>`;
+                    } else {
+                        dirListEl.innerHTML = directories.map(d => {
+                            const name = escapeHtml(d.name || '');
+                            const p = escapeHtml(d.path || '');
+                            const pAttr = escapeAttr(d.path || '');
+                            const title = p || name;
+                            return `
+                                <div class="dir-browser-item" role="button" tabindex="0" data-path="${pAttr}" onclick="directoryBrowserEnter(this.getAttribute('data-path'))" onkeydown="directoryBrowserItemKeydown(event, this)">
+                                    <div class="dir-browser-item-icon"><i class="fas fa-folder"></i></div>
+                                    <div class="dir-browser-item-body">
+                                        <div class="dir-browser-item-title" title="${title}">${name}</div>
+                                        <div class="dir-browser-item-subtitle">${p}</div>
+                                    </div>
+                                    <div class="dir-browser-item-chevron"><i class="fas fa-chevron-right"></i></div>
+                                </div>`;
+                        }).join('');
+                    }
+                }
+                
+                if (fileListEl) {
+                    if (files.length === 0) {
+                        fileListEl.innerHTML = `<div class="empty-state">${t('modal.dir_browser.no_files')}</div>`;
+                    } else {
+                        fileListEl.innerHTML = files.map(f => {
+                            const name = escapeHtml(f.name || '');
+                            return `
+                                <div class="dir-browser-item file">
+                                    <div class="dir-browser-item-icon file"><i class="fas fa-file"></i></div>
+                                    <div class="dir-browser-item-body">
+                                        <div class="dir-browser-item-title" title="${name}">${name}</div>
+                                    </div>
+                                </div>`;
+                        }).join('');
+                    }
+                }
+                
+                if (dirHintEl) {
+                    if (truncatedDirs) {
+                        dirHintEl.textContent = t('modal.dir_browser.truncated_dirs');
+                        dirHintEl.style.display = 'block';
+                    } else {
+                        dirHintEl.style.display = 'none';
+                    }
+                }
+                if (fileHintEl) {
+                    if (truncatedFiles) {
+                        fileHintEl.textContent = t('modal.dir_browser.truncated_files');
+                        fileHintEl.style.display = 'block';
+                    } else {
+                        fileHintEl.style.display = 'none';
+                    }
+                }
+            } catch (e) {
+                showToast(t('toast.error'), t('common.network_request_failed'), 'error');
+            }
+        }
+
+        function directoryBrowserItemKeydown(event, el) {
+            if (!event || !el) return;
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                const p = el.getAttribute('data-path');
+                directoryBrowserEnter(p);
+            }
+        }
+        
+        function directoryBrowserEnter(path) {
+            const p = (path || '').trim();
+            if (!p) return;
+            directoryBrowserLoad(p);
+        }
+        
+        function directoryBrowserGoUp() {
+            const state = window.__directoryBrowserState || {};
+            const parent = state.parent;
+            if (!parent) {
+                directoryBrowserGoRoots();
+                return;
+            }
+            directoryBrowserLoad(parent);
+        }
+        
+        function directoryBrowserGoRoots() {
+            directoryBrowserLoad(null);
+        }
+        
+        function directoryBrowserConfirm() {
+            const state = window.__directoryBrowserState || {};
+            const targetInputId = state.targetInputId;
+            const path = state.currentPath;
+            if (!targetInputId) return;
+            if (!path) {
+                showToast(t('toast.error'), t('modal.dir_browser.select_required'), 'error');
+                return;
+            }
+            const el = document.getElementById(targetInputId);
+            if (el) el.value = path;
+            closeModal('directoryBrowserModal');
+        }
+
+        window.addEventListener('i18n:ready', function () {
+            const modal = document.getElementById('directoryBrowserModal');
+            if (modal) applyI18nToSubtree(modal);
+        });
 
         function isMobileBrowser() {
             const ua = (navigator.userAgent || '').toLowerCase();

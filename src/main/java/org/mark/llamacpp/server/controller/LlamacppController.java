@@ -2,6 +2,8 @@ package org.mark.llamacpp.server.controller;
 
 import java.io.File;
 import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -96,6 +98,12 @@ public class LlamacppController implements BaseController {
 				cfg.setItems(items);
 			}
 			String normalized = reqData.getPath().trim();
+			Path validated = this.validateAndNormalizeLlamaBinDirectory(normalized);
+			if (validated == null) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("目录无效、不可访问或缺少llama-server可执行文件"));
+				return;
+			}
+			normalized = validated.toString();
 			boolean exists = false;
 			for (LlamaCppDataStruct i : items) {
 				if (i != null && i.getPath() != null && normalized.equals(i.getPath().trim())) {
@@ -175,6 +183,61 @@ public class LlamacppController implements BaseController {
 		} catch (Exception e) {
 			logger.info("移除llama.cpp路径时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("移除llama.cpp路径失败: " + e.getMessage()));
+		}
+	}
+	
+	private Path validateAndNormalizeLlamaBinDirectory(String input) {
+		if (input == null) return null;
+		String s = input.trim();
+		if (s.isEmpty()) return null;
+		Path p;
+		try {
+			p = Paths.get(s).toAbsolutePath().normalize();
+		} catch (Exception e) {
+			return null;
+		}
+		try {
+			if (!Files.exists(p) || !Files.isDirectory(p)) return null;
+		} catch (Exception e) {
+			return null;
+		}
+		if (this.pathHasSymlink(p)) return null;
+		Path real;
+		try {
+			real = p.toRealPath();
+		} catch (Exception e) {
+			real = p;
+		}
+		
+		File dir = real.toFile();
+		File serverLinux = new File(dir, "llama-server");
+		File serverWin = new File(dir, "llama-server.exe");
+		if (!(serverLinux.exists() && serverLinux.isFile()) && !(serverWin.exists() && serverWin.isFile())) {
+			return null;
+		}
+		return real;
+	}
+	
+	private boolean pathHasSymlink(Path p) {
+		if (p == null) return false;
+		try {
+			Path abs = p.toAbsolutePath().normalize();
+			Path root = abs.getRoot();
+			if (root == null) {
+				return Files.isSymbolicLink(abs);
+			}
+			Path cur = root;
+			for (Path part : abs) {
+				if (part == null) continue;
+				cur = cur.resolve(part);
+				try {
+					if (Files.isSymbolicLink(cur)) return true;
+				} catch (Exception ignore) {
+				}
+			}
+			return false;
+		} catch (Exception e) {
+			return false;
 		}
 	}
 	
