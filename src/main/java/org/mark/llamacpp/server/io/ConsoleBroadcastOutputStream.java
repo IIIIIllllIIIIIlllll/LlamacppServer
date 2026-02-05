@@ -3,6 +3,8 @@ package org.mark.llamacpp.server.io;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.Charset;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 import org.mark.llamacpp.server.LlamaServer;
 
@@ -11,6 +13,8 @@ public class ConsoleBroadcastOutputStream extends OutputStream {
     private final Charset charset;
     private final StringBuilder buffer = new StringBuilder();
     private volatile boolean closed = false;
+    
+    private SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm.ss.SSS");
 
     public ConsoleBroadcastOutputStream(OutputStream delegate, Charset charset) {
         this.delegate = delegate;
@@ -22,7 +26,7 @@ public class ConsoleBroadcastOutputStream extends OutputStream {
         delegate.write(b);
         char c = (char) (b & 0xFF);
         if (c == '\n') {
-            String line = buffer.toString();
+            String line = this.sdf.format(new Date()) + "-" + buffer.toString();
             LlamaServer.sendConsoleLineEvent(null, line);
             LlamaServer.out.println(line);
             buffer.setLength(0);
@@ -40,7 +44,7 @@ public class ConsoleBroadcastOutputStream extends OutputStream {
             char c = text.charAt(i);
             if (c == '\n') {
                 if (i > start) buffer.append(text, start, i);
-                String line = buffer.toString();
+                String line = this.sdf.format(new Date()) + "-" + buffer.toString();
                 LlamaServer.sendConsoleLineEvent(null, line);
                 LlamaServer.out.println(line);
                 buffer.setLength(0);

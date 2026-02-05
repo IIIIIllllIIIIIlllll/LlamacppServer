@@ -1302,6 +1302,9 @@ public class LlamaServerManager {
 			sb.append(" --cache-ram -1");
 		}
 		sb.append(" --alias ").append(targetModel.getModelId());
+		
+		sb.append(" --timeout 36000");
+		
 		return sb.toString().trim();
 	}
 

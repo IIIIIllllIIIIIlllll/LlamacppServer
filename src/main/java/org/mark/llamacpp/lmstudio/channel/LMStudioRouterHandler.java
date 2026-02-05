@@ -8,6 +8,7 @@ import java.util.concurrent.Executors;
 import org.mark.llamacpp.lmstudio.LMStudioService;
 import org.mark.llamacpp.server.LlamaServer;
 import org.mark.llamacpp.server.exception.RequestMethodException;
+import org.mark.llamacpp.server.service.OpenAIService;
 import org.mark.llamacpp.server.struct.ApiResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,7 +32,7 @@ public class LMStudioRouterHandler extends SimpleChannelInboundHandler<FullHttpR
 	
 	private LMStudioService lmStudioService = new LMStudioService();
 	
-	
+	private OpenAIService openAIService = new OpenAIService();
 	
 	@Override
 	protected void channelRead0(ChannelHandlerContext ctx, FullHttpRequest request) throws Exception {
@@ -132,6 +133,30 @@ public class LMStudioRouterHandler extends SimpleChannelInboundHandler<FullHttpR
 			this.lmStudioService.handleOpenAIEmbeddingsRequest(ctx, request);
 			return true;
 		}
+		
+		// 兼容OpenAI
+		
+		// OpenAI API 端点
+		// 获取模型列表
+		if (uri.startsWith("/v1/models") || uri.startsWith("/models")) {
+			this.openAIService.handleOpenAIModelsRequest(ctx, request);
+			return true;
+		}
+		// 聊天补全
+		if (uri.startsWith("/v1/chat/completions") || uri.startsWith("/v1/chat/completion") || uri.startsWith("/chat/completion")) {
+			this.openAIService.handleOpenAIChatCompletionsRequest(ctx, request);
+			return true;
+		}
+		// 文本补全
+		if (uri.startsWith("/v1/completions") || uri.startsWith("/completions")) {
+			this.openAIService.handleOpenAICompletionsRequest(ctx, request);
+			return true;
+		}
+		if (uri.startsWith("/v1/embeddings") || uri.startsWith("/embeddings")) {
+			this.openAIService.handleOpenAIEmbeddingsRequest(ctx, request);
+			return true;
+		}
+		
 		return false;
 	}
 	

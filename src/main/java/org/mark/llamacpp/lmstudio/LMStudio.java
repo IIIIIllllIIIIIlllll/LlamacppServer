@@ -2,7 +2,6 @@ package org.mark.llamacpp.lmstudio;
 
 import org.mark.llamacpp.lmstudio.channel.LMStudioRouterHandler;
 import org.mark.llamacpp.lmstudio.websocket.LMStudioWsPathSelectHandler;
-import org.mark.llamacpp.server.channel.OpenAIRouterHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -103,7 +102,7 @@ public class LMStudio {
 	}
 	
 	private void runServer(long gen) {
-		EventLoopGroup localBossGroup = new NioEventLoopGroup(1);
+		EventLoopGroup localBossGroup = new NioEventLoopGroup();
 		EventLoopGroup localWorkerGroup = new NioEventLoopGroup();
 		
 		synchronized (lifecycleLock) {
@@ -127,8 +126,7 @@ public class LMStudio {
 									.addLast(new HttpObjectAggregator(MAX_HTTP_CONTENT_LENGTH))
 									.addLast(new ChunkedWriteHandler())
 									.addLast(new LMStudioWsPathSelectHandler())
-									.addLast(new LMStudioRouterHandler())
-									.addLast(new OpenAIRouterHandler());
+									.addLast(new LMStudioRouterHandler());
 						}
 						@Override
 						public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {

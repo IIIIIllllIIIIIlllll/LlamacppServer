@@ -552,14 +552,13 @@ public class OpenAIService {
 			Map<Integer, String> toolCallIds = new HashMap<>();
 			while ((line = br.readLine()) != null) {
 				// 检查客户端连接是否仍然活跃
-				if (!ctx.channel().isActive()) {
+				if (!ctx.channel().isActive() || !ctx.channel().isWritable()) {
 					logger.info("检测到客户端连接已断开，停止流式响应处理");
 					if (connection != null) {
 						connection.disconnect();
 					}
 					break;
 				}
-				
 				// 处理SSE格式的数据行
 				if (line.startsWith("data: ")) {
 					String data = line.substring(6); // 去掉 "data: " 前缀
