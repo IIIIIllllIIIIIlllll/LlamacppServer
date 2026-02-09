@@ -34,6 +34,14 @@ public class LMStudioRouterHandler extends SimpleChannelInboundHandler<FullHttpR
 	
 	private OpenAIService openAIService = new OpenAIService();
 	
+	private static String stripQuery(String uri) {
+		int q = uri.indexOf('?');
+		if (q >= 0) {
+			return uri.substring(0, q);
+		}
+		return uri;
+	}
+	
 	@Override
 	protected void channelRead0(ChannelHandlerContext ctx, FullHttpRequest request) throws Exception {
 		FullHttpRequest retained = request.retainedDuplicate();
@@ -90,24 +98,18 @@ public class LMStudioRouterHandler extends SimpleChannelInboundHandler<FullHttpR
 	private boolean handleRequest(String uri, ChannelHandlerContext ctx, FullHttpRequest request)
 			throws RequestMethodException {
 		// 模型列表
-		if (uri.startsWith("/api/v0/models")) {
-			String path = uri;
-			int q = path.indexOf('?');
-			if (q >= 0) {
-				path = path.substring(0, q);
-			}
-			if ("/api/v0/models".equals(path) || "/api/v0/models/".equals(path)) {
-				this.lmStudioService.handleModelList(ctx, request);
-				return true;
-			}
-			String prefix = "/api/v0/models/";
-			if (path.startsWith(prefix)) {
-				String remainder = path.substring(prefix.length());
-				int slash = remainder.indexOf('/');
-				if (slash >= 0) {
-					remainder = remainder.substring(0, slash);
-				}
-				String modelIdFilter = URLDecoder.decode(remainder, StandardCharsets.UTF_8);
+		String path = stripQuery(uri);
+		if ("/api/v0/models".equals(path) || "/api/v0/models/".equals(path)) {
+			this.lmStudioService.handleModelList(ctx, request);
+			return true;
+		}
+		String modelsPrefix = "/api/v0/models/";
+		if (path.startsWith(modelsPrefix)) {
+			String remainder = path.substring(modelsPrefix.length());
+			int slash = remainder.indexOf('/');
+			String firstSegment = slash >= 0 ? remainder.substring(0, slash) : remainder;
+			if (!firstSegment.isEmpty()) {
+				String modelIdFilter = URLDecoder.decode(firstSegment, StandardCharsets.UTF_8);
 				this.lmStudioService.handleModelList(ctx, request, modelIdFilter);
 				return true;
 			}
