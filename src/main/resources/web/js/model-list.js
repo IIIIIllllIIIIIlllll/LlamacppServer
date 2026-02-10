@@ -1,4 +1,4 @@
-function t(key, fallback) {
+ function t(key, fallback) {
     if (window.I18N && typeof window.I18N.t === 'function') {
         return window.I18N.t(key, fallback);
     }
@@ -338,14 +338,14 @@ function renderModelsList(models) {
                             <div class="model-name" title="${model.name}" onclick="openAliasModal(decodeURIComponent('${encodeURIComponent(model.id)}'), decodeURIComponent('${encodeURIComponent(model.name)}'), decodeURIComponent('${encodeURIComponent(model.alias || '')}'))">
                                 ${displayName}
                                 ${model.isMultimodal ? '<span class="vision-badge"><i class="fas fa-image"></i></span>' : ''}
-                                <span class="model-slots" id="slots-${encodeURIComponent(model.id)}" style="display:${Array.isArray(model.slots) && model.slots.length > 0 ? 'inline-flex' : 'none'};">${renderSlotsSquaresInner(model.slots)}</span>
                             </div>
-                            <div class="model-meta">
+                        <div class="model-meta">
                                 <span><i class="fas fa-layer-group"></i> ${architecture}</span>
                                 ${quantization ? `<span><i class="fas fa-microchip"></i> ${quantization}</span>` : ''}
                                 <span><i class="fas fa-hdd"></i> ${formatFileSize(model.size)}</span>
                                 ${model.port ? `<span><i class="fas fa-network-wired"></i> ${model.port}</span>` : ''}
                             </div>
+						<span class="model-slots" id="slots-${encodeURIComponent(model.id)}" style="visibility:${Array.isArray(model.slots) && model.slots.length > 0 ? 'visible' : 'hidden'};">${renderSlotsSquaresInner(model.slots)}</span>
                         </div>
                         <div class="model-status-badge ${statusClass}">
                             <i class="fas ${statusIcon}"></i> <span>${statusText}</span>
@@ -384,7 +384,7 @@ function updateModelSlotsDom(modelId, slots) {
         const el = document.getElementById(`slots-${encodeURIComponent(modelId)}`);
         if (!el) return;
         const hasSlots = Array.isArray(slots) && slots.length > 0;
-        el.style.display = hasSlots ? 'inline-flex' : 'none';
+        el.style.visibility = hasSlots ? 'visible' : 'hidden';
         el.innerHTML = renderSlotsSquaresInner(slots);
     } catch (e) {}
 }
