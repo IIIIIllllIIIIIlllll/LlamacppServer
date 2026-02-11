@@ -88,6 +88,69 @@
     .form-card .row label {
       font-size: 12px;
     }
+    .left-col {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      min-height: 0;
+    }
+    .left-col .form-card {
+      flex: 0 0 auto;
+    }
+    .left-col .all-models-card {
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+    .all-models-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .model-menu {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      overflow: auto;
+      min-height: 0;
+      padding: 2px 0;
+    }
+    .model-menu-item {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 2px;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 10px 10px;
+      background: rgba(255, 255, 255, 0.02);
+      color: var(--text-primary);
+      cursor: pointer;
+      text-align: left;
+    }
+    .model-menu-item:hover {
+      border-color: rgba(99, 102, 241, 0.45);
+      background: rgba(99, 102, 241, 0.08);
+    }
+    .model-menu-item.active {
+      border-color: rgba(99, 102, 241, 0.75);
+      background: rgba(99, 102, 241, 0.14);
+    }
+    .model-menu-item .name {
+      font-weight: 700;
+      font-size: 13px;
+      line-height: 1.2;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .model-menu-item .meta {
+      font-size: 12px;
+      color: var(--text-secondary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .table-wrap {
       background: var(--card-bg);
       border: 1px solid var(--border-color);
@@ -160,7 +223,7 @@
       .content {
         grid-template-rows: minmax(0, 1fr);
       }
-      .card {
+      .record-card {
         height: 100%;
       }
     }
@@ -172,22 +235,31 @@
       <h1 class="title"><i class="fas fa-gauge-high"></i> <span data-i18n="page.benchmark_v2.title">Benchmark V2</span></h1>
     </div>
     <div class="content">
-      <div class="card form-card">
-        <div class="row">
-          <label for="modelSelect" data-i18n="page.benchmark_v2.label.loaded_models">已加载模型</label>
-          <select id="modelSelect" class="form-control"></select>
+      <div class="left-col">
+        <div class="card form-card">
+          <div class="row">
+            <label for="modelSelect" data-i18n="page.benchmark_v2.label.loaded_models">已加载模型</label>
+            <select id="modelSelect" class="form-control"></select>
+          </div>
+          <div class="row">
+            <label for="promptTokensInput" data-i18n="page.benchmark_v2.label.prompt_tokens">提示词长度</label>
+            <input id="promptTokensInput" type="number" class="form-control" value="8192" min="1" />
+          </div>
+          <div class="row">
+            <label for="maxTokensInput" data-i18n="page.benchmark_v2.label.max_tokens">输出最大token</label>
+            <input id="maxTokensInput" type="number" class="form-control" value="256" min="1" />
+          </div>
+          <div class="actions">
+            <button id="runBtn" class="btn btn-primary" data-i18n="page.benchmark_v2.action.run">开始测试</button>
+            <button id="refreshBtn" class="btn" data-i18n="page.benchmark_v2.action.refresh_models">刷新模型</button>
+          </div>
         </div>
-        <div class="row">
-          <label for="promptTokensInput" data-i18n="page.benchmark_v2.label.prompt_tokens">提示词长度</label>
-          <input id="promptTokensInput" type="number" class="form-control" value="8192" min="1" />
-        </div>
-        <div class="row">
-          <label for="maxTokensInput" data-i18n="page.benchmark_v2.label.max_tokens">输出最大token</label>
-          <input id="maxTokensInput" type="number" class="form-control" value="256" min="1" />
-        </div>
-        <div class="actions">
-          <button id="runBtn" class="btn btn-primary" data-i18n="page.benchmark_v2.action.run">开始测试</button>
-          <button id="refreshBtn" class="btn" data-i18n="page.benchmark_v2.action.refresh_models">刷新模型</button>
+        <div class="card all-models-card">
+          <div class="all-models-header">
+            <strong data-i18n="page.benchmark_v2.section.all_models">全部模型</strong>
+            <span id="allModelsMeta" class="hint"></span>
+          </div>
+          <div id="allModelsList" class="model-menu"></div>
         </div>
       </div>
       <div class="card record-card">
@@ -226,10 +298,18 @@
       maxTokens: document.getElementById('maxTokensInput'),
       runBtn: document.getElementById('runBtn'),
       refreshBtn: document.getElementById('refreshBtn'),
+      allModelsList: document.getElementById('allModelsList'),
+      allModelsMeta: document.getElementById('allModelsMeta'),
       resultBody: document.getElementById('resultBody'),
       status: document.getElementById('statusText')
     };
     
+    let allModels = [];
+    let loadedModels = [];
+    let loadedModelIds = new Set();
+    let selectedModelId = null;
+    let currentRecordKeys = new Set();
+
     function t(key, fallback) {
       if (window.I18N && typeof window.I18N.t === 'function') {
         return window.I18N.t(key, fallback);
@@ -251,6 +331,10 @@
       if (els.status) els.status.textContent = text || '';
     }
     
+    function safeText(value) {
+      return value == null ? '' : String(value);
+    }
+
     function readRuntimeCtx() {
       const opt = els.modelSelect.selectedOptions && els.modelSelect.selectedOptions[0];
       if (!opt) return null;
@@ -271,6 +355,88 @@
         return false;
       }
       return true;
+    }
+
+    function getModelDisplayName(model) {
+      const alias = model && typeof model.alias === 'string' ? model.alias.trim() : '';
+      const name = model && typeof model.name === 'string' ? model.name.trim() : '';
+      return alias || name || safeText(model && model.id);
+    }
+
+    function updateAllModelsMeta() {
+      if (!els.allModelsMeta) return;
+      const total = Array.isArray(allModels) ? allModels.length : 0;
+      const loaded = loadedModelIds ? loadedModelIds.size : 0;
+      els.allModelsMeta.textContent = tf('page.benchmark_v2.hint.models_total_loaded', { total, loaded }, `总计 ${total}，已加载 ${loaded}`);
+    }
+
+    function updateActiveAllModelItem() {
+      if (!els.allModelsList) return;
+      const btns = els.allModelsList.querySelectorAll('button[data-model-id]');
+      btns.forEach((btn) => {
+        const id = btn.dataset ? btn.dataset.modelId : '';
+        btn.classList.toggle('active', !!selectedModelId && id === selectedModelId);
+      });
+    }
+
+    function renderAllModelsList() {
+      if (!els.allModelsList) return;
+      els.allModelsList.innerHTML = '';
+
+      const list = Array.isArray(allModels) ? allModels.slice() : [];
+      list.sort((a, b) => {
+        const na = getModelDisplayName(a).toLowerCase();
+        const nb = getModelDisplayName(b).toLowerCase();
+        return na.localeCompare(nb);
+      });
+
+      if (!list.length) {
+        const empty = document.createElement('div');
+        empty.className = 'hint';
+        empty.textContent = t('page.benchmark_v2.empty.no_models', '暂无模型');
+        els.allModelsList.appendChild(empty);
+        updateAllModelsMeta();
+        return;
+      }
+
+      for (const m of list) {
+        const id = safeText(m && m.id).trim();
+        if (!id) continue;
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'model-menu-item';
+        btn.dataset.modelId = id;
+
+        const nameEl = document.createElement('div');
+        nameEl.className = 'name';
+        nameEl.textContent = getModelDisplayName(m);
+
+        const metaEl = document.createElement('div');
+        metaEl.className = 'meta';
+        metaEl.textContent = loadedModelIds && loadedModelIds.has(id) ? `${id} · ${t('page.benchmark_v2.model.loaded', '已加载')}` : id;
+
+        btn.appendChild(nameEl);
+        btn.appendChild(metaEl);
+        els.allModelsList.appendChild(btn);
+      }
+      updateAllModelsMeta();
+      updateActiveAllModelItem();
+    }
+
+    function selectModelForRecords(modelId, options) {
+      const id = (modelId || '').trim();
+      if (!id) return;
+
+      const prev = selectedModelId;
+      selectedModelId = id;
+      if (prev !== id) {
+        currentRecordKeys = new Set();
+      }
+      updateActiveAllModelItem();
+
+      const mode = options && options.mode ? options.mode : (prev === id ? 'append' : 'replace');
+      loadBenchmarkRecords(id, { mode });
     }
 
     function formatNumber(value) {
@@ -318,6 +484,21 @@
       els.resultBody.appendChild(tr);
     }
 
+    function prependRow(rowValues) {
+      if (!els.resultBody) return;
+      const emptyRow = document.getElementById('emptyRow');
+      if (emptyRow) emptyRow.remove();
+      const tr = document.createElement('tr');
+      for (const v of rowValues) {
+        const td = document.createElement('td');
+        td.textContent = v == null || v === '' ? '-' : String(v);
+        tr.appendChild(td);
+      }
+      const first = els.resultBody.firstChild;
+      if (first) els.resultBody.insertBefore(tr, first);
+      else els.resultBody.appendChild(tr);
+    }
+
     function normalizeRecordRow(record, fallbackModelId) {
       const timings = record && record.timings ? record.timings : null;
       const promptTokens = record && record.promptTokens != null ? record.promptTokens : (timings ? timings.prompt_n : null);
@@ -331,6 +512,14 @@
         outputTokens != null ? outputTokens : '-',
         formatNumber(timings && timings.predicted_per_second != null ? timings.predicted_per_second : null)
       ];
+    }
+
+    function recordKey(record, fallbackModelId) {
+      const modelId = safeText(record && record.modelId ? record.modelId : fallbackModelId).trim();
+      const ts = safeText(record && record.timestamp).trim();
+      const pt = record && record.promptTokens != null ? String(record.promptTokens) : '';
+      const mt = record && record.maxTokens != null ? String(record.maxTokens) : '';
+      return `${modelId}|${ts}|${pt}|${mt}`;
     }
     
     async function fetchJson(url, options) {
@@ -348,11 +537,14 @@
       return json;
     }
     
-    async function loadModels() {
+    async function loadLoadedModels() {
       setStatus(t('page.benchmark_v2.status.loading_models', '加载模型列表中…'));
       try {
+        const prevValue = safeText(els.modelSelect.value).trim();
         const data = await fetchJson('/v1/models', { method: 'GET' });
-        const models = Array.isArray(data.data) ? data.data : [];
+        const models = Array.isArray(data && data.data) ? data.data : [];
+        loadedModels = models;
+        loadedModelIds = new Set(models.map(m => safeText(m && m.id).trim()).filter(Boolean));
         els.modelSelect.innerHTML = '';
         if (!models.length) {
           const opt = document.createElement('option');
@@ -361,7 +553,7 @@
           els.modelSelect.appendChild(opt);
           els.modelSelect.disabled = true;
           setStatus(t('page.benchmark_v2.status.no_loaded_models', '没有已加载模型'));
-          clearResultRows();
+          renderAllModelsList();
           return;
         }
         for (const m of models) {
@@ -374,42 +566,123 @@
           }
           els.modelSelect.appendChild(opt);
         }
+        if (prevValue && loadedModelIds.has(prevValue)) {
+          els.modelSelect.value = prevValue;
+        }
         els.modelSelect.disabled = false;
         setStatus(t('page.benchmark_v2.status.models_loaded', '模型列表已加载'));
         validateTokenLimit();
-        loadBenchmarkRecords(els.modelSelect.value);
+        renderAllModelsList();
       } catch (e) {
         setStatus(e.message || t('page.benchmark_v2.status.models_load_failed', '模型列表加载失败'));
       }
     }
 
-    async function loadBenchmarkRecords(modelId) {
+    async function loadAllModels() {
+      try {
+        const data = await fetchJson('/api/models/list', { method: 'GET' });
+        if (!data || data.success !== true) {
+          throw new Error((data && data.error) ? data.error : t('page.benchmark_v2.status.models_load_failed', '模型列表加载失败'));
+        }
+        allModels = Array.isArray(data.models) ? data.models : [];
+        renderAllModelsList();
+      } catch (e) {
+        allModels = [];
+        renderAllModelsList();
+        throw e;
+      }
+    }
+
+    async function loadPageModels() {
+      setStatus(t('page.benchmark_v2.status.loading_models', '加载模型列表中…'));
+      const results = await Promise.allSettled([loadLoadedModels(), loadAllModels()]);
+      const failed = results.find(r => r && r.status === 'rejected');
+      if (failed && failed.reason) {
+        setStatus(failed.reason.message || t('page.benchmark_v2.status.models_load_failed', '模型列表加载失败'));
+      }
+
+      const preferred = selectedModelId
+        || (loadedModels && loadedModels[0] && loadedModels[0].id ? loadedModels[0].id : '')
+        || (allModels && allModels[0] && allModels[0].id ? allModels[0].id : '');
+
+      if (preferred) {
+        selectModelForRecords(preferred, { mode: 'replace' });
+      } else {
+        clearResultRows();
+        updateAllModelsMeta();
+      }
+    }
+
+    async function loadBenchmarkRecords(modelId, options) {
       const id = (modelId || '').trim();
       if (!id) {
         clearResultRows();
         return;
       }
-      setStatus(t('page.benchmark_v2.status.loading_records', '加载记录中…'));
+      const mode = options && options.mode ? options.mode : 'replace';
+      setStatus(tf('page.benchmark_v2.status.loading_records', { model: id }, `加载记录中…`));
       try {
         const data = await fetchJson(`/api/v2/models/benchmark/get?modelId=${encodeURIComponent(id)}`, { method: 'GET' });
+        if (!data || data.success !== true) {
+          if (mode === 'replace') {
+            clearResultRows();
+            currentRecordKeys = new Set();
+          }
+          setStatus((data && data.error) ? data.error : t('page.benchmark_v2.status.no_records', '暂无记录'));
+          return;
+        }
         const records = data && data.data && Array.isArray(data.data.records) ? data.data.records : [];
         if (!records.length) {
-          clearResultRows();
+          if (mode === 'replace') {
+            clearResultRows();
+            currentRecordKeys = new Set();
+          }
           setStatus(t('page.benchmark_v2.status.no_records', '暂无记录'));
           return;
         }
-        clearResultRows('');
         const sorted = records.slice().sort((a, b) => {
           const ta = (a && a.timestamp) ? String(a.timestamp) : '';
           const tb = (b && b.timestamp) ? String(b.timestamp) : '';
           return tb.localeCompare(ta);
         });
-        for (const r of sorted) {
-          appendRow(normalizeRecordRow(r, id));
+
+        if (mode === 'replace') {
+          clearResultRows('');
+          currentRecordKeys = new Set();
+          for (const r of sorted) {
+            appendRow(normalizeRecordRow(r, id));
+            currentRecordKeys.add(recordKey(r, id));
+          }
+          setStatus(tf('page.benchmark_v2.status.records_loaded', { count: sorted.length }, `已加载 ${sorted.length} 条记录`));
+          return;
         }
-        setStatus(tf('page.benchmark_v2.status.records_loaded', { count: sorted.length }, `已加载 ${sorted.length} 条记录`));
+
+        const toAdd = [];
+        for (const r of sorted) {
+          const key = recordKey(r, id);
+          if (!currentRecordKeys.has(key)) {
+            toAdd.push(r);
+          }
+        }
+        if (!toAdd.length) {
+          setStatus(tf('page.benchmark_v2.status.records_loaded', { count: sorted.length }, `已加载 ${sorted.length} 条记录`));
+          return;
+        }
+        const asc = toAdd.slice().sort((a, b) => {
+          const ta = (a && a.timestamp) ? String(a.timestamp) : '';
+          const tb = (b && b.timestamp) ? String(b.timestamp) : '';
+          return ta.localeCompare(tb);
+        });
+        for (const r of asc) {
+          prependRow(normalizeRecordRow(r, id));
+          currentRecordKeys.add(recordKey(r, id));
+        }
+        setStatus(tf('page.benchmark_v2.status.records_appended', { count: asc.length }, `已追加 ${asc.length} 条记录`));
       } catch (e) {
-        clearResultRows();
+        if (mode === 'replace') {
+          clearResultRows();
+          currentRecordKeys = new Set();
+        }
         setStatus(e.message || t('page.benchmark_v2.status.records_load_failed', '记录加载失败'));
       }
     }
@@ -446,19 +719,11 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
-        const timings = data && data.data ? data.data.timings : null;
-        if (data && data.success && timings) {
-          const record = {
-            timestamp: new Date().toISOString(),
-            modelId,
-            promptTokens,
-            maxTokens,
-            llamaBinPath: data.data.llamaBinPath,
-            timings
-          };
-          appendRow(normalizeRecordRow(record, modelId));
-        }
         setStatus(data.success ? t('page.benchmark_v2.status.done', '完成') : (data.error || t('page.benchmark_v2.status.failed', '失败')));
+        if (data && data.success) {
+          const mode = selectedModelId === modelId ? 'append' : 'replace';
+          selectModelForRecords(modelId, { mode });
+        }
       } catch (e) {
         setStatus(e.message || t('page.benchmark_v2.status.request_failed', '请求失败'));
       } finally {
@@ -467,17 +732,25 @@
     }
     
     els.runBtn.addEventListener('click', runBenchmark);
-    els.refreshBtn.addEventListener('click', loadModels);
+    els.refreshBtn.addEventListener('click', loadPageModels);
     els.modelSelect.addEventListener('change', () => {
       validateTokenLimit();
-      loadBenchmarkRecords(els.modelSelect.value);
+      selectModelForRecords(els.modelSelect.value, { mode: 'replace' });
     });
     els.promptTokens.addEventListener('input', validateTokenLimit);
     els.maxTokens.addEventListener('input', validateTokenLimit);
+    if (els.allModelsList) {
+      els.allModelsList.addEventListener('click', (e) => {
+        const target = e && e.target ? e.target.closest('button[data-model-id]') : null;
+        if (!target) return;
+        const id = target.dataset ? target.dataset.modelId : '';
+        selectModelForRecords(id, { mode: 'replace' });
+      });
+    }
 
     function initPage() {
       document.title = t('page.benchmark_v2.page_title', 'Benchmark V2');
-      loadModels();
+      loadPageModels();
     }
 
     function initOnce() {
