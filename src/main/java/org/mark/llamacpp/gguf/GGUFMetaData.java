@@ -228,7 +228,7 @@ public class GGUFMetaData {
     	case 38 -> "MXFP4";
     	case 32 -> "BF16";
         case 30 -> "IQ4_XS";
-        
+        case 25 -> "IQ4_NL";
     	default -> "UNKNOWN(" + fileType + ")";
     	};
     }
