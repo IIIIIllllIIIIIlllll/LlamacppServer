@@ -340,11 +340,29 @@ public class CommandLineRunner {
 
 		String currentLdPath = env.get("LD_LIBRARY_PATH");
 		String dir = exeDir.getAbsolutePath();
-		if (currentLdPath == null || currentLdPath.isBlank()) {
-			env.put("LD_LIBRARY_PATH", dir);
-		} else if (!currentLdPath.contains(dir)) {
-			env.put("LD_LIBRARY_PATH", dir + ":" + currentLdPath);
+		StringBuilder newLdPath = new StringBuilder(dir);
+		if (currentLdPath != null && !currentLdPath.isBlank() && !currentLdPath.contains(dir)) {
+			newLdPath.append(":").append(currentLdPath);
 		}
+
+		// ROCm 7.2 库路径 - 支持多种可能的安装位置
+		String[] rocmPaths = {
+			"/opt/rocm-7.2.0/lib",
+			"/opt/rocm-7.2.0/lib64",
+			"/opt/rocm/lib",
+			"/opt/rocm/lib64",
+			"/usr/local/rocm/lib",
+			"/usr/local/rocm/lib64",
+			"/usr/local/lib64",
+			"/usr/local/lib"
+		};
+		for (String rocmPath : rocmPaths) {
+			if (!newLdPath.toString().contains(rocmPath)) {
+				newLdPath.append(":").append(rocmPath);
+			}
+		}
+
+		env.put("LD_LIBRARY_PATH", newLdPath.toString());
 
 		if (os.contains("mac") || os.contains("darwin")) {
 			String currentDyldPath = env.get("DYLD_LIBRARY_PATH");

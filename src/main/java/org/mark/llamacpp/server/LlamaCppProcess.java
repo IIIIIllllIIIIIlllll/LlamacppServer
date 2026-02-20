@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -152,48 +153,62 @@ public class LlamaCppProcess {
 		if (isRunning.get()) {
 			return false;
 		}
-		
+
 		try {
-			// 使用ProcessBuilder启动进程，可以更好地控制进程
+			// 使用 ProcessBuilder 启动进程，可以继承环境变量并添加新的路径
 			List<String> args = splitCommandLineArgs(cmd);
 			ProcessBuilder pb = new ProcessBuilder(args);
-			pb.redirectErrorStream(true); // 不合并错误流和标准输出流
-			
-			boolean isWindows = isWindows();
-			if (!args.isEmpty()) {
-				String serverPath = args.get(0);
-				if (isWindows) {
-					Path exePath = Paths.get(serverPath);
-					if (exePath.isAbsolute()) {
-						Path dir = exePath.getParent();
-						if (dir != null) {
-							Map<String, String> env = pb.environment();
-							String currentPath = env.get("PATH");
-							String dirStr = dir.toString();
-							if (currentPath == null || currentPath.isEmpty()) {
-								env.put("PATH", dirStr);
-							} else if (!containsPathEntry(currentPath, dirStr, true)) {
-								env.put("PATH", dirStr + ";" + currentPath);
-							}
-						}
-					}
-				} else if (serverPath.startsWith("/")) {
-					int lastSlash = serverPath.lastIndexOf('/');
-					if (lastSlash > 0) {
-						String libPath = serverPath.substring(0, lastSlash);
-						Map<String, String> env = pb.environment();
-						String currentLdPath = env.get("LD_LIBRARY_PATH");
-						if (currentLdPath != null && !currentLdPath.isEmpty()) {
-							env.put("LD_LIBRARY_PATH", libPath + ":" + currentLdPath);
-						} else {
-							env.put("LD_LIBRARY_PATH", libPath);
-						}
-					}
-				}
+
+			// 获取并修改环境变量
+			Map<String, String> env = pb.environment();
+
+			// 保留原有的 LD_LIBRARY_PATH
+			String existingLdPath = env.get("LD_LIBRARY_PATH");
+
+			// 追加 llama-server 目录和 ROCm 库路径
+			StringBuilder ldPathBuilder = new StringBuilder();
+			if (this.llamaBinPath != null && !this.llamaBinPath.isEmpty()) {
+				ldPathBuilder.append(this.llamaBinPath);
 			}
-			// 正经启动
+
+			// ROCm 7.2 库路径
+			String[] rocmPaths = {
+				"/opt/rocm-7.2.0/lib",
+				"/opt/rocm-7.2.0/lib64",
+				"/opt/rocm/lib",
+				"/opt/rocm/lib64",
+				"/usr/local/rocm/lib",
+				"/usr/local/rocm/lib64",
+				"/usr/local/lib64",
+				"/usr/local/lib"
+			};
+			for (String rocmPath : rocmPaths) {
+				if (ldPathBuilder.length() > 0) {
+				ldPathBuilder.append(":");
+				}
+				ldPathBuilder.append(rocmPath);
+			}
+
+			// 追加原有路径
+			if (existingLdPath != null && !existingLdPath.isEmpty()) {
+				if (ldPathBuilder.length() > 0) {
+					ldPathBuilder.append(":");
+				}
+				ldPathBuilder.append(existingLdPath);
+			}
+
+			env.put("LD_LIBRARY_PATH", ldPathBuilder.toString());
+
 			this.process = pb.start();
-			
+			logger.info("llama-server 进程已启动");
+
+			// 等待进程初始化
+			try {
+				Thread.sleep(500);
+			} catch (InterruptedException e) {
+				// ignore
+			}
+
 			// 获取PID (Java 9+ 提供了getPid方法)
 			// 获取输入流
 			try {
@@ -204,14 +219,15 @@ public class LlamaCppProcess {
 				// 如果获取不到PID，使用一个默认值
 				this.pid = -1;
 			}
-			
+
 			this.isRunning.set(true);
-			
+
 			// 启动输出读取线程
 			this.startOutputReaders();
-			
+
 			return true;
 		} catch (IOException e) {
+			logger.error("启动 llama-server 失败: {}", e.getMessage());
 			e.printStackTrace();
 			return false;
 		}
@@ -333,6 +349,26 @@ public class LlamaCppProcess {
 		});
 		this.outputThread.setDaemon(true);
 		this.outputThread.start();
+
+		// 错误输出读取线程 - llama-server 所有输出都在 stderr
+		this.errorThread = new Thread(() -> {
+			try (BufferedReader reader = new BufferedReader(new InputStreamReader(this.process.getErrorStream()))) {
+				String line;
+				while ((line = reader.readLine()) != null && this.isRunning.get()) {
+					// 将错误输出也传递给处理器
+					if (this.outputHandler != null) {
+						this.outputHandler.accept(line);
+					}
+					if(!line.contains("update_slots") && !line.contains("log_server_r")) {
+						logger.info(line);
+					}
+				}
+			} catch (IOException e) {
+				// 忽略错误
+			}
+		});
+		this.errorThread.setDaemon(true);
+		this.errorThread.start();
 	}
 	
 	

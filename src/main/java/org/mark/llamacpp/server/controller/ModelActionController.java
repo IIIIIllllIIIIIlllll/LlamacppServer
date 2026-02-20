@@ -558,11 +558,31 @@ public class ModelActionController implements BaseController {
 					String libPath = benchPath.substring(0, lastSlash);
 					Map<String, String> env = pb.environment();
 					String currentLdPath = env.get("LD_LIBRARY_PATH");
+
+					// 构建 LD_LIBRARY_PATH
+					StringBuilder newLdPath = new StringBuilder(libPath);
 					if (currentLdPath != null && !currentLdPath.isEmpty()) {
-						env.put("LD_LIBRARY_PATH", libPath + ":" + currentLdPath);
-					} else {
-						env.put("LD_LIBRARY_PATH", libPath);
+						newLdPath.append(":").append(currentLdPath);
 					}
+
+					// ROCm 7.2 库路径
+					String[] rocmPaths = {
+						"/opt/rocm-7.2.0/lib",
+						"/opt/rocm-7.2.0/lib64",
+						"/opt/rocm/lib",
+						"/opt/rocm/lib64",
+						"/usr/local/rocm/lib",
+						"/usr/local/rocm/lib64",
+						"/usr/local/lib64",
+						"/usr/local/lib"
+					};
+					for (String rocmPath : rocmPaths) {
+						if (!newLdPath.toString().contains(rocmPath)) {
+							newLdPath.append(":").append(rocmPath);
+						}
+					}
+
+					env.put("LD_LIBRARY_PATH", newLdPath.toString());
 				}
 			}
 			Process process = pb.start();
