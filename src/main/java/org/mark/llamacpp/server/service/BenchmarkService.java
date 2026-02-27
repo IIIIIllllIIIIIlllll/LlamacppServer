@@ -117,8 +117,8 @@ public class BenchmarkService {
 			connection = (HttpURLConnection) url.openConnection();
 			connection.setRequestMethod("POST");
 			connection.setDoOutput(true);
-			connection.setConnectTimeout(3600 * 7 * 24);
-			connection.setReadTimeout(3600 * 7 * 24);
+			connection.setConnectTimeout(3600 * 7 * 24 * 1000);
+			connection.setReadTimeout(3600 * 7 * 24 * 1000);
 			connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
 			
 			if (ctx != null) {
