@@ -27,8 +27,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
@@ -136,7 +134,7 @@ public class LlamaServerManager {
 	 */
 	private final ExecutorService executorService = Executors.newSingleThreadExecutor(Thread.ofVirtual().name("llama-loader-", 0).factory());
 	
-	private final ScheduledExecutorService slotsScheduler = new ScheduledThreadPoolExecutor(1, Thread.ofVirtual().name("llama-slots-", 0).factory());
+//	private final ScheduledExecutorService slotsScheduler = new ScheduledThreadPoolExecutor(1, Thread.ofVirtual().name("llama-slots-", 0).factory());
 	
 	/**
 	 *
@@ -144,7 +142,7 @@ public class LlamaServerManager {
 	private LlamaServerManager() {
 		// 尝试从配置文件加载设置
 		this.loadSettingsFromFile();
-		this.startSlotsPolling();
+		//this.startSlotsPolling();
 	}
 	
 	/**
@@ -200,56 +198,59 @@ public class LlamaServerManager {
         return new ArrayList<>(this.modelPaths);
     }
 	
-	private void startSlotsPolling() {
-		this.slotsScheduler.scheduleAtFixedRate(() -> {
-			try {
-				Map<String, LlamaCppProcess> loaded = this.getLoadedProcesses();
-				if (loaded.isEmpty()) {
-					return;
-				}
-				for (String modelId : loaded.keySet()) {
-					if (modelId == null || modelId.isBlank()) {
-						continue;
-					}
-					JsonObject resp;
-					try {
-						resp = this.handleModelSlotsGet(modelId);
-					} catch (Exception e) {
-						continue;
-					}
-					JsonArray slots = resp != null && resp.has("slots") && resp.get("slots").isJsonArray()
-							? resp.getAsJsonArray("slots")
-							: null;
-					if (slots == null) {
-						continue;
-					}
-					JsonArray filtered = new JsonArray();
-					for (JsonElement el : slots) {
-						if (el == null || !el.isJsonObject()) {
-							continue;
-						}
-						JsonObject slot = el.getAsJsonObject();
-						JsonObject out = new JsonObject();
-						if (slot.has("id") && !slot.get("id").isJsonNull()) {
-							out.add("id", slot.get("id"));
-						}
-						boolean speculative = slot.has("speculative") && !slot.get("speculative").isJsonNull()
-								? slot.get("speculative").getAsBoolean()
-								: false;
-						boolean isProcessing = slot.has("is_processing") && !slot.get("is_processing").isJsonNull()
-								? slot.get("is_processing").getAsBoolean()
-								: false;
-						out.addProperty("speculative", speculative);
-						out.addProperty("is_processing", isProcessing);
-						filtered.add(out);
-					}
-					LlamaServer.sendModelSlotsEvent(modelId, filtered);
-				}
-			} catch (Exception e) {
-				logger.info("轮询slots时发生错误", e);
-			}
-		}, 1, 1, TimeUnit.SECONDS);
-	}
+//    /**
+//     * 	原本是用来定时查询slots信息的，但是似乎有潜在的风险。
+//     */
+//	private void startSlotsPolling() {
+//		this.slotsScheduler.scheduleAtFixedRate(() -> {
+//			try {
+//				Map<String, LlamaCppProcess> loaded = this.getLoadedProcesses();
+//				if (loaded.isEmpty()) {
+//					return;
+//				}
+//				for (String modelId : loaded.keySet()) {
+//					if (modelId == null || modelId.isBlank()) {
+//						continue;
+//					}
+//					JsonObject resp;
+//					try {
+//						resp = this.handleModelSlotsGet(modelId);
+//					} catch (Exception e) {
+//						continue;
+//					}
+//					JsonArray slots = resp != null && resp.has("slots") && resp.get("slots").isJsonArray()
+//							? resp.getAsJsonArray("slots")
+//							: null;
+//					if (slots == null) {
+//						continue;
+//					}
+//					JsonArray filtered = new JsonArray();
+//					for (JsonElement el : slots) {
+//						if (el == null || !el.isJsonObject()) {
+//							continue;
+//						}
+//						JsonObject slot = el.getAsJsonObject();
+//						JsonObject out = new JsonObject();
+//						if (slot.has("id") && !slot.get("id").isJsonNull()) {
+//							out.add("id", slot.get("id"));
+//						}
+//						boolean speculative = slot.has("speculative") && !slot.get("speculative").isJsonNull()
+//								? slot.get("speculative").getAsBoolean()
+//								: false;
+//						boolean isProcessing = slot.has("is_processing") && !slot.get("is_processing").isJsonNull()
+//								? slot.get("is_processing").getAsBoolean()
+//								: false;
+//						out.addProperty("speculative", speculative);
+//						out.addProperty("is_processing", isProcessing);
+//						filtered.add(out);
+//					}
+//					LlamaServer.sendModelSlotsEvent(modelId, filtered);
+//				}
+//			} catch (Exception e) {
+//				logger.info("轮询slots时发生错误", e);
+//			}
+//		}, 1, 1, TimeUnit.SECONDS);
+//	}
 	
 	/**
 	 * 	获取模型列表。
@@ -1075,29 +1076,29 @@ public class LlamaServerManager {
 						this.modelPorts.put(modelId, port);
 					}
 					LlamaServer.sendModelLoadEvent(modelId, true, "模型加载成功", port);
-					// 这里请求一次
-					try {
-						JsonObject slotsResponse = this.handleModelSlotsGet(modelId);
-						int ctxSize = 0;
-						if (slotsResponse != null && slotsResponse.has("slots") && slotsResponse.get("slots").isJsonArray()) {
-							JsonArray slots = slotsResponse.getAsJsonArray("slots");
-							if (slots.size() > 0 && slots.get(0).isJsonObject()) {
-								JsonObject slot0 = slots.get(0).getAsJsonObject();
-								if (slot0.has("n_ctx") && !slot0.get("n_ctx").isJsonNull()) {
-									ctxSize = (int) Math.round(slot0.get("n_ctx").getAsDouble());
-								}
-							}
-						}
-						// 继续添加新东西
-						// TODO
-						
-						
-						
-						process.setCtxSize(ctxSize);
-					}catch (Exception e) {
-						e.printStackTrace();
-						process.setCtxSize(0);
-					}
+//					// 这里请求一次
+//					try {
+//						JsonObject slotsResponse = this.handleModelSlotsGet(modelId);
+//						int ctxSize = 0;
+//						if (slotsResponse != null && slotsResponse.has("slots") && slotsResponse.get("slots").isJsonArray()) {
+//							JsonArray slots = slotsResponse.getAsJsonArray("slots");
+//							if (slots.size() > 0 && slots.get(0).isJsonObject()) {
+//								JsonObject slot0 = slots.get(0).getAsJsonObject();
+//								if (slot0.has("n_ctx") && !slot0.get("n_ctx").isJsonNull()) {
+//									ctxSize = (int) Math.round(slot0.get("n_ctx").getAsDouble());
+//								}
+//							}
+//						}
+//						// 继续添加新东西
+//						// TODO
+//						
+//						
+//						
+//						process.setCtxSize(ctxSize);
+//					}catch (Exception e) {
+//						e.printStackTrace();
+//						process.setCtxSize(0);
+//					}
 					// 这里再请求一次
 					try {
 						JsonObject slotsResponse = this.handleModelSlotsGet(modelId);
