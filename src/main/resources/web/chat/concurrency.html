@@ -671,8 +671,8 @@
     function buildRequestBody(endpointKind, model, promptText, params, systemLines) {
       if (endpointKind === 'chat') {
         const messages = [];
-        messages.push({ role: 'system', content: systemLines.fixed });
-        messages.push({ role: 'system', content: systemLines.randomLine });
+        const systemContent = [systemLines.fixed, systemLines.randomLine].filter(Boolean).join('\n');
+        messages.push({ role: 'system', content: systemContent });
         messages.push({ role: 'user', content: promptText });
         return {
           model,
