@@ -228,6 +228,7 @@ public class GGUFMetaData {
         case 23 -> "IQ3_XXS";
         case 24 -> "IQ1_S";
         case 25 -> "IQ4_NL";
+        case 27 -> "IQ3_M";
         case 29 -> "IQ2_M";
         case 30 -> "IQ4_XS";
         case 31 -> "IQ1_M";
