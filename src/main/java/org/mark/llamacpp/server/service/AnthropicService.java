@@ -339,10 +339,12 @@ public class AnthropicService {
                         os.write(input, 0, input.length);
                     }
                 }
-
+                
+                long t = System.currentTimeMillis();
                 int responseCode = connection.getResponseCode();
 
                 if (isStream) {
+                	logger.info("llama.cpp进程响应码: {}，，等待时间：{}", responseCode, System.currentTimeMillis() - t);
                 	this.handleStreamResponse(ctx, connection, responseCode);
                 } else {
                 	this.handleNonStreamResponse(ctx, connection, responseCode);
@@ -411,8 +413,6 @@ public class AnthropicService {
 
         ctx.write(response);
         ctx.flush();
-
-        logger.info("开始处理 Anthropic 流式响应，响应码: {}", responseCode);
 
         try (BufferedReader br = new BufferedReader(
             new InputStreamReader(
