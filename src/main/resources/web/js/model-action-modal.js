@@ -1239,7 +1239,9 @@ function updateSelectedDevicesCacheFromChecklist() {
 function syncMainGpuSelectWithChecklist() {
     const modal = getLoadModelModal();
     const mainGpuEl = findById(modal, 'mainGpuSelect');
-    if (mainGpuEl) window.__loadModelMainGpu = getSelectedMainGpu();
+    if (mainGpuEl && !window.__loadModelSelectionFromConfig) {
+        window.__loadModelMainGpu = getSelectedMainGpu();
+    }
     updateSelectedDevicesCacheFromChecklist();
     renderMainGpuSelect(window.__availableDevices || [], window.__loadModelSelectedDevices || []);
     window.__loadModelSelectionFromConfig = false;
@@ -1253,7 +1255,7 @@ function loadDeviceList() {
         updateSelectedDevicesCacheFromChecklist();
     }
     const mainGpuEl = findById(modal, 'mainGpuSelect');
-    if (mainGpuEl && mainGpuEl.options && mainGpuEl.options.length > 1) {
+    if (!window.__loadModelSelectionFromConfig && mainGpuEl && mainGpuEl.options && mainGpuEl.options.length > 1) {
         window.__loadModelMainGpu = getSelectedMainGpu();
     }
     const llamaSelect = findById(modal, 'llamaBinPathSelect') || findFieldByName(modal, 'llamaBinPathSelect');
