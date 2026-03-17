@@ -22,6 +22,7 @@ import org.mark.llamacpp.server.LlamaCppProcess;
 import org.mark.llamacpp.server.LlamaServer;
 import org.mark.llamacpp.server.LlamaServerManager;
 import org.mark.llamacpp.server.exception.RequestMethodException;
+import org.mark.llamacpp.server.service.ModelSamplingService;
 import org.mark.llamacpp.server.struct.ApiResponse;
 import org.mark.llamacpp.server.tools.ChatTemplateFileTool;
 import org.mark.llamacpp.server.tools.JsonUtil;
@@ -495,6 +496,8 @@ public class ModelInfoController implements BaseController {
 				}
 				savedData.put(modelId, configManager.getModelLaunchConfigBundle(modelId));
 				LlamaServer.sendJsonResponse(ctx, ApiResponse.success(savedData));
+				// 保存参数后，重新加载。
+				ModelSamplingService.getInstance().reload();
 				return;
 			}
 

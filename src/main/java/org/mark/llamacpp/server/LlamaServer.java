@@ -23,6 +23,7 @@ import org.mark.llamacpp.server.channel.FileDownloadRouterHandler;
 import org.mark.llamacpp.server.channel.OpenAIRouterHandler;
 import org.mark.llamacpp.server.io.ConsoleBroadcastOutputStream;
 import org.mark.llamacpp.server.mcp.McpClientService;
+import org.mark.llamacpp.server.service.ModelSamplingService;
 import org.mark.llamacpp.server.struct.LlamaCppConfig;
 import org.mark.llamacpp.server.struct.LlamaCppDataStruct;
 import org.mark.llamacpp.server.struct.ModelPathConfig;
@@ -103,6 +104,8 @@ public class LlamaServer {
 		// 预加载模型列表，这会同时保存模型信息到配置文件
 		logger.info("正在扫描模型目录...");
 		serverManager.listModel();
+		
+		ModelSamplingService.getInstance();
 
 		try {
 			McpClientService.getInstance().initializeFromRegistry();

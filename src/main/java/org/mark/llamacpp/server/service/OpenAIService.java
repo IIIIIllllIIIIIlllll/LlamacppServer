@@ -339,6 +339,12 @@ public class OpenAIService {
 				requestJson.add("chat_template_kwargs", chatTemplateKwargs);
 			}
 			//==============================================================================================
+			// 这里做采样代理，针对llamacpp中的请求，注入采样参数。
+			ModelSamplingService service = ModelSamplingService.getInstance();
+			service.handleOpenAI(requestJson);
+			
+			
+			
 			// 获取LlamaServerManager实例
 			LlamaServerManager manager = LlamaServerManager.getInstance();
 			

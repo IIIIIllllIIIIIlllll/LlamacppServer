@@ -46,8 +46,8 @@ function showModelDetailModal(model) {
                         `<div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">` +
                         `<label for="${modalId}SamplingConfigSelect" style="white-space:nowrap;">${t('modal.model_detail.sampling.config', '启动配置')}</label>` +
                         `<select class="form-control" id="${modalId}SamplingConfigSelect" style="max-width:320px;"></select>` +
+                        `<button class="btn btn-primary" id="${modalId}SamplingSaveBtn">${t('modal.model_detail.sampling.save', '保存设定')}</button>` +
                         `</div>` +
-                        `<pre id="${modalId}SamplingPreview" style="min-height:46px; max-height:120px; overflow:auto; font-size:13px; background:#111827; color:#e5e7eb; padding:10px; border-radius:0.75rem; margin-bottom:10px;"></pre>` +
                         `<div id="${modalId}SamplingDetails" style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;"></div>` +
                         `</div>`;
     let propsPanel = `<div id="${modalId}PropsPanel" style="display:none; height:100%;">` +
@@ -89,6 +89,7 @@ function showModelDetailModal(model) {
     const tabChatTemplate = document.getElementById(modalId + 'TabChatTemplate');
     const tabToken = document.getElementById(modalId + 'TabToken');
     const samplingConfigSelect = document.getElementById(modalId + 'SamplingConfigSelect');
+    const samplingSaveBtn = document.getElementById(modalId + 'SamplingSaveBtn');
     const fetchPropsBtn = document.getElementById(modalId + 'PropsFetchBtn');
     const tplReloadBtn = document.getElementById(modalId + 'ChatTemplateReloadBtn');
     const tplDefaultBtn = document.getElementById(modalId + 'ChatTemplateDefaultBtn');
@@ -102,6 +103,7 @@ function showModelDetailModal(model) {
     if (tabChatTemplate) tabChatTemplate.onclick = () => { openModelDetailTab('chatTemplate'); loadModelChatTemplate(false); };
     if (tabToken) tabToken.onclick = () => openModelDetailTab('token');
     if (samplingConfigSelect) samplingConfigSelect.onchange = () => renderSelectedModelSamplingSettings();
+    if (samplingSaveBtn) samplingSaveBtn.onclick = () => saveModelSamplingSelection();
     if (fetchPropsBtn) fetchPropsBtn.onclick = () => loadModelProps();
     if (tplReloadBtn) tplReloadBtn.onclick = () => loadModelChatTemplate(true);
     if (tplDefaultBtn) tplDefaultBtn.onclick = () => loadModelDefaultChatTemplate();
@@ -288,16 +290,20 @@ function extractSamplingSettingsFromConfig(cfg) {
 function renderSelectedModelSamplingSettings() {
     const modalId = 'modelDetailModal';
     const select = document.getElementById(modalId + 'SamplingConfigSelect');
-    const preview = document.getElementById(modalId + 'SamplingPreview');
     const details = document.getElementById(modalId + 'SamplingDetails');
     const bundle = window.__modelDetailSamplingBundle;
-    if (!select || !preview || !details || !bundle || !bundle.configs) return;
-    const name = select.value || bundle.selectedConfig || '';
+    if (!select || !details || !bundle || !bundle.configs) return;
+    const name = select.value || '';
+    if (!name) {
+        details.style.display = 'none';
+        details.innerHTML = '';
+        return;
+    }
+    details.style.display = 'grid';
     const cfg = bundle.configs[name] || {};
     const s = extractSamplingSettingsFromConfig(cfg);
     const fmt = (v) => (v === null || v === undefined || String(v).trim() === '') ? '-' : String(v);
     const safe = (v) => escapeAttrCompat(v === null || v === undefined ? '' : String(v));
-    preview.textContent = `--temp ${fmt(s.temp)} --top-p ${fmt(s.topP)} --top-k ${fmt(s.topK)} --min-p ${fmt(s.minP)} --presence-penalty ${fmt(s.presencePenalty)} --repeat-penalty ${fmt(s.repeatPenalty)} --frequency-penalty ${fmt(s.frequencyPenalty)}`;
     details.innerHTML = [
         ['温度', '--temp', s.temp],
         ['Top-P', '--top-p', s.topP],
@@ -313,31 +319,51 @@ function loadModelSamplingSettings() {
     const modelId = window.__modelDetailModelId;
     const modalId = 'modelDetailModal';
     const select = document.getElementById(modalId + 'SamplingConfigSelect');
-    const preview = document.getElementById(modalId + 'SamplingPreview');
-    if (!modelId || !select || !preview) return;
-    preview.textContent = t('common.loading', '加载中...');
+    const details = document.getElementById(modalId + 'SamplingDetails');
+    if (!modelId || !select || !details) return;
+    details.innerHTML = `<div style="grid-column:1 / -1; padding:12px; border:1px solid #e5e7eb; border-radius:0.75rem; color:#6b7280;">${escapeAttrCompat(t('common.loading', '加载中...'))}</div>`;
     fetch(`/api/models/config/get?modelId=${encodeURIComponent(modelId)}`)
         .then(r => r.json())
         .then(res => {
             if (!(res && res.success)) {
-                preview.textContent = t('common.request_failed', '请求失败');
+                details.innerHTML = `<div style="grid-column:1 / -1; padding:12px; border:1px solid #fecaca; border-radius:0.75rem; color:#b91c1c;">${escapeAttrCompat(t('common.request_failed', '请求失败'))}</div>`;
                 return;
             }
             const bundle = extractModelConfigBundleFromGetResponse(res, modelId);
             window.__modelDetailSamplingBundle = bundle;
             const names = Object.keys(bundle.configs || {});
-            if (!names.length) {
-                select.innerHTML = '<option value="">默认配置</option>';
-                select.value = '';
-                renderSelectedModelSamplingSettings();
-                return;
-            }
-            select.innerHTML = names.map((name) => `<option value="${escapeAttrCompat(name)}">${escapeAttrCompat(name)}</option>`).join('');
-            select.value = (bundle.selectedConfig && bundle.configs[bundle.selectedConfig]) ? bundle.selectedConfig : names[0];
+            const offOption = `<option value="">${escapeAttrCompat(t('modal.model_detail.sampling.off', '关闭功能'))}</option>`;
+            const dynamicOptions = names.map((name) => `<option value="${escapeAttrCompat(name)}">${escapeAttrCompat(name)}</option>`).join('');
+            select.innerHTML = offOption + dynamicOptions;
+            select.value = '';
             renderSelectedModelSamplingSettings();
         })
         .catch(() => {
-            preview.textContent = t('common.request_failed', '请求失败');
+            details.innerHTML = `<div style="grid-column:1 / -1; padding:12px; border:1px solid #fecaca; border-radius:0.75rem; color:#b91c1c;">${escapeAttrCompat(t('common.request_failed', '请求失败'))}</div>`;
+        });
+}
+
+function saveModelSamplingSelection() {
+    const modelId = window.__modelDetailModelId;
+    const modalId = 'modelDetailModal';
+    const select = document.getElementById(modalId + 'SamplingConfigSelect');
+    if (!modelId || !select) return;
+    const samplingConfigName = select.value == null ? '' : String(select.value).trim();
+    fetch('/api/sys/model/sampling/setting', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modelId, samplingConfigName })
+    })
+        .then(r => r.json())
+        .then(res => {
+            if (res && res.success) {
+                showToast(t('toast.success', '成功'), t('modal.model_detail.sampling.saved', '采样设定已保存'), 'success');
+            } else {
+                showToast(t('toast.error', '错误'), (res && res.error) ? res.error : t('common.save_failed', '保存失败'), 'error');
+            }
+        })
+        .catch(() => {
+            showToast(t('toast.error', '错误'), t('common.network_request_failed', '网络请求失败'), 'error');
         });
 }
 
