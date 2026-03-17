@@ -34,6 +34,7 @@ public class ConfigManager {
     private static final String CONFIG_DIR = "config";
     private static final String MODELS_CONFIG_FILE = CONFIG_DIR + "/models.json";
     private static final String LAUNCH_CONFIG_FILE = CONFIG_DIR + "/launch_config.json";
+    private static final String DEFAULT_CONFIG_NAME = "默认配置";
     
     private final Gson gson;
 
@@ -100,10 +101,34 @@ public class ConfigManager {
      * @return 是否保存成功
      */
     public boolean saveLaunchConfig(String modelId, Map<String, Object> launchConfig) {
+        return this.saveLaunchConfig(modelId, null, launchConfig, false);
+    }
+
+    /**
+     * 	统一按“selectedConfig + configs”结构写入，兼容旧版单配置结构
+     * @param modelId
+     * @param configName
+     * @param launchConfig
+     * @param setSelected
+     * @return
+     */
+    public boolean saveLaunchConfig(String modelId, String configName, Map<String, Object> launchConfig, boolean setSelected) {
         synchronized (launchFileLock) {
             try {
                 Map<String, Map<String, Object>> allConfigs = loadAllLaunchConfigsUnsafe();
-                allConfigs.put(modelId, launchConfig);
+                Map<String, Object> entry = allConfigs.get(modelId);
+                Map<String, Object> normalized = normalizeLaunchConfigEntry(entry);
+                Map<String, Object> configs = getConfigItems(normalized);
+                if (configs == null) {
+                    configs = new HashMap<>();
+                    normalized.put("configs", configs);
+                }
+                String targetConfigName = resolveTargetConfigName(configName, normalized);
+                configs.put(targetConfigName, launchConfig == null ? new HashMap<>() : new HashMap<>(launchConfig));
+                if (setSelected || !normalized.containsKey("selectedConfig")) {
+                    normalized.put("selectedConfig", targetConfigName);
+                }
+                allConfigs.put(modelId, normalized);
                 writeJsonFileAtomic(LAUNCH_CONFIG_FILE, allConfigs);
                 logger.info("启动配置已保存到: {}", LAUNCH_CONFIG_FILE);
                 return true;
@@ -150,7 +175,74 @@ public class ConfigManager {
      */
     public Map<String, Map<String, Object>> loadAllLaunchConfigs() {
         synchronized (launchFileLock) {
-            return loadAllLaunchConfigsUnsafe();
+            Map<String, Map<String, Object>> allConfigs = loadAllLaunchConfigsUnsafe();
+            // 关键注释：读取时自动升级旧格式，确保后续统一走新结构
+            if (upgradeAllLaunchConfigEntriesIfNeeded(allConfigs)) {
+                try {
+                    writeJsonFileAtomic(LAUNCH_CONFIG_FILE, allConfigs);
+                } catch (IOException e) {
+                    logger.info("读取时升级启动配置格式失败: {}", e);
+                }
+            }
+            return allConfigs;
+        }
+    }
+
+    public Map<String, Object> getModelLaunchConfigBundle(String modelId) {
+        synchronized (launchFileLock) {
+            Map<String, Map<String, Object>> allConfigs = loadAllLaunchConfigsUnsafe();
+            Map<String, Object> entry = allConfigs.get(modelId);
+            Map<String, Object> normalized = normalizeLaunchConfigEntry(entry);
+            if (entry != null && !normalized.equals(entry)) {
+                allConfigs.put(modelId, normalized);
+                try {
+                    writeJsonFileAtomic(LAUNCH_CONFIG_FILE, allConfigs);
+                } catch (IOException e) {
+                    logger.info("读取模型配置时自动升级格式失败: {}", e);
+                }
+            }
+            return normalized;
+        }
+    }
+
+    public boolean deleteLaunchConfig(String modelId, String configName) {
+        synchronized (launchFileLock) {
+            try {
+                Map<String, Map<String, Object>> allConfigs = loadAllLaunchConfigsUnsafe();
+                Map<String, Object> entry = allConfigs.get(modelId);
+                Map<String, Object> normalized = normalizeLaunchConfigEntry(entry);
+                Map<String, Object> configs = getConfigItems(normalized);
+                if (configs == null) {
+                    configs = new HashMap<>();
+                    normalized.put("configs", configs);
+                }
+                String targetName = configName == null ? "" : configName.trim();
+                if (targetName.isEmpty()) {
+                    Object selectedObj = normalized.get("selectedConfig");
+                    targetName = selectedObj == null ? "" : String.valueOf(selectedObj).trim();
+                }
+                if (targetName.isEmpty()) {
+                    targetName = DEFAULT_CONFIG_NAME;
+                }
+                configs.remove(targetName);
+                // 关键注释：当全部配置被删除时自动回填默认配置，避免前端无可选项
+                if (configs.isEmpty()) {
+                    configs.put(DEFAULT_CONFIG_NAME, new HashMap<>());
+                }
+                String selected = String.valueOf(normalized.getOrDefault("selectedConfig", "")).trim();
+                if (selected.isEmpty() || !configs.containsKey(selected)) {
+                    selected = configs.keySet().iterator().next();
+                }
+                normalized.put("selectedConfig", selected);
+                normalized.put("configs", configs);
+                allConfigs.put(modelId, normalized);
+                writeJsonFileAtomic(LAUNCH_CONFIG_FILE, allConfigs);
+                logger.info("启动配置已删除并保存: {}", LAUNCH_CONFIG_FILE);
+                return true;
+            } catch (IOException e) {
+                logger.info("删除启动配置失败: {}", e);
+                return false;
+            }
         }
     }
     
@@ -326,6 +418,81 @@ public class ConfigManager {
         	logger.info("加载启动配置失败: {}", e.getMessage());
             return new HashMap<>();
         }
+    }
+
+    private String resolveTargetConfigName(String configName, Map<String, Object> normalized) {
+        String incoming = configName == null ? "" : configName.trim();
+        if (!incoming.isEmpty()) return incoming;
+        Object selected = normalized.get("selectedConfig");
+        String selectedName = selected == null ? "" : String.valueOf(selected).trim();
+        if (!selectedName.isEmpty()) return selectedName;
+        return DEFAULT_CONFIG_NAME;
+    }
+
+    private boolean upgradeAllLaunchConfigEntriesIfNeeded(Map<String, Map<String, Object>> allConfigs) {
+        if (allConfigs == null || allConfigs.isEmpty()) return false;
+        boolean changed = false;
+        for (Map.Entry<String, Map<String, Object>> modelEntry : allConfigs.entrySet()) {
+            Map<String, Object> raw = modelEntry.getValue();
+            Map<String, Object> normalized = normalizeLaunchConfigEntry(raw);
+            if (raw == null || !normalized.equals(raw)) {
+                modelEntry.setValue(normalized);
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> getConfigItems(Map<String, Object> normalized) {
+        if (normalized == null) return null;
+        Object configsObj = normalized.get("configs");
+        if (configsObj instanceof Map<?, ?>) {
+            return (Map<String, Object>) configsObj;
+        }
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> normalizeLaunchConfigEntry(Map<String, Object> entry) {
+        Map<String, Object> normalized = new HashMap<>();
+        Map<String, Object> configs = new HashMap<>();
+        String selectedConfig = DEFAULT_CONFIG_NAME;
+
+        if (entry != null && entry.get("configs") instanceof Map<?, ?>) {
+            Map<?, ?> rawConfigs = (Map<?, ?>) entry.get("configs");
+            for (Map.Entry<?, ?> configItem : rawConfigs.entrySet()) {
+                if (configItem.getKey() == null) continue;
+                String name = String.valueOf(configItem.getKey()).trim();
+                if (name.isEmpty()) continue;
+                Object configVal = configItem.getValue();
+                if (configVal instanceof Map<?, ?>) {
+                    configs.put(name, new HashMap<>((Map<String, Object>) configVal));
+                } else {
+                    configs.put(name, new HashMap<>());
+                }
+            }
+            Object selected = entry.get("selectedConfig");
+            if (selected != null) {
+                String selectedRaw = String.valueOf(selected).trim();
+                if (!selectedRaw.isEmpty() && configs.containsKey(selectedRaw)) {
+                    selectedConfig = selectedRaw;
+                }
+            }
+            if (!configs.containsKey(selectedConfig) && !configs.isEmpty()) {
+                selectedConfig = configs.keySet().iterator().next();
+            }
+        } else if (entry != null) {
+            configs.put(DEFAULT_CONFIG_NAME, new HashMap<>(entry));
+            selectedConfig = DEFAULT_CONFIG_NAME;
+        } else {
+            configs.put(DEFAULT_CONFIG_NAME, new HashMap<>());
+            selectedConfig = DEFAULT_CONFIG_NAME;
+        }
+
+        normalized.put("selectedConfig", selectedConfig);
+        normalized.put("configs", configs);
+        return normalized;
     }
 
     private void writeJsonFileAtomic(String filePath, Object data) throws IOException {

@@ -425,18 +425,230 @@ function applyCmdToDynamicFields(modal, cmd) {
     if (extraStr) setFieldValue(modal, ['extraParams'], extraStr);
 }
 
-function extractLaunchConfigFromGetResponse(res, modelId) {
-    if (!(res && res.success)) return {};
-    const data = res.data;
-    if (!data) return {};
-    if (data && typeof data === 'object' && data.config && typeof data.config === 'object') {
-        return data.config || {};
+function isPlainObject(v) {
+    return !!(v && typeof v === 'object' && !Array.isArray(v));
+}
+
+function getDefaultConfigName() {
+    return '默认配置';
+}
+
+function normalizeLaunchConfigBundle(rawEntry) {
+    const fallbackName = getDefaultConfigName();
+    if (!isPlainObject(rawEntry)) {
+        return {
+            selectedConfig: fallbackName,
+            configs: { [fallbackName]: {} }
+        };
     }
-    if (data && typeof data === 'object') {
-        const direct = data[modelId];
-        if (direct && typeof direct === 'object') return direct;
+    if (isPlainObject(rawEntry.configs)) {
+        const configs = {};
+        const names = Object.keys(rawEntry.configs);
+        for (let i = 0; i < names.length; i++) {
+            const name = names[i];
+            const item = rawEntry.configs[name];
+            configs[name] = isPlainObject(item) ? item : {};
+        }
+        if (!Object.keys(configs).length) {
+            configs[fallbackName] = {};
+        }
+        const selectedRaw = rawEntry.selectedConfig === null || rawEntry.selectedConfig === undefined ? '' : String(rawEntry.selectedConfig).trim();
+        const selectedConfig = selectedRaw && configs[selectedRaw] ? selectedRaw : Object.keys(configs)[0];
+        return { selectedConfig, configs };
+    }
+    return {
+        selectedConfig: fallbackName,
+        configs: { [fallbackName]: rawEntry }
+    };
+}
+
+function extractLaunchConfigBundleFromGetResponse(res, modelId) {
+    if (!(res && res.success)) return normalizeLaunchConfigBundle(null);
+    const data = res.data;
+    if (!isPlainObject(data)) return normalizeLaunchConfigBundle(null);
+    if (isPlainObject(data.configs)) {
+        return normalizeLaunchConfigBundle(data);
+    }
+    const direct = data[modelId];
+    return normalizeLaunchConfigBundle(direct);
+}
+
+function extractLaunchConfigFromGetResponse(res, modelId) {
+    const bundle = extractLaunchConfigBundleFromGetResponse(res, modelId);
+    const selected = bundle && bundle.selectedConfig ? bundle.selectedConfig : getDefaultConfigName();
+    if (bundle && isPlainObject(bundle.configs) && isPlainObject(bundle.configs[selected])) {
+        return bundle.configs[selected];
     }
     return {};
+}
+
+function renderModelConfigSelect(modal, bundle) {
+    const select = findById(modal, 'modelConfigSelect');
+    if (!select) return;
+    const normalized = normalizeLaunchConfigBundle(bundle);
+    const names = Object.keys(normalized.configs);
+    select.innerHTML = names.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
+    select.value = normalized.selectedConfig;
+    window.__modelConfigBundle = normalized;
+}
+
+// 关键注释：将当前UI中的启动参数整理为可持久化配置对象
+function buildPersistableLaunchConfig(modal) {
+    const base = buildLoadModelPayload(modal);
+    return {
+        llamaBinPath: base && base.llamaBinPathSelect ? base.llamaBinPathSelect : '',
+        mg: base && base.mg !== undefined ? base.mg : -1,
+        cmd: base && base.cmd ? base.cmd : '',
+        extraParams: base && base.extraParams ? base.extraParams : '',
+        enableVision: base && base.enableVision !== undefined ? !!base.enableVision : true,
+        device: base && Array.isArray(base.device) ? base.device : ['All']
+    };
+}
+
+function getSelectedModelConfigName(modal) {
+    const select = findById(modal, 'modelConfigSelect');
+    if (!select || !select.value) return getDefaultConfigName();
+    return String(select.value).trim() || getDefaultConfigName();
+}
+
+function buildConfigSetPayload(modelId, configName, cfg) {
+    return {
+        modelId: modelId,
+        configName: configName,
+        setSelected: true,
+        config: cfg
+    };
+}
+
+function buildConfigDeletePayload(modelId, configName) {
+    return {
+        modelId: modelId,
+        configName: configName
+    };
+}
+
+function setModelConfigControlsDisabled(modal, disabled) {
+    const addBtn = findById(modal, 'addModelConfigBtn');
+    const delBtn = findById(modal, 'deleteModelConfigBtn');
+    const configSelect = findById(modal, 'modelConfigSelect');
+    if (addBtn) addBtn.disabled = !!disabled;
+    if (delBtn) delBtn.disabled = !!disabled;
+    if (configSelect) configSelect.disabled = !!disabled;
+}
+
+function applyLaunchConfigToModal(modal, config) {
+    const cfg = isPlainObject(config) ? config : {};
+    const cmdStr = cfg.cmd === null || cfg.cmd === undefined ? '' : String(cfg.cmd);
+    let applied = false;
+    let attempts = 0;
+    const maxAttempts = 60;
+    const tryApply = () => {
+        if (applied) return;
+        attempts++;
+        const cfgList = getParamConfigListSafe();
+        const dyn = findById(modal, 'dynamicParamsContainer');
+        const hasToggle = !!(dyn && dyn.querySelector && dyn.querySelector('input[type="checkbox"][id^="param_enable_"]'));
+        const ready = cfgList && cfgList.length && hasToggle && findById(modal, 'extraParams');
+        if (ready) {
+            applied = true;
+            applyCmdToDynamicFields(modal, cmdStr);
+            if (cfg.extraParams !== undefined && cfg.extraParams !== null && String(cfg.extraParams).trim()) {
+                setFieldValue(modal, ['extraParams'], String(cfg.extraParams));
+            } else if (cfg.extraParams !== undefined) {
+                setFieldValue(modal, ['extraParams'], cfg.extraParams || '');
+            }
+            return;
+        }
+        if (attempts >= maxAttempts) return;
+        setTimeout(tryApply, 60);
+    };
+    tryApply();
+
+    const enableVisionEl = findField(modal, 'enableVision');
+    if (enableVisionEl && 'checked' in enableVisionEl) {
+        enableVisionEl.checked = cfg.enableVision !== undefined ? !!cfg.enableVision : true;
+    }
+    window.__loadModelSelectedDevices = normalizeDeviceSelection(cfg.device);
+    window.__loadModelMainGpu = normalizeMainGpu(cfg.mg);
+    window.__loadModelSelectionFromConfig = true;
+}
+
+function onModelConfigSelectionChange() {
+    const modal = getLoadModelModal();
+    if (!modal) return;
+    const selected = getSelectedModelConfigName(modal);
+    const bundle = normalizeLaunchConfigBundle(window.__modelConfigBundle);
+    if (!bundle.configs[selected]) return;
+    bundle.selectedConfig = selected;
+    window.__modelConfigBundle = bundle;
+    applyLaunchConfigToModal(modal, bundle.configs[selected]);
+}
+
+function addModelConfigOption() {
+    const modal = getLoadModelModal();
+    if (!modal) return;
+    const modelId = getFieldString(modal, ['modelId']);
+    if (!modelId) return;
+    const inputName = window.prompt(t('modal.model_action.config.prompt_new_name', '请输入新配置名称'));
+    const name = inputName === null || inputName === undefined ? '' : String(inputName).trim();
+    if (!name) return;
+    const bundle = normalizeLaunchConfigBundle(window.__modelConfigBundle);
+    if (!bundle.configs[name]) {
+        bundle.configs[name] = buildPersistableLaunchConfig(modal);
+    }
+    bundle.selectedConfig = name;
+    renderModelConfigSelect(modal, bundle);
+    onModelConfigSelectionChange();
+    const payload = buildConfigSetPayload(modelId, name, bundle.configs[name]);
+    setModelConfigControlsDisabled(modal, true);
+    fetch('/api/models/config/set', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    }).then(r => r.json()).then(res => {
+        if (!(res && res.success)) {
+            showToast(t('toast.error', '错误'), (res && res.error) ? res.error : t('common.save_failed', '保存失败'), 'error');
+            return;
+        }
+        showToast(t('toast.success', '成功'), t('modal.model_action.config.saved', '启动参数已保存'), 'success');
+    }).catch(() => {
+        showToast(t('toast.error', '错误'), t('common.network_request_failed', '网络请求失败'), 'error');
+    }).finally(() => {
+        setModelConfigControlsDisabled(modal, false);
+    });
+}
+
+function deleteModelConfigOption() {
+    const modal = getLoadModelModal();
+    if (!modal) return;
+    const modelId = getFieldString(modal, ['modelId']);
+    if (!modelId) return;
+    const name = getSelectedModelConfigName(modal);
+    if (!name) return;
+    const ok = window.confirm(t('modal.model_action.config.delete_confirm', '确认删除配置「{name}」吗？').replace('{name}', name));
+    if (!ok) return;
+    const payload = buildConfigDeletePayload(modelId, name);
+    setModelConfigControlsDisabled(modal, true);
+    fetch('/api/models/config/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    }).then(r => r.json()).then(res => {
+        if (!(res && res.success)) {
+            showToast(t('toast.error', '错误'), (res && res.error) ? res.error : t('modal.model_action.config.delete_failed', '删除配置失败'), 'error');
+            return;
+        }
+        const nextBundle = extractLaunchConfigBundleFromGetResponse(res, modelId);
+        renderModelConfigSelect(modal, nextBundle);
+        const selected = nextBundle.selectedConfig;
+        const nextConfig = nextBundle.configs[selected] || {};
+        applyLaunchConfigToModal(modal, nextConfig);
+        showToast(t('toast.success', '成功'), t('modal.model_action.config.deleted', '配置已删除'), 'success');
+    }).catch(() => {
+        showToast(t('toast.error', '错误'), t('common.network_request_failed', '网络请求失败'), 'error');
+    }).finally(() => {
+        setModelConfigControlsDisabled(modal, false);
+    });
 }
 
 function parseBooleanLike(v, fallback = false) {
@@ -709,42 +921,16 @@ function loadModel(modelId, modelName, mode = 'load') {
 
     fetch(`/api/models/config/get?modelId=${encodeURIComponent(modelId)}`)
         .then(r => r.json()).then(data => {
-            const config = extractLaunchConfigFromGetResponse(data, modelId);
-            if (config && typeof config === 'object') {
-                const cmdStr = config.cmd === null || config.cmd === undefined ? '' : String(config.cmd);
-                let applied = false;
-                let attempts = 0;
-                const maxAttempts = 60;
-                const tryApply = () => {
-                    if (applied) return;
-                    attempts++;
-                    const cfgList = getParamConfigListSafe();
-                    const dyn = findById(modal, 'dynamicParamsContainer');
-                    const hasToggle = !!(dyn && dyn.querySelector && dyn.querySelector('input[type="checkbox"][id^="param_enable_"]'));
-                    const ready = cfgList && cfgList.length && hasToggle && findById(modal, 'extraParams');
-                    if (ready) {
-                        applied = true;
-                        applyCmdToDynamicFields(modal, cmdStr);
-                        if (config.extraParams !== undefined && config.extraParams !== null && String(config.extraParams).trim()) {
-                            setFieldValue(modal, ['extraParams'], String(config.extraParams));
-                        } else if (config.extraParams !== undefined) {
-                            setFieldValue(modal, ['extraParams'], config.extraParams || '');
-                        }
-                        return;
-                    }
-                    if (attempts >= maxAttempts) return;
-                    setTimeout(tryApply, 60);
-                };
-                tryApply();
-
-                const enableVisionEl = findField(modal, 'enableVision');
-                if (enableVisionEl && 'checked' in enableVisionEl) {
-                    enableVisionEl.checked = config.enableVision !== undefined ? !!config.enableVision : true;
-                }
-                window.__loadModelSelectedDevices = normalizeDeviceSelection(config.device);
-                window.__loadModelMainGpu = normalizeMainGpu(config.mg);
-                window.__loadModelSelectionFromConfig = true;
+            const bundle = extractLaunchConfigBundleFromGetResponse(data, modelId);
+            renderModelConfigSelect(modal, bundle);
+            const configSelect = findById(modal, 'modelConfigSelect');
+            if (configSelect && !configSelect.__modelConfigChangeBound) {
+                configSelect.__modelConfigChangeBound = true;
+                configSelect.addEventListener('change', onModelConfigSelectionChange);
             }
+            const selected = bundle.selectedConfig;
+            const config = bundle.configs[selected] || {};
+            applyLaunchConfigToModal(modal, config);
 
             fetch('/api/llamacpp/list').then(r => r.json()).then(listData => {
                 const select = findById(modal, 'llamaBinPathSelect') || findFieldByName(modal, 'llamaBinPathSelect');
@@ -911,23 +1097,18 @@ function submitModelAction() {
     }
 
     let payload = null;
+    let configPayload = null;
     let modelIdForUi = getFieldString(modal, ['modelId']);
     if (mode === 'config') {
         const base = buildLoadModelPayload(modal);
         modelIdForUi = base && base.modelId ? base.modelId : modelIdForUi;
-        const cfg = {
-            llamaBinPath: base && base.llamaBinPathSelect ? base.llamaBinPathSelect : '',
-            mg: base && base.mg !== undefined ? base.mg : -1,
-            cmd: base && base.cmd ? base.cmd : '',
-            extraParams: base && base.extraParams ? base.extraParams : '',
-            enableVision: base && base.enableVision !== undefined ? !!base.enableVision : true,
-            device: base && Array.isArray(base.device) ? base.device : ['All']
-        };
-        payload = {};
-        payload[modelIdForUi] = cfg;
+        const configName = getSelectedModelConfigName(modal);
+        payload = buildConfigSetPayload(modelIdForUi, configName, buildPersistableLaunchConfig(modal));
     } else {
         payload = buildLoadModelPayload(modal);
         modelIdForUi = payload && payload.modelId ? payload.modelId : modelIdForUi;
+        const configName = getSelectedModelConfigName(modal);
+        configPayload = buildConfigSetPayload(modelIdForUi, configName, buildPersistableLaunchConfig(modal));
     }
 
     const submitBtn = findById(modal, 'modelActionSubmitBtn')
@@ -972,12 +1153,29 @@ function submitModelAction() {
             : `<i class="fas fa-spinner fa-spin"></i> ${t('common.processing', '处理中...')}`;
     }
 
-    const url = mode === 'config' ? '/api/models/config/set' : '/api/models/load';
-    fetch(url, {
+    const saveConfigRequest = () => fetch('/api/models/config/set', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(mode === 'config' ? payload : configPayload)
+    }).then(r => r.json());
+
+    const doLoadRequest = () => fetch('/api/models/load', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
-    }).then(r => r.json()).then(res => {
+    }).then(r => r.json());
+
+    // 关键注释：启动模型前先落盘当前选中配置，保证“配置切换”所选项始终最新
+    const requestChain = mode === 'config'
+        ? saveConfigRequest()
+        : saveConfigRequest().then(cfgRes => {
+            if (!cfgRes || !cfgRes.success) {
+                return Promise.reject(new Error((cfgRes && cfgRes.error) ? cfgRes.error : t('common.save_failed', '保存失败')));
+            }
+            return doLoadRequest();
+        });
+
+    requestChain.then(res => {
         if (res.success) {
             if (mode === 'config') {
                 showToast(t('toast.success', '成功'), t('modal.model_action.config.saved', '启动参数已保存'), 'success');
@@ -1002,8 +1200,9 @@ function submitModelAction() {
                 applyModelActionSubmitButtonState(modal, mode);
             }
         }
-    }).catch(() => {
-        showToast(t('toast.error', '错误'), t('common.network_request_failed', '网络请求失败'), 'error');
+    }).catch((err) => {
+        const msg = err && err.message ? err.message : t('common.network_request_failed', '网络请求失败');
+        showToast(t('toast.error', '错误'), msg, 'error');
         if (submitBtn) {
             submitBtn.disabled = false;
             applyModelActionSubmitButtonState(modal, mode);
@@ -1021,16 +1220,8 @@ function saveModelConfigAction() {
         showToast(t('toast.error', '错误'), t('modal.model_action.missing_model_id', '缺少必需的modelId参数'), 'error');
         return;
     }
-    const cfg = {
-        llamaBinPath: base && base.llamaBinPathSelect ? base.llamaBinPathSelect : '',
-        mg: base && base.mg !== undefined ? base.mg : -1,
-        cmd: base && base.cmd ? base.cmd : '',
-        extraParams: base && base.extraParams ? base.extraParams : '',
-        enableVision: base && base.enableVision !== undefined ? !!base.enableVision : true,
-        device: base && Array.isArray(base.device) ? base.device : ['All']
-    };
-    const payload = {};
-    payload[modelIdForUi] = cfg;
+    const configName = getSelectedModelConfigName(modal);
+    const payload = buildConfigSetPayload(modelIdForUi, configName, buildPersistableLaunchConfig(modal));
 
     const saveBtn = findById(modal, 'modelActionSaveBtn');
     const submitBtn = findById(modal, 'modelActionSubmitBtn');

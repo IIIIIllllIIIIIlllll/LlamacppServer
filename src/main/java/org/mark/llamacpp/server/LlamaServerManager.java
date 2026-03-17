@@ -1199,16 +1199,16 @@ public class LlamaServerManager {
 		if (device != null && !device.isEmpty()) {
 			if (device.size() == 1) {
 				if (!"All".equals(device.get(0))) {
-					sb.append(" -sm none -dev ");
+					sb.append(" -sm none --device ");
 					sb.append(ParamTool.quoteIfNeeded(device.get(0)));
 				}
 			} else {
-				sb.append(" -dev ");
+				sb.append(" --device ");
 				sb.append(ParamTool.quoteIfNeeded(String.join(",", device)));
 			}
-			if(mg >= 0) {
-				sb.append(" -mg ");
-				sb.append(mg != null ? String.valueOf(mg) : "0");	
+			if(mg != null && mg >= 0) {
+				sb.append(" --main-gpu ");
+				sb.append(String.valueOf(mg));	
 			}
 		}
 
@@ -1623,7 +1623,7 @@ public class LlamaServerManager {
 	 * @return
 	 */
 	public String handleFitParam(String llamaBinPath, String modelId, boolean enableVision, List<String> cmd) {
-		String[] keysParam = {"--ctx-size", "--flash-attn", "--batch-size", "--ubatch-size", "--parallel", "--kv-unified", "--cache-type-k", "--cache-type-v"};
+		String[] keysParam = {"--ctx-size", "--flash-attn", "--batch-size", "--ubatch-size", "--parallel", "--kv-unified", "--cache-type-k", "--cache-type-v", "--device", "--main-gpu"};
 		Map<String, String> cmdMap = new HashMap<>();
 		for(int i = 0; i < cmd.size(); i++) {
 			String param = cmd.get(i);
@@ -1662,7 +1662,7 @@ public class LlamaServerManager {
 //			String mmprojFile = model.getPath() + "/" + model.getMmproj().getFileName();
 //			command += ParamTool.quoteIfNeeded(mmprojFile);
 //		}
-		
+		System.err.println(command);
 		// 执行命令
 		CommandLineRunner.CommandResult result = CommandLineRunner.execute(command, 30);
 		String output = result.getError();

@@ -605,6 +605,15 @@
                                 <input type="text" class="form-control" id="modelId" name="modelId" readonly style="background-color: #f3f4f6; display: none;">
                                 <input type="text" class="form-control" id="modelName" name="modelName" readonly style="background-color: #f3f4f6;">
                             </div>
+                            <div class="form-group">
+                                <label class="form-label" for="modelConfigSelect" data-i18n="modal.model_action.config.switch">配置切换</label>
+                                <div style="display: flex; gap: 8px; align-items: center;">
+                                    <select class="form-control" id="modelConfigSelect" name="modelConfigSelect" style="flex: 1;"></select>
+                                    <button class="btn btn-secondary" type="button" id="addModelConfigBtn" onclick="addModelConfigOption()" data-i18n="modal.model_action.config.add">新增配置</button>
+                                    <button class="btn btn-danger" type="button" id="deleteModelConfigBtn" onclick="deleteModelConfigOption()" data-i18n="modal.model_action.config.delete">删除配置</button>
+                                </div>
+                                <small class="form-text" data-i18n="modal.model_action.config.hint">选择或新增模型配置，启动模型或点击保存后会自动保存到当前配置</small>
+                            </div>
                             
                             <div class="form-group">
                                 <label class="form-label" for="llamaBinPathSelect" data-i18n="modal.model_action.llamacpp_version">modal.model_action.llamacpp_version</label>

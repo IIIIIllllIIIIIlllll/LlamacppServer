@@ -1110,10 +1110,10 @@ function buildCompletionPayload() {
   return {
     id: Number(state.currentCompletionId),
     title: els.titleInput.value || '',
-    prompt: lzCompressIfNeeded(els.rolePrompt.value || ''),
-    systemPrompt: lzCompressIfNeeded(els.systemPrompt.value || ''),
-    paramsJson: lzCompressIfNeeded(buildParamsJson()),
-    timingsJson: lzCompressIfNeeded(buildTimingsJson()),
+    prompt: els.rolePrompt.value || '',
+    systemPrompt: els.systemPrompt.value || '',
+    paramsJson: buildParamsJson(),
+    timingsJson: buildTimingsJson(),
     apiModel: state.apiModel,
     createdAt: Number(state.currentCreatedAt || 0),
     updatedAt: Date.now()
@@ -1425,11 +1425,11 @@ function syncMessageSequence() {
 function applyCompletionData(s) {
   const data = (s && typeof s === 'object') ? s : {};
   els.titleInput.value = data.title || '';
-  els.systemPrompt.value = lzDecompressIfNeeded(data.systemPrompt || '');
-  els.rolePrompt.value = lzDecompressIfNeeded(data.prompt || '');
+  els.systemPrompt.value = data.systemPrompt || '';
+  els.rolePrompt.value = data.prompt || '';
   state.currentCreatedAt = Number(data.createdAt || 0);
   {
-    const timingsText = lzDecompressIfNeeded(data.timingsJson || '');
+    const timingsText = data.timingsJson || '';
     let parsed = null;
     try { parsed = timingsText ? JSON.parse(timingsText) : null; } catch (e) { parsed = null; }
     if (Array.isArray(parsed)) state.timingsLog = parsed;
@@ -1437,7 +1437,7 @@ function applyCompletionData(s) {
   }
 
   let ext = {};
-  const paramsJsonText = lzDecompressIfNeeded(data.paramsJson || '');
+  const paramsJsonText = data.paramsJson || '';
   try { ext = paramsJsonText ? JSON.parse(paramsJsonText) : {}; } catch (e) { ext = {}; }
   if (ext?.model) els.modelSelect.value = ext.model;
   els.userName.value = (ext?.userName == null ? '' : String(ext.userName));

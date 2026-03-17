@@ -413,40 +413,6 @@ async function maybeUploadPendingAttachment() {
   return savedName;
 }
 
-//========================================================================================================================================
-// 压缩/解压 JSON 字符串
-
-const LZ_PREFIX = 'lz:';
-
-function lzCompressIfNeeded(text) {
-  if (text == null) return text;
-  const s = String(text);
-  if (!s) return s;
-  if (s.startsWith(LZ_PREFIX)) return s;
-  if (s.length < 256) return s;
-  try {
-    const compressed = window.LZString?.compressToEncodedURIComponent ? window.LZString.compressToEncodedURIComponent(s) : null;
-    if (!compressed) return s;
-    return LZ_PREFIX + compressed;
-  } catch (e) {
-    return s;
-  }
-}
-
-function lzDecompressIfNeeded(text) {
-  if (text == null) return text;
-  const s = String(text);
-  if (!s) return s;
-  if (!s.startsWith(LZ_PREFIX)) return s;
-  const payload = s.slice(LZ_PREFIX.length);
-  try {
-    const out = window.LZString?.decompressFromEncodedURIComponent ? window.LZString.decompressFromEncodedURIComponent(payload) : null;
-    return out == null ? s : out;
-  } catch (e) {
-    return s;
-  }
-}
-
 function formatTime(ts) {
   if (!ts) return '';
   try {
@@ -469,8 +435,7 @@ function writeCompletionBackup(completionId, snapshot) {
   if (!key) return false;
   try {
     const raw = JSON.stringify(snapshot || {});
-    const packed = lzCompressIfNeeded(raw);
-    window.localStorage.setItem(key, packed);
+    window.localStorage.setItem(key, raw);
     return true;
   } catch (e) {
     return false;
@@ -481,9 +446,7 @@ function readCompletionBackup(completionId) {
   const key = getCompletionBackupKey(completionId);
   if (!key) return null;
   try {
-    const packed = window.localStorage.getItem(key);
-    if (!packed) return null;
-    const raw = lzDecompressIfNeeded(packed);
+    const raw = window.localStorage.getItem(key);
     if (!raw) return null;
     return JSON.parse(raw);
   } catch (e) {

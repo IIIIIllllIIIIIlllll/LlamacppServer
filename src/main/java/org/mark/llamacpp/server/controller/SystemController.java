@@ -783,10 +783,15 @@ public class SystemController implements BaseController {
 				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("请求体必须为JSON对象"));
 				return;
 			}
-
 			JsonObject obj = root.getAsJsonObject();
 			String cmd = JsonUtil.getJsonString(obj, "cmd", "");
 			String extraParams = JsonUtil.getJsonString(obj, "extraParams", "");
+			// device mg
+			// 取出字符串数组：devices，其结构参考："device":["All"]
+			List<String> device = JsonUtil.getJsonStringList(obj.get("device"));
+			// 取出数字整数：mg
+			Integer mg = JsonUtil.getJsonInt(obj, "mg", null);
+			
 			if (cmd != null) cmd = cmd.trim();
 			if (extraParams != null) extraParams = extraParams.trim();
 			if ((cmd == null || cmd.isEmpty()) && (extraParams == null || extraParams.isEmpty())) {
@@ -802,10 +807,29 @@ public class SystemController implements BaseController {
 			if (llamaBinPathSelect == null || llamaBinPathSelect.trim().isEmpty()) {
 				llamaBinPathSelect = JsonUtil.getJsonString(obj, "llamaBinPath", null);
 			}
+			
+			// 加入-dev和-mg
+			if(device.size() == 1) {
+				// 只有一个设备，但是对应的是All，则不添加-dev
+				String onlyOneDevice = device.get(0);
+				if("All".equals(onlyOneDevice)) {
+					
+				}else {
+					combinedCmd += " --device " + onlyOneDevice;
+				}
+			}else {
+				combinedCmd += " --device ";
+				combinedCmd += ParamTool.quoteIfNeeded(String.join(",", device));
+			}
+			//
+			combinedCmd += " --main-gpu " + mg;
+			
 			// 预留返回值
 			Map<String, Object> data = new HashMap<>();
 			
-			// 只保留部分参数：--ctx-size --flash-attn --batch-size --ubatch-size --parallel --kv-unified --cache-type-k --cache-type-v
+			logger.info("这是是测试：" + combinedCmd);
+			
+			// 只保留部分参数：--ctx-size --flash-attn --batch-size --ubatch-size --parallel --kv-unified --cache-type-k --cache-type-v -mg -dev
 			List<String> cmdlist = ParamTool.splitCmdArgs(combinedCmd);
 			// 运行fit-param
 			String output = LlamaServerManager.getInstance().handleFitParam(llamaBinPathSelect, modelId, enableVision, cmdlist);

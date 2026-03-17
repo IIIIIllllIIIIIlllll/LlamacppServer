@@ -84,6 +84,11 @@ public class ModelInfoController implements BaseController {
 			this.handleModelConfigSetRequest(ctx, request);
 			return true;
 		}
+		// 用于删除指定配置项的API
+		if (uri.startsWith("/api/models/config/delete")) {
+			this.handleModelConfigDeleteRequest(ctx, request);
+			return true;
+		}
 		// 获取指定模型详情的API
 		if (uri.startsWith("/api/models/details")) {
 			this.handleModelDetailsRequest(ctx, request);
@@ -420,16 +425,8 @@ public class ModelInfoController implements BaseController {
 				return;
 			}
 			ConfigManager configManager = ConfigManager.getInstance();
-			// 取出指定模型的启动参数
-			Map<String, Map<String, Object>> allConfigs = configManager.loadAllLaunchConfigs();
-			Map<String, Object> launchConfig = allConfigs.get(modelId);
-			if (launchConfig == null) {
-				launchConfig = new HashMap<>();
-			}
-			// 
-			Map<String, Object> data = new HashMap<>();
-			data.put(modelId, launchConfig);
-			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
+			Map<String, Object> bundle = configManager.getModelLaunchConfigBundle(modelId);
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(bundle));
 		} catch (Exception e) {
 			logger.info("获取模型启动配置时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("获取模型启动配置失败: " + e.getMessage()));
@@ -471,11 +468,15 @@ public class ModelInfoController implements BaseController {
 					LlamaServer.sendJsonResponse(ctx, ApiResponse.error("缺少必需的modelId参数"));
 					return;
 				}
+				String configName = JsonUtil.getJsonString(obj, "configName", null);
+				boolean setSelected = obj.has("setSelected") && !obj.get("setSelected").isJsonNull() && obj.get("setSelected").getAsBoolean();
 				JsonElement cfgEl = obj.has("config") ? obj.get("config") : obj;
 				Map<String, Object> cfgMap = JsonUtil.fromJson(cfgEl, mapType);
 				if (cfgMap == null) cfgMap = new HashMap<>();
 				cfgMap.remove("modelId");
 				cfgMap.remove("config");
+				cfgMap.remove("configName");
+				cfgMap.remove("setSelected");
 				if (cfgMap.containsKey("chatTemplate")) {
 					Object v = cfgMap.get("chatTemplate");
 					String s = v == null ? "" : String.valueOf(v);
@@ -486,12 +487,13 @@ public class ModelInfoController implements BaseController {
 					}
 					cfgMap.remove("chatTemplate");
 				}
-				boolean saved = configManager.saveLaunchConfig(modelId, cfgMap);
+				// 关键注释：保存到命名配置，并在需要时切换当前选中配置
+				boolean saved = configManager.saveLaunchConfig(modelId, configName, cfgMap, setSelected);
 				if (!saved) {
 					LlamaServer.sendJsonResponse(ctx, ApiResponse.error("保存模型启动配置失败"));
 					return;
 				}
-				savedData.put(modelId, cfgMap);
+				savedData.put(modelId, configManager.getModelLaunchConfigBundle(modelId));
 				LlamaServer.sendJsonResponse(ctx, ApiResponse.success(savedData));
 				return;
 			}
@@ -514,18 +516,52 @@ public class ModelInfoController implements BaseController {
 					}
 					cfgMap.remove("chatTemplate");
 				}
-				boolean saved = configManager.saveLaunchConfig(modelId, cfgMap);
+				boolean saved = configManager.saveLaunchConfig(modelId, null, cfgMap, false);
 				if (!saved) {
 					LlamaServer.sendJsonResponse(ctx, ApiResponse.error("保存模型启动配置失败"));
 					return;
 				}
-				savedData.put(modelId, cfgMap);
+				savedData.put(modelId, configManager.getModelLaunchConfigBundle(modelId));
 			}
 
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(savedData));
 		} catch (Exception e) {
 			logger.info("设置模型启动配置时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("设置模型启动配置失败: " + e.getMessage()));
+		}
+	}
+
+	private void handleModelConfigDeleteRequest(ChannelHandlerContext ctx, FullHttpRequest request) throws RequestMethodException {
+		this.assertRequestMethod(request.method() != HttpMethod.POST, "只支持POST请求");
+		try {
+			String content = request.content().toString(CharsetUtil.UTF_8);
+			if (content == null || content.trim().isEmpty()) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("请求体为空"));
+				return;
+			}
+			JsonObject obj = JsonUtil.fromJson(content, JsonObject.class);
+			if (obj == null) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("请求体必须为JSON对象"));
+				return;
+			}
+			String modelId = JsonUtil.getJsonString(obj, "modelId", null);
+			if (modelId == null || modelId.trim().isEmpty()) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("缺少必需的modelId参数"));
+				return;
+			}
+			String configName = JsonUtil.getJsonString(obj, "configName", null);
+			ConfigManager configManager = ConfigManager.getInstance();
+			boolean deleted = configManager.deleteLaunchConfig(modelId, configName);
+			if (!deleted) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("删除模型配置失败"));
+				return;
+			}
+			// 关键注释：删除后直接返回规范化配置包，前端可立即刷新下拉与当前配置
+			Map<String, Object> bundle = configManager.getModelLaunchConfigBundle(modelId);
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(bundle));
+		} catch (Exception e) {
+			logger.info("删除模型启动配置时发生错误", e);
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("删除模型启动配置失败: " + e.getMessage()));
 		}
 	}
 	
