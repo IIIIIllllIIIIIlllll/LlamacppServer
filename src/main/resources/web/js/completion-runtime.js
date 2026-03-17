@@ -414,6 +414,8 @@ async function consumeSseStream(res, assistantMsgId) {
 }
 
 function currentParams() {
+  const rawMaxTokens = String(els.maxTokens.value || '').trim();
+  const rawTemperature = String(els.temperature.value || '').trim();
   const rawTopP = String(els.topP.value || '').trim();
   const rawMinP = String(els.minP.value || '').trim();
   const rawRepeatPenalty = String(els.repeatPenalty.value || '').trim();
@@ -425,6 +427,8 @@ function currentParams() {
     .map(s => s.trim())
     .filter(Boolean);
 
+  const max_tokens = rawMaxTokens ? Number(rawMaxTokens) : undefined;
+  const temperature = rawTemperature ? Number(rawTemperature) : undefined;
   const top_p = rawTopP ? Number(rawTopP) : undefined;
   const min_p = rawMinP ? Number(rawMinP) : undefined;
   const repeat_penalty = rawRepeatPenalty ? Number(rawRepeatPenalty) : undefined;
@@ -434,8 +438,8 @@ function currentParams() {
   const stop = stopLines.length ? stopLines : undefined;
 
   return {
-    max_tokens: Number(els.maxTokens.value || 1024),
-    temperature: Number(els.temperature.value || 0.7),
+    max_tokens: (Number.isFinite(max_tokens) ? max_tokens : undefined),
+    temperature: (Number.isFinite(temperature) ? temperature : undefined),
     top_p: (Number.isFinite(top_p) ? top_p : undefined),
     min_p: (Number.isFinite(min_p) ? min_p : undefined),
     repeat_penalty: (Number.isFinite(repeat_penalty) ? repeat_penalty : undefined),
@@ -1011,6 +1015,11 @@ async function regenerateMessage(messageId) {
       return;
     }
 
+    msg.reasoning = '';
+    msg.uiContent = '';
+    delete msg.timings;
+    state.timingsLog = (Array.isArray(state.timingsLog) ? state.timingsLog : []).filter(it => String(it?.messageId || '') !== String(msg.id));
+
     state.messages = state.messages.slice(0, idx + 1);
     rerenderAll();
     updateMessage(msg.id, '');
@@ -1436,15 +1445,17 @@ function applyCompletionData(s) {
   els.userSuffix.value = (ext?.userSuffix == null ? '' : String(ext.userSuffix));
   els.assistantPrefix.value = (ext?.assistantPrefix == null ? '' : String(ext.assistantPrefix));
   els.assistantSuffix.value = (ext?.assistantSuffix == null ? '' : String(ext.assistantSuffix));
+  els.maxTokens.value = '';
+  els.temperature.value = '';
+  els.topP.value = '';
+  els.topK.value = '';
+  els.minP.value = '';
+  els.presencePenalty.value = '';
+  els.repeatPenalty.value = '';
+  els.frequencyPenalty.value = '';
+  els.stopSequences.value = '';
   if (ext?.params?.max_tokens != null) els.maxTokens.value = String(ext.params.max_tokens);
   if (ext?.params?.temperature != null) els.temperature.value = String(ext.params.temperature);
-  els.topP.value = '0.95';
-  els.topK.value = '40';
-  els.minP.value = '0.05';
-  els.presencePenalty.value = '0';
-  els.repeatPenalty.value = '1';
-  els.frequencyPenalty.value = '0';
-  els.stopSequences.value = '';
   if (ext?.params?.top_p != null) els.topP.value = String(ext.params.top_p);
   if (ext?.params?.min_p != null) els.minP.value = String(ext.params.min_p);
   if (ext?.params?.repeat_penalty != null) els.repeatPenalty.value = String(ext.params.repeat_penalty);

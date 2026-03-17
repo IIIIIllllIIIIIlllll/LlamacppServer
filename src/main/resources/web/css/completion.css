@@ -1133,8 +1133,8 @@
     }
 
     .settings-container {
-      width: min(900px, calc(100vw - 40px));
-      height: min(680px, calc(100vh - 40px));
+      width: min(1120px, calc(100vw - 40px));
+      height: min(820px, calc(100vh - 40px));
       background: #ffffff;
       border-radius: 20px;
       box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
@@ -1216,8 +1216,8 @@
 
     .settings-tab {
       display: none;
-      padding: 32px 40px;
-      max-width: 800px;
+      padding: 32px 36px;
+      max-width: 960px;
       margin: 0 auto;
     }
 
@@ -1329,6 +1329,11 @@
       resize: vertical;
       font-size: 14px;
       line-height: 1.5;
+    }
+
+    #systemPrompt,
+    #rolePrompt {
+      min-height: 220px;
     }
     
     .code-font {
