@@ -263,7 +263,7 @@ public class BenchmarkService {
 		// 这个集合中的内容参考：Vulkan0: AMD Radeon(TM) Graphics (16253 MiB, 15440 MiB free)
 		List<String> deviceList = LlamaServerManager.getInstance().handleListDevices(llamaBinPath);
 		// 如果使用了指定的设备
-		String cmd = process.getCmd().replace("-dev", "--device");
+		String cmd = process.getCmd();
 		if(cmd.contains("--device")) {
 			Pattern pattern = Pattern.compile("--device\\s+(\\S+)");
 			Matcher matcher = pattern.matcher(cmd);
