@@ -252,6 +252,102 @@ public class ParamTool {
 	}
 	
 	
+	public static void handleThinking(JsonObject requestJson) {
+		boolean needInjection = false;
+		boolean enableValueStr = true;
+		
+		// 1. 检查传统字段 "enable_thinking"
+		if (requestJson.has("enable_thinking")) {
+			try {
+				JsonElement et = requestJson.get("enable_thinking");
+				if (et != null && !et.isJsonNull() && et.isJsonPrimitive()) {
+					if (et.getAsJsonPrimitive().isBoolean()) {
+						needInjection = true;
+						enableValueStr = et.getAsBoolean();
+					} else if (et.getAsJsonPrimitive().isString()) {
+						needInjection = true;
+						enableValueStr = Boolean.parseBoolean(et.getAsString().trim());
+					}
+				}
+			} catch (Exception ignore) {
+			}
+		}
+		// 2. 检查额外的"thinking":{"type":"disabled"}
+		if (!needInjection) {
+			if (requestJson.has("thinking")) {
+				try {
+					JsonElement thinkingEl = requestJson.get("thinking");
+					if (thinkingEl != null && !thinkingEl.isJsonNull() && thinkingEl.isJsonObject()) {
+						JsonObject thinkingObj = thinkingEl.getAsJsonObject();
+						String typeVal = "";
+						if (thinkingObj.has("type")) {
+							JsonElement typeEl = thinkingObj.get("type");
+							if (typeEl != null && !typeEl.isJsonNull() && typeEl.isJsonPrimitive()
+									&& typeEl.getAsJsonPrimitive().isString()) {
+								typeVal = typeEl.getAsString().toLowerCase().trim();
+							}
+						}
+						// 核心判断：如果 type 是 "disabled"，视为需要处理（通常映射为 enable_thinking: false）
+						if ("disabled".equals(typeVal.toLowerCase())) {
+							needInjection = true;
+							enableValueStr = false;
+						}
+					}
+				} catch (Exception ignore) {
+				}
+			}
+		}
+		// 3. 检查来自/v1/messages的参数：thinking_budget_tokens
+		if(!needInjection) {
+			if(requestJson.has("thinking_budget_tokens")) {
+				try {
+					JsonElement thinkingEl = requestJson.get("thinking_budget_tokens");
+					if (thinkingEl != null && !thinkingEl.isJsonNull() && thinkingEl.isJsonObject()) {
+						Integer thinkingObj = thinkingEl.getAsInt();
+						if(thinkingObj != null) {
+							needInjection = true;
+							if(thinkingObj > 0) {
+								enableValueStr = true;	
+							}
+						}
+					}
+				} catch (Exception ignore) {
+				}
+			}else {
+				needInjection = true;
+				enableValueStr = false;	
+			}
+		}
+		
+		if (needInjection) {
+			// 拼接一个chat_template_kwargs进去： "chat_template_kwargs" : {"enable_thinking":
+			// false},
+			// 分两种情况
+			// 没有这个模板注入，那就直接新建一个丢进去
+			JsonObject chatTemplateKwargs = null;
+			if (requestJson.has("chat_template_kwargs")) {
+				try {
+					JsonElement kwargsEl = requestJson.get("chat_template_kwargs");
+					if (kwargsEl != null && !kwargsEl.isJsonNull()) {
+						if (kwargsEl.isJsonObject()) {
+							chatTemplateKwargs = kwargsEl.getAsJsonObject();
+						} else if (kwargsEl.isJsonPrimitive() && kwargsEl.getAsJsonPrimitive().isString()) {
+							chatTemplateKwargs = JsonUtil.tryParseObject(kwargsEl.getAsString());
+						}
+					}
+				} catch (Exception ignore) {
+				}
+			}
+			if (chatTemplateKwargs == null) {
+				chatTemplateKwargs = new JsonObject();
+			}
+			chatTemplateKwargs.addProperty("enable_thinking", enableValueStr);
+			requestJson.add("chat_template_kwargs", chatTemplateKwargs);
+		}
+	}
+	
+	
+	
 	public static String readQuantization(GGUFModel model) {
 		if (model == null) {
 			return null;
