@@ -1,4 +1,6 @@
 (function() {
+    const SPEED_SAMPLE_MIN_MS = 1000;
+    const SPEED_EMA_ALPHA = 0.25;
     const isDownloadHtml = /(^|\/)download\.html$/i.test(String(window.location.pathname || ''));
 
     const state = {
@@ -371,10 +373,15 @@
         if (prevSpeed && typeof prevSpeed.atMs === 'number' && typeof prevSpeed.bytes === 'number') {
             const dtMs = nowMs - prevSpeed.atMs;
             const deltaBytes = downloadedBytesNumber - prevSpeed.bytes;
-            if (dtMs > 0 && deltaBytes >= 0) {
-                state.speedByTaskId[taskId] = { atMs: nowMs, bytes: downloadedBytesNumber, speedBps: (deltaBytes * 1000) / dtMs };
+            if (dtMs >= SPEED_SAMPLE_MIN_MS && deltaBytes >= 0) {
+                const instantSpeed = (deltaBytes * 1000) / dtMs;
+                const previousSpeed = typeof prevSpeed.speedBps === 'number' ? prevSpeed.speedBps : 0;
+                const smoothedSpeed = previousSpeed > 0
+                    ? (previousSpeed * (1 - SPEED_EMA_ALPHA)) + (instantSpeed * SPEED_EMA_ALPHA)
+                    : instantSpeed;
+                state.speedByTaskId[taskId] = { atMs: nowMs, bytes: downloadedBytesNumber, speedBps: smoothedSpeed };
             } else {
-                state.speedByTaskId[taskId] = { atMs: nowMs, bytes: downloadedBytesNumber, speedBps: prevSpeed.speedBps };
+                state.speedByTaskId[taskId] = { atMs: prevSpeed.atMs, bytes: prevSpeed.bytes, speedBps: prevSpeed.speedBps };
             }
         } else {
             state.speedByTaskId[taskId] = { atMs: nowMs, bytes: downloadedBytesNumber, speedBps: 0 };

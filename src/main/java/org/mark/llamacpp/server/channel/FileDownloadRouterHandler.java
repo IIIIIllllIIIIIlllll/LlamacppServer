@@ -2,6 +2,7 @@ package org.mark.llamacpp.server.channel;
 
 
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -13,9 +14,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Stream;
 
+import org.mark.file.downloader.DownloadTaskInfo;
+import org.mark.file.downloader.DownloadTaskManager;
+import org.mark.file.downloader.DownloadTaskStatus;
 import org.mark.llamacpp.download.struct.ModelDownloadRequest;
 import org.mark.llamacpp.server.LlamaServer;
-import org.mark.llamacpp.server.service.DownloadService;
 import org.mark.llamacpp.server.tools.JsonUtil;
 
 import io.netty.channel.ChannelHandlerContext;
@@ -31,10 +34,7 @@ import io.netty.util.ReferenceCountUtil;
  */
 public class FileDownloadRouterHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
     
-	/**
-	 * 	下载服务
-	 */
-    private static final DownloadService downloadService = DownloadService.getInstance();
+    private static final DownloadTaskManager taskManager = createTaskManager();
 
 	private static final ExecutorService async = Executors.newVirtualThreadPerTaskExecutor();
     
@@ -196,6 +196,10 @@ public class FileDownloadRouterHandler extends SimpleChannelInboundHandler<FullH
 			}
 
 			Path targetDir = modelRootDir.resolve(folderName).toAbsolutePath().normalize();
+			Path modelLeaf = modelRootDir.getFileName();
+			if (modelLeaf != null && modelLeaf.toString().equalsIgnoreCase(folderName)) {
+				targetDir = modelRootDir;
+			}
 			if (!targetDir.startsWith(modelRootDir)) {
 				LlamaServer.sendErrorResponse(ctx, HttpResponseStatus.BAD_REQUEST, "保存路径不合法");
 				return;
@@ -234,7 +238,7 @@ public class FileDownloadRouterHandler extends SimpleChannelInboundHandler<FullH
 //				if (i == 0) {
 //					fileName = sanitizeFileName(req.getName());
 //				}
-				Map<String, Object> r = downloadService.createModelDownloadTask(url, targetDir.toString(), null);
+				Map<String, Object> r = createAndStartTask(url, targetDir.toString(), null);
 				if (!Boolean.TRUE.equals(r.get("success"))) {
 					allSuccess = false;
 				}
@@ -308,7 +312,14 @@ public class FileDownloadRouterHandler extends SimpleChannelInboundHandler<FullH
 	 */
 	private void handleListDownloads(ChannelHandlerContext ctx) {
 		try {
-			var result = downloadService.getAllDownloadTasks();
+			List<DownloadTaskInfo> tasks = taskManager.listTasks();
+			List<Map<String, Object>> downloads = new ArrayList<>();
+			for (DownloadTaskInfo task : tasks) {
+				downloads.add(toTaskView(task));
+			}
+			Map<String, Object> result = new HashMap<>();
+			result.put("success", true);
+			result.put("downloads", downloads);
 			LlamaServer.sendJsonResponse(ctx, result);
 		} catch (Exception e) {
 			LlamaServer.sendErrorResponse(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, "获取下载列表失败: " + e.getMessage());
@@ -340,7 +351,7 @@ public class FileDownloadRouterHandler extends SimpleChannelInboundHandler<FullH
 				LlamaServer.sendErrorResponse(ctx, HttpResponseStatus.BAD_REQUEST, "保存路径不能为空");
 				return;
 			}
-			var result = downloadService.createDownloadTask(url, path, fileName);
+			var result = createAndStartTask(url, path, fileName);
 			LlamaServer.sendJsonResponse(ctx, result);
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -366,7 +377,11 @@ public class FileDownloadRouterHandler extends SimpleChannelInboundHandler<FullH
 				return;
 			}
 
-			var result = downloadService.pauseDownloadTask(taskId);
+			taskManager.pauseTask(taskId);
+			Map<String, Object> result = new HashMap<>();
+			result.put("success", true);
+			result.put("taskId", taskId);
+			result.put("message", "下载任务已暂停");
 			LlamaServer.sendJsonResponse(ctx, result);
 		} catch (Exception e) {
 			LlamaServer.sendErrorResponse(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, "暂停下载任务失败: " + e.getMessage());
@@ -391,7 +406,11 @@ public class FileDownloadRouterHandler extends SimpleChannelInboundHandler<FullH
 				return;
 			}
 
-			var result = downloadService.resumeDownloadTask(taskId);
+			DownloadTaskInfo task = taskManager.startTask(taskId);
+			Map<String, Object> result = new HashMap<>();
+			result.put("success", true);
+			result.put("taskId", task.getTaskId());
+			result.put("message", "下载任务已恢复");
 			LlamaServer.sendJsonResponse(ctx, result);
 		} catch (Exception e) {
 			LlamaServer.sendErrorResponse(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, "恢复下载任务失败: " + e.getMessage());
@@ -416,7 +435,17 @@ public class FileDownloadRouterHandler extends SimpleChannelInboundHandler<FullH
 				return;
 			}
 
-			var result = downloadService.deleteDownloadTask(taskId);
+			Object deleteFileObj = requestData.get("deleteFile");
+			boolean deleteLocalFile = deleteFileObj instanceof Boolean b ? b.booleanValue() : false;
+			boolean deleted = taskManager.deleteTask(taskId, deleteLocalFile);
+			Map<String, Object> result = new HashMap<>();
+			result.put("success", deleted);
+			result.put("taskId", taskId);
+			if (deleted) {
+				result.put("message", "下载任务已删除");
+			} else {
+				result.put("error", "无法删除任务，任务可能不存在");
+			}
 			LlamaServer.sendJsonResponse(ctx, result);
 		} catch (Exception e) {
 			LlamaServer.sendErrorResponse(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, "删除下载任务失败: " + e.getMessage());
@@ -429,7 +458,20 @@ public class FileDownloadRouterHandler extends SimpleChannelInboundHandler<FullH
 	 */
 	private void handleGetStats(ChannelHandlerContext ctx) {
 		try {
-			var result = downloadService.getDownloadStats();
+			List<DownloadTaskInfo> tasks = taskManager.listTasks();
+			long activeCount = tasks.stream().filter(t -> t.getStatus() == DownloadTaskStatus.RUNNING).count();
+			long pendingCount = tasks.stream().filter(t -> t.getStatus() == DownloadTaskStatus.PENDING).count();
+			long completedCount = tasks.stream().filter(t -> t.getStatus() == DownloadTaskStatus.COMPLETED).count();
+			long failedCount = tasks.stream().filter(t -> t.getStatus() == DownloadTaskStatus.FAILED).count();
+			Map<String, Object> stats = new HashMap<>();
+			stats.put("active", activeCount);
+			stats.put("pending", pendingCount);
+			stats.put("completed", completedCount);
+			stats.put("failed", failedCount);
+			stats.put("total", tasks.size());
+			Map<String, Object> result = new HashMap<>();
+			result.put("success", true);
+			result.put("stats", stats);
 			LlamaServer.sendJsonResponse(ctx, result);
 		} catch (Exception e) {
 			LlamaServer.sendErrorResponse(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, "获取下载统计信息失败: " + e.getMessage());
@@ -482,5 +524,95 @@ public class FileDownloadRouterHandler extends SimpleChannelInboundHandler<FullH
 		} catch (Exception e) {
 			LlamaServer.sendErrorResponse(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, "设置下载路径失败: " + e.getMessage());
 		}
+	}
+
+	private static DownloadTaskManager createTaskManager() {
+		try {
+			return DownloadTaskManager.createDefault(Math.max(2, Runtime.getRuntime().availableProcessors() / 2));
+		} catch (IOException e) {
+			throw new RuntimeException("初始化下载任务管理器失败", e);
+		}
+	}
+
+	private Map<String, Object> createAndStartTask(String url, String path, String fileName) {
+		Map<String, Object> result = new HashMap<>();
+		try {
+			Path targetFile = resolveTargetFile(path, fileName, url);
+			DownloadTaskInfo created = taskManager.createTask(url, targetFile, 8);
+			taskManager.startTask(created.getTaskId());
+			result.put("success", true);
+			result.put("taskId", created.getTaskId());
+			result.put("message", "下载任务创建成功");
+		} catch (Exception e) {
+			result.put("success", false);
+			result.put("error", "创建下载任务失败: " + e.getMessage());
+		}
+		return result;
+	}
+
+	private static Path resolveTargetFile(String path, String fileName, String url) {
+		Path base = Paths.get(path);
+		String selectedName = trimToNull(fileName);
+		if (selectedName == null) {
+			selectedName = inferFileName(url);
+		}
+		if (selectedName == null || selectedName.isBlank()) {
+			throw new IllegalArgumentException("无法推断文件名");
+		}
+		selectedName = selectedName.replaceAll("[<>:\"/\\\\|?*]", "_").trim();
+		if (selectedName.isEmpty()) {
+			throw new IllegalArgumentException("文件名不合法");
+		}
+		if (Files.exists(base) && !Files.isDirectory(base)) {
+			return base;
+		}
+		return base.resolve(selectedName);
+	}
+
+	private static String inferFileName(String url) {
+		try {
+			URI uri = URI.create(url);
+			String path = uri.getPath();
+			if (path == null || path.isBlank()) {
+				return null;
+			}
+			String name = Paths.get(path).getFileName().toString();
+			return trimToNull(name);
+		} catch (Exception e) {
+			return null;
+		}
+	}
+
+	private Map<String, Object> toTaskView(DownloadTaskInfo task) {
+		Map<String, Object> view = new HashMap<>();
+		Path target = Path.of(task.getTargetPath());
+		String fileName = target.getFileName() == null ? "" : target.getFileName().toString();
+		String parentPath = target.getParent() == null ? "" : target.getParent().toString();
+		view.put("taskId", task.getTaskId());
+		view.put("url", task.getSourceUrl());
+		view.put("targetPath", parentPath);
+		view.put("fileName", fileName);
+		view.put("state", mapState(task.getStatus()));
+		view.put("totalBytes", task.getTotalBytes());
+		view.put("downloadedBytes", task.getDownloadedBytes());
+		view.put("partsTotal", task.getPartsTotal());
+		view.put("partsCompleted", task.getPartsCompleted());
+		view.put("progressRatio", task.getProgressRatio());
+		view.put("createdAt", task.getCreatedAt());
+		view.put("updatedAt", task.getUpdatedAt());
+		if (task.getErrorMessage() != null) {
+			view.put("errorMessage", task.getErrorMessage());
+		}
+		return view;
+	}
+
+	private String mapState(DownloadTaskStatus status) {
+		return switch (status) {
+		case RUNNING -> "DOWNLOADING";
+		case PAUSED -> "PAUSED";
+		case COMPLETED -> "COMPLETED";
+		case FAILED -> "FAILED";
+		case PENDING -> "IDLE";
+		};
 	}
 }

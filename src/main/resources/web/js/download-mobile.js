@@ -1,4 +1,6 @@
 (function () {
+    const SPEED_SAMPLE_MIN_MS = 1000;
+    const SPEED_EMA_ALPHA = 0.25;
     const state = {
         started: false,
         downloads: [],
@@ -249,12 +251,23 @@
                 } else if (prevObj && typeof prevObj.atMs === 'number' && typeof prevObj.bytes === 'number') {
                     const dtMs = nowMs - prevObj.atMs;
                     const deltaBytes = downloadedBytes - prevObj.bytes;
-                    if (dtMs > 0 && deltaBytes >= 0) speedBps = (deltaBytes * 1000) / dtMs;
-                    else if (typeof prevObj.speedBps === 'number') speedBps = prevObj.speedBps;
+                    if (dtMs >= SPEED_SAMPLE_MIN_MS && deltaBytes >= 0) {
+                        const instantSpeed = (deltaBytes * 1000) / dtMs;
+                        const previousSpeed = typeof prevObj.speedBps === 'number' ? prevObj.speedBps : 0;
+                        speedBps = previousSpeed > 0
+                            ? (previousSpeed * (1 - SPEED_EMA_ALPHA)) + (instantSpeed * SPEED_EMA_ALPHA)
+                            : instantSpeed;
+                    } else if (typeof prevObj.speedBps === 'number') {
+                        speedBps = prevObj.speedBps;
+                    }
                 }
 
                 if (!state.speedByTaskId) state.speedByTaskId = {};
-                state.speedByTaskId[id] = { atMs: nowMs, bytes: downloadedBytes, speedBps };
+                if (prevObj && nowMs - prevObj.atMs < SPEED_SAMPLE_MIN_MS) {
+                    state.speedByTaskId[id] = { atMs: prevObj.atMs, bytes: prevObj.bytes, speedBps };
+                } else {
+                    state.speedByTaskId[id] = { atMs: nowMs, bytes: downloadedBytes, speedBps };
+                }
                 mergeUpdate(id, {
                     downloadedBytes: data.downloadedBytes,
                     totalBytes: data.totalBytes
