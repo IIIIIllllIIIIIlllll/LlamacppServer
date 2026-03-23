@@ -436,7 +436,7 @@ public class FileDownloadRouterHandler extends SimpleChannelInboundHandler<FullH
 			}
 
 			Object deleteFileObj = requestData.get("deleteFile");
-			boolean deleteLocalFile = deleteFileObj instanceof Boolean b ? b.booleanValue() : false;
+			boolean deleteLocalFile = !(deleteFileObj instanceof Boolean) || Boolean.TRUE.equals(deleteFileObj);
 			boolean deleted = taskManager.deleteTask(taskId, deleteLocalFile);
 			Map<String, Object> result = new HashMap<>();
 			result.put("success", deleted);

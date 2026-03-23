@@ -244,6 +244,8 @@ public class DownloadTaskManager implements Closeable {
 	private void deleteTaskFiles(DownloadTaskInfo task) throws IOException {
 		Path target = Path.of(task.getTargetPath());
 		Path temp = target.resolveSibling(target.getFileName() + ".downloading");
+		Path metadata = target.resolveSibling(target.getFileName() + ".downloading.meta");
+		Files.deleteIfExists(metadata);
 		Files.deleteIfExists(temp);
 		Files.deleteIfExists(target);
 	}
