@@ -22,7 +22,6 @@ import org.mark.llamacpp.server.LlamaServerManager;
 import org.mark.llamacpp.server.exception.RequestMethodException;
 import org.mark.llamacpp.server.service.ModelSamplingService;
 import org.mark.llamacpp.server.struct.ApiResponse;
-import org.mark.llamacpp.server.tools.CommandLineRunner;
 import org.mark.llamacpp.server.tools.JsonUtil;
 import org.mark.llamacpp.server.tools.ParamTool;
 import org.slf4j.Logger;
@@ -678,12 +677,6 @@ public class SystemController implements BaseController {
 			if (obj == null) {
 				return;
 			}
-			String modelId = JsonUtil.getJsonString(obj, "modelId", null);
-			modelId = modelId == null ? "" : modelId.trim();
-			if (modelId.isEmpty()) {
-				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("缺少modelId参数"));
-				return;
-			}
 			String samplingConfigName = JsonUtil.getJsonStringAny(obj, "", "samplingConfigName", "configName");
 			if (samplingConfigName.isEmpty()) {
 				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("缺少samplingConfigName参数"));
@@ -699,10 +692,9 @@ public class SystemController implements BaseController {
 					}
 				}
 			}
-			JsonObject savedSampling = ModelSamplingService.getInstance().upsertSamplingConfig(modelId, samplingConfigName, sampling);
+			JsonObject savedSampling = ModelSamplingService.getInstance().upsertSamplingConfig(samplingConfigName, sampling);
 			Map<String, Object> data = new HashMap<>();
 			data.put("saved", true);
-			data.put("modelId", modelId);
 			data.put("samplingConfigName", samplingConfigName);
 			data.put("sampling", savedSampling);
 			data.put("file", Paths.get("config", "model-sampling.json").toString());

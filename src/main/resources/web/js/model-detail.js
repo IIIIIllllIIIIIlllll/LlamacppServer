@@ -428,10 +428,9 @@ function saveModelSamplingSelection() {
 }
 
 function addModelSamplingConfig() {
-    const modelId = window.__modelDetailModelId;
     const modalId = 'modelDetailModal';
     const select = document.getElementById(modalId + 'SamplingConfigSelect');
-    if (!modelId || !select) return;
+    if (!select) return;
     const configName = prompt(t('modal.model_detail.sampling.new_name_prompt', '请输入新的采样配置名称'));
     const samplingConfigName = configName === null || configName === undefined ? '' : String(configName).trim();
     if (!samplingConfigName) return;
@@ -440,7 +439,7 @@ function addModelSamplingConfig() {
     fetch('/api/sys/model/sampling/setting/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ modelId, samplingConfigName, sampling })
+        body: JSON.stringify({ samplingConfigName, sampling })
     })
         .then(r => r.json())
         .then(res => {
@@ -475,10 +474,9 @@ function addModelSamplingConfig() {
 }
 
 function updateModelSamplingConfig() {
-    const modelId = window.__modelDetailModelId;
     const modalId = 'modelDetailModal';
     const select = document.getElementById(modalId + 'SamplingConfigSelect');
-    if (!modelId || !select) return;
+    if (!select) return;
     const samplingConfigName = select.value == null ? '' : String(select.value).trim();
     if (!samplingConfigName) {
         showToast(t('toast.info', '提示'), t('modal.model_detail.sampling.select_first', '请先选择一个采样配置'), 'info');
@@ -488,7 +486,7 @@ function updateModelSamplingConfig() {
     fetch('/api/sys/model/sampling/setting/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ modelId, samplingConfigName, sampling })
+        body: JSON.stringify({ samplingConfigName, sampling })
     })
         .then(r => r.json())
         .then(res => {

@@ -623,35 +623,10 @@ public class OpenAIService {
 				// 构建目标URL
 				String targetUrl = String.format("http://localhost:%d%s", port, endpoint);
 				logger.info("连接到llama.cpp进程: {}", targetUrl);
-				
-				URL url = URI.create(targetUrl).toURL();
-				connection = (HttpURLConnection) url.openConnection();
-				
-				// 保存本次请求的链接到缓存
-				synchronized (this.channelConnectionMap) {
-					this.channelConnectionMap.put(ctx, connection);
-				}
-				
-				// 设置请求方法
-				connection.setRequestMethod(method.name());
-				
-				// 设置必要的请求头
-				for (Map.Entry<String, String> entry : headers.entrySet()) {
-					// 跳过一些可能导致问题的头
-					if (!entry.getKey().equalsIgnoreCase("Connection") &&
-						!entry.getKey().equalsIgnoreCase("Content-Length") &&
-						!entry.getKey().equalsIgnoreCase("Transfer-Encoding")) {
-						connection.setRequestProperty(entry.getKey(), entry.getValue());
-					}
-				}
-				
-				// 设置连接和读取超时
-				connection.setConnectTimeout(36000 * 1000);
-				connection.setReadTimeout(36000 * 1000);
+				connection = this.openTrackedConnection(ctx, targetUrl, method, headers, false);
 				
 				// 对于POST请求，设置请求体
 				if (method == HttpMethod.POST && requestBody != null && !requestBody.isEmpty()) {
-					connection.setDoOutput(true);
 					try (OutputStream os = connection.getOutputStream()) {
 						byte[] input = requestBody.getBytes(StandardCharsets.UTF_8);
 						os.write(input, 0, input.length);
@@ -662,14 +637,7 @@ public class OpenAIService {
 				// 获取响应码
 				int responseCode = connection.getResponseCode();
 				logger.info("llama.cpp进程响应码: {}，等待时间：{}", responseCode, System.currentTimeMillis() - t);
-				
-				if (isStream) {
-					// 处理流式响应
-					this.handleStreamResponse(ctx, connection, responseCode, modelName);
-				} else {
-					// 处理非流式响应
-					this.handleNonStreamResponse(ctx, connection, responseCode);
-				}
+				this.handleProxyResponse(ctx, connection, responseCode, isStream, modelName);
 			} catch (Exception e) {
 				logger.info("转发请求到llama.cpp进程时发生错误", e);
 				// 检查是否是客户端断开连接导致的异常
@@ -678,16 +646,59 @@ public class OpenAIService {
 				}
 				this.sendOpenAIErrorResponseWithCleanup(ctx, 500, null, e.getMessage(), null);
 			} finally {
-				// 关闭连接
-				if (connection != null) {
-					connection.disconnect();
-				}
-				// 清理 
-				synchronized (this.channelConnectionMap) {
-					this.channelConnectionMap.remove(ctx);
-				}
+				this.cleanupTrackedConnection(ctx, connection);
 			}
 		});
+	}
+
+	public HttpURLConnection openTrackedConnection(ChannelHandlerContext ctx, String targetUrl, HttpMethod method, Map<String, String> headers, boolean chunkedStreaming) throws IOException {
+		URL url = URI.create(targetUrl).toURL();
+		HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+
+		synchronized (this.channelConnectionMap) {
+			this.channelConnectionMap.put(ctx, connection);
+		}
+
+		connection.setRequestMethod(method.name());
+		for (Map.Entry<String, String> entry : headers.entrySet()) {
+			if (!entry.getKey().equalsIgnoreCase("Connection") &&
+				!entry.getKey().equalsIgnoreCase("Content-Length") &&
+				!entry.getKey().equalsIgnoreCase("Transfer-Encoding")) {
+				connection.setRequestProperty(entry.getKey(), entry.getValue());
+			}
+		}
+		connection.setConnectTimeout(36000 * 1000);
+		connection.setReadTimeout(36000 * 1000);
+		if (method == HttpMethod.POST) {
+			connection.setDoOutput(true);
+			if (chunkedStreaming) {
+				connection.setChunkedStreamingMode(8192);
+			}
+		}
+		return connection;
+	}
+
+	public void handleProxyResponse(ChannelHandlerContext ctx, HttpURLConnection connection, int responseCode, boolean isStream, String modelName) throws IOException {
+		if (isStream) {
+			this.handleStreamResponse(ctx, connection, responseCode, modelName);
+			return;
+		}
+		this.handleNonStreamResponse(ctx, connection, responseCode);
+	}
+
+	public void cleanupTrackedConnection(ChannelHandlerContext ctx, HttpURLConnection connection) {
+		if (connection != null) {
+			connection.disconnect();
+		}
+		synchronized (this.channelConnectionMap) {
+			HttpURLConnection mapped = this.channelConnectionMap.remove(ctx);
+			if (mapped != null && mapped != connection) {
+				try {
+					mapped.disconnect();
+				} catch (Exception e) {
+				}
+			}
+		}
 	}
 	
 	/**
@@ -961,7 +972,7 @@ public class OpenAIService {
 	 * @param message
 	 * @param param
 	 */
-	private void sendOpenAIErrorResponseWithCleanup(ChannelHandlerContext ctx, int httpStatus, String openAiErrorCode, String message, String param) {
+	public void sendOpenAIErrorResponseWithCleanup(ChannelHandlerContext ctx, int httpStatus, String openAiErrorCode, String message, String param) {
 		String type = "invalid_request_error";
 		// 通过code判断错误类型
 		if(httpStatus == 401) {

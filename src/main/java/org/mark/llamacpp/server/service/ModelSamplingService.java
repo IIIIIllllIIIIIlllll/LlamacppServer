@@ -81,6 +81,19 @@ public class ModelSamplingService {
 		}
 		injectSampling(requestJson, sampling);
 	}
+
+	public JsonObject getOpenAISampling(String modelId) {
+		if (modelId == null) {
+			return null;
+		}
+		String safeModelId = modelId.trim();
+		if (safeModelId.isEmpty()) {
+			return null;
+		}
+		reloadCaches(false);
+		JsonObject sampling = samplingConfigByModel.get(safeModelId);
+		return sampling == null ? null : sampling.deepCopy();
+	}
 	
 	public Map<String, Object> listSamplingSettings() {
 		Map<String, Object> data = new HashMap<>();
@@ -98,12 +111,8 @@ public class ModelSamplingService {
 		return data;
 	}
 	
-	public JsonObject upsertSamplingConfig(String modelId, String configName, JsonObject samplingConfig) {
-		String safeModelId = modelId == null ? "" : modelId.trim();
+	public JsonObject upsertSamplingConfig(String configName, JsonObject samplingConfig) {
 		String safeConfigName = configName == null ? "" : configName.trim();
-		if (safeModelId.isEmpty()) {
-			throw new IllegalArgumentException("缺少modelId参数");
-		}
 		if (safeConfigName.isEmpty()) {
 			throw new IllegalArgumentException("缺少samplingConfigName参数");
 		}
@@ -111,15 +120,8 @@ public class ModelSamplingService {
 		JsonObject normalizedSampling = extractOpenAISampling(in);
 		synchronized (reloadLock) {
 			JsonObject root = readSamplingRoot();
-			JsonObject modelEntry = root.has(safeModelId) && root.get(safeModelId).isJsonObject()
-					? root.getAsJsonObject(safeModelId)
-					: new JsonObject();
-			JsonObject configs = modelEntry.has("configs") && modelEntry.get("configs").isJsonObject()
-					? modelEntry.getAsJsonObject("configs")
-					: new JsonObject();
+			JsonObject configs = getSharedConfigs(root, true);
 			configs.add(safeConfigName, normalizedSampling);
-			modelEntry.add("configs", configs);
-			root.add(safeModelId, modelEntry);
 			writeSamplingRoot(root);
 		}
 		reloadCaches(true);
@@ -135,32 +137,13 @@ public class ModelSamplingService {
 		int removedBindingCount = 0;
 		synchronized (reloadLock) {
 			JsonObject root = readSamplingRoot();
-			List<String> removeModelIds = new ArrayList<>();
-			for (Map.Entry<String, JsonElement> modelItem : root.entrySet()) {
-				String modelId = modelItem.getKey();
-				JsonElement modelEl = modelItem.getValue();
-				if (modelEl == null || !modelEl.isJsonObject()) {
-					continue;
-				}
-				JsonObject modelEntry = modelEl.getAsJsonObject();
-				if (!modelEntry.has("configs") || !modelEntry.get("configs").isJsonObject()) {
-					continue;
-				}
-				JsonObject configs = modelEntry.getAsJsonObject("configs");
-				if (!configs.has(safeConfigName)) {
-					continue;
-				}
-				configs.remove(safeConfigName);
+			JsonObject sharedConfigs = getSharedConfigs(root, false);
+			if (sharedConfigs != null && sharedConfigs.has(safeConfigName)) {
+				sharedConfigs.remove(safeConfigName);
 				removedConfigCount++;
-				if (configs.size() == 0) {
-					modelEntry.remove("configs");
+				if (sharedConfigs.size() == 0) {
+					root.remove("configs");
 				}
-				if (modelEntry.size() == 0) {
-					removeModelIds.add(modelId);
-				}
-			}
-			for (String modelId : removeModelIds) {
-				root.remove(modelId);
 			}
 			writeSamplingRoot(root);
 			Map<String, String> selectedMap = loadSelectedSamplingMap();
@@ -211,33 +194,8 @@ public class ModelSamplingService {
 			if (launchRoot == null || launchRoot.size() == 0) {
 				return out;
 			}
-			for (Map.Entry<String, JsonElement> modelItem : launchRoot.entrySet()) {
-				JsonElement modelEl = modelItem.getValue();
-				if (modelEl == null || !modelEl.isJsonObject()) {
-					continue;
-				}
-				JsonObject modelEntry = modelEl.getAsJsonObject();
-				JsonElement configsEl = modelEntry.get("configs");
-				if (configsEl == null || !configsEl.isJsonObject()) {
-					continue;
-				}
-				JsonObject configs = configsEl.getAsJsonObject();
-				for (Map.Entry<String, JsonElement> cfgItem : configs.entrySet()) {
-					String configName = cfgItem.getKey() == null ? "" : cfgItem.getKey().trim();
-					if (configName.isEmpty()) {
-						continue;
-					}
-					JsonElement cfgEl = cfgItem.getValue();
-					if (cfgEl == null || !cfgEl.isJsonObject()) {
-						continue;
-					}
-					JsonObject sampling = extractOpenAISampling(cfgEl.getAsJsonObject());
-					JsonObject exists = out.get(configName);
-					if (exists == null || exists.size() == 0 || sampling.size() > 0) {
-						out.put(configName, sampling);
-					}
-				}
-			}
+			JsonObject sharedConfigs = getSharedConfigs(launchRoot, false);
+			mergeConfigs(out, sharedConfigs);
 		} catch (Exception e) {
 			logger.info("读取全部采样配置失败: {}", e.getMessage());
 		}
@@ -351,29 +309,63 @@ public class ModelSamplingService {
 			if (launchRoot == null || launchRoot.size() == 0) {
 				return out;
 			}
+			JsonObject sharedConfigs = getSharedConfigs(launchRoot, false);
 			for (Map.Entry<String, String> item : selectedMap.entrySet()) {
 				String modelId = item.getKey();
 				String configName = item.getValue();
 				if (modelId == null || configName == null) {
 					continue;
 				}
-				JsonObject modelEntry = launchRoot.has(modelId) && launchRoot.get(modelId).isJsonObject()
-						? launchRoot.getAsJsonObject(modelId)
-						: null;
-				if (modelEntry == null || !modelEntry.has("configs") || !modelEntry.get("configs").isJsonObject()) {
+				JsonObject configObj = readConfig(sharedConfigs, configName);
+				if (configObj == null) {
 					continue;
 				}
-				JsonObject configs = modelEntry.getAsJsonObject("configs");
-				if (!configs.has(configName) || !configs.get(configName).isJsonObject()) {
-					continue;
-				}
-				JsonObject configObj = configs.getAsJsonObject(configName);
 				out.put(modelId, extractOpenAISampling(configObj));
 			}
 		} catch (Exception e) {
 			logger.info("构建模型采样配置缓存失败: {}", e.getMessage());
 		}
 		return out;
+	}
+
+	private JsonObject getSharedConfigs(JsonObject root, boolean createIfMissing) {
+		if (root == null) {
+			return null;
+		}
+		if (root.has("configs") && root.get("configs").isJsonObject()) {
+			return root.getAsJsonObject("configs");
+		}
+		if (!createIfMissing) {
+			return null;
+		}
+		JsonObject configs = new JsonObject();
+		root.add("configs", configs);
+		return configs;
+	}
+
+	private void mergeConfigs(Map<String, JsonObject> out, JsonObject configs) {
+		if (out == null || configs == null) {
+			return;
+		}
+		for (Map.Entry<String, JsonElement> cfgItem : configs.entrySet()) {
+			String configName = cfgItem.getKey() == null ? "" : cfgItem.getKey().trim();
+			if (configName.isEmpty()) {
+				continue;
+			}
+			JsonElement cfgEl = cfgItem.getValue();
+			if (cfgEl == null || !cfgEl.isJsonObject()) {
+				continue;
+			}
+			JsonObject sampling = extractOpenAISampling(cfgEl.getAsJsonObject());
+			out.put(configName, sampling);
+		}
+	}
+
+	private JsonObject readConfig(JsonObject configs, String configName) {
+		if (configs == null || configName == null || !configs.has(configName) || !configs.get(configName).isJsonObject()) {
+			return null;
+		}
+		return configs.getAsJsonObject(configName);
 	}
 	
 	private JsonObject extractOpenAISampling(JsonObject configObj) {

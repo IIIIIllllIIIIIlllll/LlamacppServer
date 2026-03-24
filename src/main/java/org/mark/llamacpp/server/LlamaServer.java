@@ -20,6 +20,7 @@ import org.mark.llamacpp.server.channel.AnthropicRouterHandler;
 import org.mark.llamacpp.server.channel.BasicRouterHandler;
 import org.mark.llamacpp.server.channel.CompletionRouterHandler;
 import org.mark.llamacpp.server.channel.FileDownloadRouterHandler;
+import org.mark.llamacpp.server.channel.OpenAIChatStreamingHandler;
 import org.mark.llamacpp.server.channel.OpenAIRouterHandler;
 import org.mark.llamacpp.server.io.ConsoleBroadcastOutputStream;
 import org.mark.llamacpp.server.mcp.McpClientService;
@@ -232,6 +233,8 @@ public class LlamaServer {
 	
 	private static volatile int lmstudioCompatPort = 1234;
 
+	private static volatile boolean chatStreamingEnabled = true;
+
 	//##############################################################################################################################
 	
 	public static final String SLOTS_SAVE_KEYWORD = "~SLOTSAVE";
@@ -352,6 +355,12 @@ public class LlamaServer {
 						}
 					}
 				}
+				if (compat.has("chatStreaming")) {
+					JsonObject chatStreaming = compat.getAsJsonObject("chatStreaming");
+					if (chatStreaming != null && chatStreaming.has("enabled")) {
+						chatStreamingEnabled = chatStreaming.get("enabled").getAsBoolean();
+					}
+				}
 			}
 		}
 		
@@ -403,6 +412,10 @@ public class LlamaServer {
 				lmstudio.addProperty("enabled", lmstudioCompatEnabled);
 				lmstudio.addProperty("port", lmstudioCompatPort);
 				compat.add("lmstudio", lmstudio);
+
+				JsonObject chatStreaming = new JsonObject();
+				chatStreaming.addProperty("enabled", chatStreamingEnabled);
+				compat.add("chatStreaming", chatStreaming);
 				
 				root.add("compat", compat);
 				
@@ -529,6 +542,10 @@ public class LlamaServer {
     public static int getLmstudioCompatPort() {
     	return lmstudioCompatPort;
     }
+
+    public static boolean isChatStreamingEnabled() {
+    	return chatStreamingEnabled;
+    }
     
     public static boolean isLogRequestUrlEnabled() {
     	return logRequestUrl;
@@ -653,6 +670,7 @@ public class LlamaServer {
                         protected void initChannel(SocketChannel ch) throws Exception {
                             ch.pipeline()
                                     .addLast(new HttpServerCodec())
+                                    .addLast(new OpenAIChatStreamingHandler())
                                     .addLast(new HttpObjectAggregator(MAX_HTTP_CONTENT_LENGTH))
                                     .addLast(new ChunkedWriteHandler())
                                     .addLast(new WebSocketServerProtocolHandler(WEBSOCKET_PATH, null, true, Integer.MAX_VALUE))
