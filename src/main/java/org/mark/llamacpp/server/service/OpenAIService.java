@@ -272,7 +272,7 @@ public class OpenAIService {
 	}
 	
 	/**
-	 * 	处理 OpenAI 文本补全请求
+	 * 	处理 OpenAI 文本补全请求：/v1/completions
 	 * @param ctx
 	 * @param request
 	 */
@@ -306,6 +306,7 @@ public class OpenAIService {
 					this.sendOpenAIErrorResponseWithCleanup(ctx, 404, null, "No models are currently loaded", null);
 					return;
 				}
+				requestJson.addProperty("model", modelName);
 			} else {
 				modelName = requestJson.get("model").getAsString();
 			}
@@ -321,6 +322,8 @@ public class OpenAIService {
 				this.sendOpenAIErrorResponseWithCleanup(ctx, 404, null, "Model not found: " + modelName, "model");
 				return;
 			}
+			ModelSamplingService service = ModelSamplingService.getInstance();
+			service.handleOpenAI(requestJson);
 			
 			// 在这加入特殊处理，判断是否存在特殊字符。
 			//String body = LlamaCommandParser.filterCompletion(ctx, modelName, requestJson);
