@@ -33,12 +33,12 @@ public class ParamController implements BaseController {
 	public boolean handleRequest(String uri, ChannelHandlerContext ctx, FullHttpRequest request)
 			throws RequestMethodException {
 		
-		// 列出可用的参数API
+		// 列出Server可用的参数API
 		if (uri.startsWith("/api/models/param/server/list")) {
 			this.handleParamServerListRequest(ctx, request);
 			return true;
 		}
-		// 列出可用的参数API
+		// 列出benchmark可用参数的API
 		if (uri.startsWith("/api/models/param/benchmark/list")) {
 			this.handleParamBenchmarkListRequest(ctx, request);
 			return true;
