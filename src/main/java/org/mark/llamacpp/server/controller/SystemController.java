@@ -86,6 +86,11 @@ public class SystemController implements BaseController {
 			this.handleCompatStatusRequest(ctx, request);
 			return true;
 		}
+		// 获取构建版本信息
+		if (uri.startsWith("/api/sys/version")) {
+			this.handleVersionInfoRequest(ctx, request);
+			return true;
+		}
 		// 保存系统设置
 		if (uri.startsWith("/api/sys/setting")) {
 			this.handleSysSettingRequest(ctx, request);
@@ -334,6 +339,24 @@ public class SystemController implements BaseController {
 		} catch (Exception e) {
 			logger.info("获取兼容服务状态时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("获取兼容服务状态失败: " + e.getMessage()));
+		}
+	}
+
+	private void handleVersionInfoRequest(ChannelHandlerContext ctx, FullHttpRequest request) throws RequestMethodException {
+		if (request.method() == HttpMethod.OPTIONS) {
+			LlamaServer.sendCorsResponse(ctx);
+			return;
+		}
+		this.assertRequestMethod(request.method() != HttpMethod.GET, "只支持GET请求");
+		try {
+			Map<String, Object> data = new HashMap<>();
+			data.put("tag", LlamaServer.getTag());
+			data.put("version", LlamaServer.getVersion());
+			data.put("createdTime", LlamaServer.getCreatedTime());
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
+		} catch (Exception e) {
+			logger.info("获取版本信息时发生错误", e);
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("获取版本信息失败: " + e.getMessage()));
 		}
 	}
 	

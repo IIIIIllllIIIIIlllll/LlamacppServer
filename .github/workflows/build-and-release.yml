@@ -54,6 +54,49 @@ jobs:
           done
           echo "CLASSPATH=$CLASSPATH" >> $GITHUB_ENV
 
+      - name: 获取构建元信息
+        id: get_version
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            TAG=${GITHUB_REF#refs/tags/}
+            APP_VERSION=${TAG#v}
+          else
+            TAG="dev-${GITHUB_SHA::7}"
+            APP_VERSION="$TAG"
+          fi
+          VERSION="$TAG"
+          CREATED_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "app_version=$APP_VERSION" >> $GITHUB_OUTPUT
+          echo "created_time=$CREATED_TIME" >> $GITHUB_OUTPUT
+          echo "TAG=$TAG" >> $GITHUB_ENV
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "APP_VERSION=$APP_VERSION" >> $GITHUB_ENV
+          echo "CREATED_TIME=$CREATED_TIME" >> $GITHUB_ENV
+          echo "构建 Tag: $TAG"
+          echo "程序版本: $APP_VERSION"
+          echo "构建时间: $CREATED_TIME"
+
+      - name: 注入构建信息
+        run: |
+          python3 - << 'PY'
+          import os
+          from pathlib import Path
+
+          path = Path("src/main/java/org/mark/llamacpp/server/BuildInfo.java")
+          text = path.read_text(encoding="utf-8")
+          replacements = {
+              "{tag}": os.environ["TAG"],
+              "{version}": os.environ["APP_VERSION"],
+              "{createdTime}": os.environ["CREATED_TIME"],
+          }
+          for source, target in replacements.items():
+              text = text.replace(source, target)
+          path.write_text(text, encoding="utf-8")
+          print(path.read_text(encoding="utf-8"))
+          PY
+
       - name: 编译 Java 源码
         run: |
           find src/main/java -name "*.java" -print0 | xargs -0 javac \
@@ -126,18 +169,6 @@ jobs:
           if [ -f README.md ]; then
             cp README.md build/
           fi
-
-      - name: 获取版本号
-        id: get_version
-        run: |
-          if [[ $GITHUB_REF == refs/tags/* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/}
-          else
-            VERSION="latest"
-          fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "版本号: $VERSION"
 
       - name: 获取 llama.cpp Releases 列表
         run: |

@@ -151,7 +151,7 @@ public class LlamaServer {
 	 * @return
 	 */
 	public static String getTag() {
-		return "{tag}";
+		return BuildInfo.getTag();
 	}
 	
 	/**
@@ -159,7 +159,7 @@ public class LlamaServer {
 	 * @return
 	 */
 	public static String getVersion() {
-		return "{version}";
+		return BuildInfo.getVersion();
 	}
 	
 	/**
@@ -167,7 +167,7 @@ public class LlamaServer {
 	 * @return
 	 */
 	public static String getCreatedTime() {
-		return "{createdTime}";
+		return BuildInfo.getCreatedTime();
 	}
 	
 	

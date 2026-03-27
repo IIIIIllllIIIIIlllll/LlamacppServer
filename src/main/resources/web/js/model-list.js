@@ -5,6 +5,49 @@
     return fallback == null ? key : fallback;
 }
 
+function formatBuildCreatedTime(createdTime) {
+    if (!createdTime) return '';
+    const date = new Date(createdTime);
+    if (Number.isNaN(date.getTime())) return createdTime;
+    return date.toLocaleString();
+}
+
+function renderBuildInfo(buildInfo) {
+    const container = document.getElementById('appBuildInfo');
+    const versionEl = document.getElementById('appVersionText');
+    const createdTimeEl = document.getElementById('appBuildTimeText');
+    if (!container || !versionEl || !createdTimeEl) return;
+
+    const tag = buildInfo && buildInfo.tag ? String(buildInfo.tag).trim() : '';
+    const version = buildInfo && buildInfo.version ? String(buildInfo.version).trim() : '';
+    const createdTime = buildInfo && buildInfo.createdTime ? String(buildInfo.createdTime).trim() : '';
+    const displayVersion = tag || (version ? (version.startsWith('v') ? version : `v${version}`) : '--');
+
+    versionEl.textContent = displayVersion;
+    createdTimeEl.textContent = formatBuildCreatedTime(createdTime);
+
+    const titleParts = [];
+    if (tag) titleParts.push(`tag: ${tag}`);
+    if (version) titleParts.push(`version: ${version}`);
+    if (createdTime) titleParts.push(`created: ${createdTime}`);
+    container.title = titleParts.join('\n');
+}
+
+function loadBuildInfo() {
+    fetch('/api/sys/version')
+        .then(response => response.json())
+        .then(result => {
+            if (!result || !result.success) {
+                throw new Error(result && result.error ? result.error : 'load build info failed');
+            }
+            renderBuildInfo(result.data || {});
+        })
+        .catch(error => {
+            console.error('Failed to load build info:', error);
+            renderBuildInfo({});
+        });
+}
+
 function loadModels() {
     const modelsList = document.getElementById('modelsList');
     fetch('/api/models/list')

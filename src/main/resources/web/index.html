@@ -104,8 +104,10 @@
                     <i class="fas fa-external-link-alt sidebar-quick-link-ext"></i>
                 </a>
             </div>
-            <div style="font-size: 0.75rem; color: var(--text-secondary);">
-                Llama.cpp Server<br>v1.0.0
+            <div id="appBuildInfo" style="font-size: 0.75rem; color: var(--text-secondary);">
+                <div>Llama.cpp Server</div>
+                <div id="appVersionText">--</div>
+                <div id="appBuildTimeText"></div>
             </div>
         </div>
     </aside>
@@ -826,6 +828,7 @@
             initWebSocket();
             initModelSearch();
             loadParamConfig();
+            loadBuildInfo();
             updateChatCompletionLinkForDevice();
             initCompatServiceToggles();
             initSettingsForms();
