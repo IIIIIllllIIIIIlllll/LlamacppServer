@@ -1,5 +1,5 @@
 {
-  "app.title": "Llama Manager",
+  "app.title": "llama.cpp-hub",
   "page.chat.concurrency.page_title": "Concurrency Load Test · Chat",
   "page.chat.concurrency.brand.title": "Concurrency Load Test",
   "page.chat.concurrency.brand.subtitle": "Submit once, fire N OpenAI-compatible API requests concurrently",

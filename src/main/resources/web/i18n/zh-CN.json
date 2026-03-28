@@ -1,5 +1,5 @@
 {
-  "app.title": "Llama Manager",
+  "app.title": "llama.cpp-hub",
   "page.chat.concurrency.page_title": "并发压测 · Chat",
   "page.chat.concurrency.brand.title": "并发压测",
   "page.chat.concurrency.brand.subtitle": "一次提交，同时发起 N 次 OpenAI 标准 API 请求",

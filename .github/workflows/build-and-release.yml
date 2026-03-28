@@ -286,19 +286,19 @@ jobs:
           cp -r build build-linux-no-llamacpp
           cp -r jre-linux/jre build-linux-no-llamacpp/jre
           mkdir -p build-linux-no-llamacpp/llamacpp
-          make_zip "build-linux-no-llamacpp" "llama-server-${VERSION}-linux" "llama-server-${VERSION}-linux.zip"
+          make_zip "build-linux-no-llamacpp" "llama.cpp-hub-${VERSION}-linux" "llama.cpp-hub-${VERSION}-linux.zip"
 
           cp -r build build-win-no-llamacpp
           cp -r jre-win/jre build-win-no-llamacpp/jre
           mkdir -p build-win-no-llamacpp/llamacpp
-          make_zip "build-win-no-llamacpp" "llama-server-${VERSION}-windows" "llama-server-${VERSION}-windows.zip"
+          make_zip "build-win-no-llamacpp" "llama.cpp-hub-${VERSION}-windows" "llama.cpp-hub-${VERSION}-windows.zip"
 
           if [ "${UBUNTU_VULKAN_AVAILABLE:-0}" = "1" ]; then
             cp -r build build-linux-vulkan
             cp -r jre-linux/jre build-linux-vulkan/jre
             mkdir -p build-linux-vulkan/llamacpp
             cp -r ubuntu-vulkan build-linux-vulkan/llamacpp/
-            make_zip "build-linux-vulkan" "llama-server-${VERSION}-${UBUNTU_VULKAN_TAG}-linux-vulkan" "llama-server-${VERSION}-${UBUNTU_VULKAN_TAG}-linux-vulkan.zip"
+            make_zip "build-linux-vulkan" "llama.cpp-hub-${VERSION}-${UBUNTU_VULKAN_TAG}-linux-vulkan" "llama.cpp-hub-${VERSION}-${UBUNTU_VULKAN_TAG}-linux-vulkan.zip"
           fi
 
           if [ "${UBUNTU_ROCM72_AVAILABLE:-0}" = "1" ]; then
@@ -306,7 +306,7 @@ jobs:
             cp -r jre-linux/jre build-linux-rocm72/jre
             mkdir -p build-linux-rocm72/llamacpp
             cp -r ubuntu-rocm72 build-linux-rocm72/llamacpp/
-            make_zip "build-linux-rocm72" "llama-server-${VERSION}-${UBUNTU_ROCM72_TAG}-linux-rocm-7.2" "llama-server-${VERSION}-${UBUNTU_ROCM72_TAG}-linux-rocm-7.2.zip"
+            make_zip "build-linux-rocm72" "llama.cpp-hub-${VERSION}-${UBUNTU_ROCM72_TAG}-linux-rocm-7.2" "llama.cpp-hub-${VERSION}-${UBUNTU_ROCM72_TAG}-linux-rocm-7.2.zip"
           fi
 
           if [ "${WIN_CUDA12_AVAILABLE:-0}" = "1" ]; then
@@ -314,7 +314,7 @@ jobs:
             cp -r jre-win/jre build-win-cuda12/jre
             mkdir -p build-win-cuda12/llamacpp
             cp -r win-cuda12 build-win-cuda12/llamacpp/
-            make_zip "build-win-cuda12" "llama-server-${VERSION}-${WIN_CUDA12_TAG}-windows-cuda12" "llama-server-${VERSION}-${WIN_CUDA12_TAG}-windows-cuda12.zip"
+            make_zip "build-win-cuda12" "llama.cpp-hub-${VERSION}-${WIN_CUDA12_TAG}-windows-cuda12" "llama.cpp-hub-${VERSION}-${WIN_CUDA12_TAG}-windows-cuda12.zip"
           fi
 
           if [ "${WIN_CUDA13_AVAILABLE:-0}" = "1" ]; then
@@ -322,7 +322,7 @@ jobs:
             cp -r jre-win/jre build-win-cuda13/jre
             mkdir -p build-win-cuda13/llamacpp
             cp -r win-cuda13 build-win-cuda13/llamacpp/
-            make_zip "build-win-cuda13" "llama-server-${VERSION}-${WIN_CUDA13_TAG}-windows-cuda13" "llama-server-${VERSION}-${WIN_CUDA13_TAG}-windows-cuda13.zip"
+            make_zip "build-win-cuda13" "llama.cpp-hub-${VERSION}-${WIN_CUDA13_TAG}-windows-cuda13" "llama.cpp-hub-${VERSION}-${WIN_CUDA13_TAG}-windows-cuda13.zip"
           fi
 
           if [ "${WIN_VULKAN_AVAILABLE:-0}" = "1" ]; then
@@ -330,7 +330,7 @@ jobs:
             cp -r jre-win/jre build-win-vulkan/jre
             mkdir -p build-win-vulkan/llamacpp
             cp -r win-vulkan build-win-vulkan/llamacpp/
-            make_zip "build-win-vulkan" "llama-server-${VERSION}-${WIN_VULKAN_TAG}-windows-vulkan" "llama-server-${VERSION}-${WIN_VULKAN_TAG}-windows-vulkan.zip"
+            make_zip "build-win-vulkan" "llama.cpp-hub-${VERSION}-${WIN_VULKAN_TAG}-windows-vulkan" "llama.cpp-hub-${VERSION}-${WIN_VULKAN_TAG}-windows-vulkan.zip"
           fi
 
           if [ "${WIN_HIP_AVAILABLE:-0}" = "1" ]; then
@@ -338,7 +338,7 @@ jobs:
             cp -r jre-win/jre build-win-hip/jre
             mkdir -p build-win-hip/llamacpp
             cp -r win-hip build-win-hip/llamacpp/
-            make_zip "build-win-hip" "llama-server-${VERSION}-${WIN_HIP_TAG}-windows-hip" "llama-server-${VERSION}-${WIN_HIP_TAG}-windows-hip.zip"
+            make_zip "build-win-hip" "llama.cpp-hub-${VERSION}-${WIN_HIP_TAG}-windows-hip" "llama.cpp-hub-${VERSION}-${WIN_HIP_TAG}-windows-hip.zip"
           fi
 
 
@@ -490,7 +490,7 @@ jobs:
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
         with:
-          name: llama-server-${{ steps.get_version.outputs.version }}
+          name: llama.cpp-hub-${{ steps.get_version.outputs.version }}
           path: |
             dist/*.zip
             release_notes.md
