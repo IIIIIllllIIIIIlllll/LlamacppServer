@@ -235,16 +235,87 @@ function parseCommandArgs(command) {
     return args;
 }
 
+function normalizeModelSamplingStringArray(value, options = {}) {
+    const mode = options && options.mode ? String(options.mode) : 'csv';
+    const allowDuplicates = !!(options && options.allowDuplicates);
+    const out = [];
+    const pushValue = (raw) => {
+        if (raw === null || raw === undefined) return;
+        const text = String(raw).trim();
+        if (!text) return;
+        if (!allowDuplicates && out.indexOf(text) > -1) return;
+        out.push(text);
+    };
+    const splitText = (rawText) => {
+        const text = rawText === null || rawText === undefined ? '' : String(rawText);
+        if (!text.trim()) return;
+        if (mode === 'json-array') {
+            try {
+                const parsed = JSON.parse(text);
+                if (Array.isArray(parsed)) {
+                    for (let i = 0; i < parsed.length; i++) pushValue(parsed[i]);
+                    return;
+                }
+            } catch (e) {
+            }
+            const lines = text.split(/\r?\n/);
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (!line) continue;
+                try {
+                    pushValue(JSON.parse(`"${line.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`));
+                } catch (e) {
+                    pushValue(line);
+                }
+            }
+            return;
+        }
+        const parts = text.split(/[;\n,]+/);
+        for (let i = 0; i < parts.length; i++) pushValue(parts[i]);
+    };
+    if (Array.isArray(value)) {
+        for (let i = 0; i < value.length; i++) pushValue(value[i]);
+        return out;
+    }
+    if (value && typeof value === 'object') {
+        return out;
+    }
+    splitText(value);
+    return out;
+}
+
+function getModelSamplingSamplerOptions() {
+    return [
+        { value: 'penalties', label: t('param.server.samplers.option.penalties', 'penalties') },
+        { value: 'dry', label: t('param.server.samplers.option.dry', 'dry') },
+        { value: 'top_n_sigma', label: t('param.server.samplers.option.top_n_sigma', 'top_n_sigma') },
+        { value: 'top_k', label: t('param.server.samplers.option.top_k', 'top_k') },
+        { value: 'typ_p', label: t('param.server.samplers.option.typ_p', 'typ_p') },
+        { value: 'top_p', label: t('param.server.samplers.option.top_p', 'top_p') },
+        { value: 'min_p', label: t('param.server.samplers.option.min_p', 'min_p') },
+        { value: 'xtc', label: t('param.server.samplers.option.xtc', 'xtc') },
+        { value: 'temperature', label: t('param.server.samplers.option.temperature', 'temperature') }
+    ];
+}
+
 function extractSamplingSettingsFromConfig(cfg) {
     const config = cfg && typeof cfg === 'object' ? cfg : {};
     const out = {
+        seed: null,
         temp: null,
+        samplers: [],
         topP: null,
         topK: null,
         minP: null,
+        topNSigma: null,
         presencePenalty: null,
         repeatPenalty: null,
         frequencyPenalty: null,
+        dryMultiplier: null,
+        dryBase: null,
+        dryAllowedLength: null,
+        dryPenaltyLastN: null,
+        drySequenceBreakers: [],
         enableThinking: null
     };
     const readValue = (keys) => {
@@ -256,13 +327,30 @@ function extractSamplingSettingsFromConfig(cfg) {
         }
         return null;
     };
+    const readStringArrayValue = (keys, mode, allowDuplicates) => {
+        for (let i = 0; i < keys.length; i++) {
+            const key = keys[i];
+            if (!Object.prototype.hasOwnProperty.call(config, key)) continue;
+            const items = normalizeModelSamplingStringArray(config[key], { mode, allowDuplicates });
+            if (items.length) return items;
+        }
+        return [];
+    };
+    out.seed = readValue(['seed']);
     out.temp = readValue(['temp', 'temperature']);
+    out.samplers = readStringArrayValue(['samplers'], 'csv', false);
     out.topP = readValue(['topP', 'top_p', 'top-p']);
     out.topK = readValue(['topK', 'top_k', 'top-k']);
     out.minP = readValue(['minP', 'min_p', 'min-p']);
+    out.topNSigma = readValue(['topNSigma', 'top_n_sigma', 'top-n-sigma']);
     out.presencePenalty = readValue(['presencePenalty', 'presence_penalty', 'presence-penalty']);
     out.repeatPenalty = readValue(['repeatPenalty', 'repeat_penalty', 'repeat-penalty']);
     out.frequencyPenalty = readValue(['frequencyPenalty', 'frequency_penalty', 'frequency-penalty']);
+    out.dryMultiplier = readValue(['dryMultiplier', 'dry_multiplier', 'dry-multiplier']);
+    out.dryBase = readValue(['dryBase', 'dry_base', 'dry-base']);
+    out.dryAllowedLength = readValue(['dryAllowedLength', 'dry_allowed_length', 'dry-allowed-length']);
+    out.dryPenaltyLastN = readValue(['dryPenaltyLastN', 'dry_penalty_last_n', 'dry-penalty-last-n']);
+    out.drySequenceBreakers = readStringArrayValue(['drySequenceBreakers', 'dry_sequence_breakers', 'dry-sequence-breakers'], 'json-array', true);
     const readBooleanValue = (keys) => {
         for (let i = 0; i < keys.length; i++) {
             const key = keys[i];
@@ -279,16 +367,6 @@ function extractSamplingSettingsFromConfig(cfg) {
     out.enableThinking = readBooleanValue(['enable_thinking']);
 
     const args = parseCommandArgs(config.cmd);
-    const flagMap = {
-        '--temp': 'temp',
-        '--top-p': 'topP',
-        '--top-k': 'topK',
-        '--min-p': 'minP',
-        '--presence-penalty': 'presencePenalty',
-        '--repeat-penalty': 'repeatPenalty',
-        '--frequency-penalty': 'frequencyPenalty',
-        '--enable-thinking': 'enableThinking'
-    };
     const parseBoolToken = (raw) => {
         if (raw === null || raw === undefined) return null;
         const text = String(raw).trim().toLowerCase();
@@ -306,30 +384,221 @@ function extractSamplingSettingsFromConfig(cfg) {
         if (eq > -1) {
             key = token.slice(0, eq);
             val = token.slice(eq + 1);
-        } else if (i + 1 < args.length) {
+        } else if (i + 1 < args.length && !String(args[i + 1]).startsWith('--')) {
             val = args[i + 1];
         }
-        const target = flagMap[key];
-        if (!target || out[target] !== null) continue;
-        if (target === 'enableThinking') {
-            if (eq > -1) {
-                const boolByEq = parseBoolToken(val);
-                if (boolByEq !== null) out[target] = boolByEq;
-                continue;
-            }
-            if (val !== null && val !== undefined && !String(val).startsWith('--')) {
-                const boolByNext = parseBoolToken(val);
-                if (boolByNext !== null) out[target] = boolByNext;
-                continue;
-            }
-            out[target] = true;
-            continue;
+        switch (key) {
+            case '--seed':
+                if (out.seed === null && val !== null && val !== undefined && String(val).trim() !== '') out.seed = val;
+                break;
+            case '--temp':
+                if (out.temp === null && val !== null && val !== undefined && String(val).trim() !== '') out.temp = val;
+                break;
+            case '--samplers':
+                if (!out.samplers.length && val !== null && val !== undefined && String(val).trim() !== '') {
+                    out.samplers = normalizeModelSamplingStringArray(val, { mode: 'csv', allowDuplicates: false });
+                }
+                break;
+            case '--top-p':
+                if (out.topP === null && val !== null && val !== undefined && String(val).trim() !== '') out.topP = val;
+                break;
+            case '--top-k':
+                if (out.topK === null && val !== null && val !== undefined && String(val).trim() !== '') out.topK = val;
+                break;
+            case '--min-p':
+                if (out.minP === null && val !== null && val !== undefined && String(val).trim() !== '') out.minP = val;
+                break;
+            case '--top-nsigma':
+            case '--top-n-sigma':
+                if (out.topNSigma === null && val !== null && val !== undefined && String(val).trim() !== '') out.topNSigma = val;
+                break;
+            case '--presence-penalty':
+                if (out.presencePenalty === null && val !== null && val !== undefined && String(val).trim() !== '') out.presencePenalty = val;
+                break;
+            case '--repeat-penalty':
+                if (out.repeatPenalty === null && val !== null && val !== undefined && String(val).trim() !== '') out.repeatPenalty = val;
+                break;
+            case '--frequency-penalty':
+                if (out.frequencyPenalty === null && val !== null && val !== undefined && String(val).trim() !== '') out.frequencyPenalty = val;
+                break;
+            case '--dry-multiplier':
+                if (out.dryMultiplier === null && val !== null && val !== undefined && String(val).trim() !== '') out.dryMultiplier = val;
+                break;
+            case '--dry-base':
+                if (out.dryBase === null && val !== null && val !== undefined && String(val).trim() !== '') out.dryBase = val;
+                break;
+            case '--dry-allowed-length':
+                if (out.dryAllowedLength === null && val !== null && val !== undefined && String(val).trim() !== '') out.dryAllowedLength = val;
+                break;
+            case '--dry-penalty-last-n':
+                if (out.dryPenaltyLastN === null && val !== null && val !== undefined && String(val).trim() !== '') out.dryPenaltyLastN = val;
+                break;
+            case '--dry-sequence-breaker':
+                if (val !== null && val !== undefined && String(val).trim() !== '') {
+                    out.drySequenceBreakers = normalizeModelSamplingStringArray(
+                        out.drySequenceBreakers.concat([val]),
+                        { mode: 'json-array', allowDuplicates: true }
+                    );
+                }
+                break;
+            case '--enable-thinking':
+                if (out.enableThinking !== null) break;
+                if (eq > -1) {
+                    const boolByEq = parseBoolToken(val);
+                    if (boolByEq !== null) out.enableThinking = boolByEq;
+                    break;
+                }
+                if (val !== null && val !== undefined && !String(val).startsWith('--')) {
+                    const boolByNext = parseBoolToken(val);
+                    if (boolByNext !== null) out.enableThinking = boolByNext;
+                    break;
+                }
+                out.enableThinking = true;
+                break;
+            default:
+                break;
         }
-        if (val !== null && val !== undefined && String(val).startsWith('--')) continue;
-        if (val === null || val === undefined || String(val).trim() === '') continue;
-        out[target] = val;
     }
     return out;
+}
+
+function renderModelSamplingField(def) {
+    const modalId = 'modelDetailModal';
+    const safe = (v) => escapeAttrCompat(v === null || v === undefined ? '' : String(v));
+    const value = def.value === null || def.value === undefined ? '' : String(def.value);
+    const name = t(def.nameKey, def.nameFallback);
+    const desc = t(def.descKey, def.descFallback);
+    const meta = `${name} ${def.flag}`;
+    const style = def.fullWidth ? ' style="grid-column:1 / -1;"' : '';
+    const descHtml = desc ? `<div class="model-sampling-field-meta" style="margin-top:2px;">${safe(desc)}</div>` : '';
+    if (def.type === 'textarea') {
+        const placeholder = def.placeholder ? ` placeholder="${safe(def.placeholder)}"` : '';
+        return `<div class="model-sampling-field"${style}><div class="model-sampling-field-meta">${safe(meta)}</div>${descHtml}<textarea class="form-control" id="${safe(modalId + def.id)}" rows="${safe(def.rows || 4)}"${placeholder} style="resize:vertical;">${safe(value)}</textarea></div>`;
+    }
+    return `<div class="model-sampling-field"${style}><div class="model-sampling-field-meta">${safe(meta)}</div>${descHtml}<input class="form-control" id="${safe(modalId + def.id)}" value="${safe(value)}" /></div>`;
+}
+
+function renderModelSamplingSamplersField(selectedSamplers) {
+    const modalId = 'modelDetailModal';
+    const options = getModelSamplingSamplerOptions();
+    const selected = normalizeModelSamplingStringArray(selectedSamplers, { mode: 'csv', allowDuplicates: false });
+    const selectedSet = new Set(selected);
+    const optionHtml = options.map((item) => {
+        const isSelected = selectedSet.has(item.value);
+        const selectedClass = isSelected ? ' is-selected' : '';
+        return `<button type="button" class="ordered-multiselect-option${selectedClass}" data-sampler-option="${escapeAttrCompat(item.value)}"><span class="ordered-multiselect-option-text">${escapeAttrCompat(item.label)}</span></button>`;
+    }).join('');
+    const safeSelectedJson = escapeAttrCompat(JSON.stringify(selected));
+    return `<div class="model-sampling-field" style="grid-column:1 / -1;">` +
+        `<div class="model-sampling-field-meta">${escapeAttrCompat(t('param.server.samplers.name', '采样器链（有序多选）'))} --samplers</div>` +
+        `<div class="model-sampling-field-meta" style="margin-top:2px;">${escapeAttrCompat(t('param.server.samplers.desc', '按顺序组合 llama.cpp 的采样器链。勾选表示启用该采样器；右侧顺序表示实际执行次序，越靠前越先参与采样流程。最终值会按分号拼接后传给 --samplers。'))}</div>` +
+        `<div class="ordered-multiselect" id="${escapeAttrCompat(modalId + 'SamplingFieldSamplersWidget')}" data-selected='${safeSelectedJson}'>` +
+            `<div class="ordered-multiselect-section">` +
+                `<div class="ordered-multiselect-heading">${escapeAttrCompat(t('page.params.ordered_multi.available', '点击添加采样器'))}</div>` +
+                `<div class="ordered-multiselect-options">${optionHtml}</div>` +
+            `</div>` +
+            `<div class="ordered-multiselect-section">` +
+                `<div class="ordered-multiselect-heading">${escapeAttrCompat(t('page.params.ordered_multi.selected', '当前执行顺序'))}</div>` +
+                `<div class="ordered-multiselect-selected-list" id="${escapeAttrCompat(modalId + 'SamplingFieldSamplersSelectedList')}"></div>` +
+                `<div class="ordered-multiselect-preview" id="${escapeAttrCompat(modalId + 'SamplingFieldSamplersPreview')}"></div>` +
+            `</div>` +
+        `</div>` +
+    `</div>`;
+}
+
+function getModelSamplingSamplersWidgetSelection(modalId) {
+    const widget = document.getElementById(modalId + 'SamplingFieldSamplersWidget');
+    if (!widget) return [];
+    if (Array.isArray(widget.__selectedSamplers)) return widget.__selectedSamplers.slice();
+    const raw = widget.getAttribute('data-selected');
+    const parsed = normalizeModelSamplingStringArray(raw, { mode: 'json-array', allowDuplicates: false });
+    widget.__selectedSamplers = parsed.slice();
+    return parsed;
+}
+
+function setModelSamplingSamplersWidgetSelection(modalId, values) {
+    const widget = document.getElementById(modalId + 'SamplingFieldSamplersWidget');
+    if (!widget) return;
+    const selected = normalizeModelSamplingStringArray(values, { mode: 'csv', allowDuplicates: false });
+    widget.__selectedSamplers = selected.slice();
+    widget.setAttribute('data-selected', JSON.stringify(selected));
+}
+
+function refreshModelSamplingSamplersField(modalId) {
+    const widget = document.getElementById(modalId + 'SamplingFieldSamplersWidget');
+    const list = document.getElementById(modalId + 'SamplingFieldSamplersSelectedList');
+    const preview = document.getElementById(modalId + 'SamplingFieldSamplersPreview');
+    if (!widget || !list || !preview) return;
+    const selected = getModelSamplingSamplersWidgetSelection(modalId);
+    const selectedSet = new Set(selected);
+    const optionButtons = widget.querySelectorAll('[data-sampler-option]');
+    for (let i = 0; i < optionButtons.length; i++) {
+        const btn = optionButtons[i];
+        const value = btn.getAttribute('data-sampler-option') || '';
+        if (selectedSet.has(value)) btn.classList.add('is-selected');
+        else btn.classList.remove('is-selected');
+    }
+    if (!selected.length) {
+        list.innerHTML = `<div class="ordered-multiselect-empty">${escapeAttrCompat(t('page.params.ordered_multi.empty', '未选择'))}</div>`;
+    } else {
+        list.innerHTML = selected.map((value, index) => {
+            return `<div class="ordered-multiselect-selected-item">` +
+                `<span class="ordered-multiselect-selected-text">${escapeAttrCompat(value)}</span>` +
+                `<span class="ordered-multiselect-selected-actions">` +
+                    `<button type="button" class="ordered-multiselect-action" data-sampler-action="up" data-sampler-index="${escapeAttrCompat(index)}" title="${escapeAttrCompat(t('page.params.ordered_multi.move_up', '上移'))}">↑</button>` +
+                    `<button type="button" class="ordered-multiselect-action" data-sampler-action="down" data-sampler-index="${escapeAttrCompat(index)}" title="${escapeAttrCompat(t('page.params.ordered_multi.move_down', '下移'))}">↓</button>` +
+                    `<button type="button" class="ordered-multiselect-action danger" data-sampler-action="remove" data-sampler-index="${escapeAttrCompat(index)}" title="${escapeAttrCompat(t('page.params.ordered_multi.remove', '移除'))}">×</button>` +
+                `</span>` +
+            `</div>`;
+        }).join('');
+    }
+    preview.textContent = `${t('page.params.ordered_multi.preview', '最终值：')}${selected.join(';')}`;
+}
+
+function bindModelSamplingSamplersField(modalId) {
+    const widget = document.getElementById(modalId + 'SamplingFieldSamplersWidget');
+    if (!widget) return;
+    widget.onclick = (event) => {
+        const optionButton = event.target && event.target.closest ? event.target.closest('[data-sampler-option]') : null;
+        if (optionButton) {
+            const value = optionButton.getAttribute('data-sampler-option') || '';
+            if (!value) return;
+            const selected = getModelSamplingSamplersWidgetSelection(modalId);
+            const index = selected.indexOf(value);
+            if (index > -1) selected.splice(index, 1);
+            else selected.push(value);
+            setModelSamplingSamplersWidgetSelection(modalId, selected);
+            refreshModelSamplingSamplersField(modalId);
+            updateSamplingBundleFromForm();
+            scheduleModelSamplingAutoUpdate();
+            return;
+        }
+        const actionButton = event.target && event.target.closest ? event.target.closest('[data-sampler-action]') : null;
+        if (!actionButton) return;
+        const action = actionButton.getAttribute('data-sampler-action') || '';
+        const index = parseInt(actionButton.getAttribute('data-sampler-index') || '', 10);
+        if (!Number.isInteger(index) || index < 0) return;
+        const selected = getModelSamplingSamplersWidgetSelection(modalId);
+        if (index >= selected.length) return;
+        if (action === 'remove') {
+            selected.splice(index, 1);
+        } else if (action === 'up' && index > 0) {
+            const item = selected[index];
+            selected.splice(index, 1);
+            selected.splice(index - 1, 0, item);
+        } else if (action === 'down' && index < selected.length - 1) {
+            const item = selected[index];
+            selected.splice(index, 1);
+            selected.splice(index + 1, 0, item);
+        } else {
+            return;
+        }
+        setModelSamplingSamplersWidgetSelection(modalId, selected);
+        refreshModelSamplingSamplersField(modalId);
+        updateSamplingBundleFromForm();
+        scheduleModelSamplingAutoUpdate();
+    };
+    refreshModelSamplingSamplersField(modalId);
 }
 
 function renderSelectedModelSamplingSettings() {
@@ -349,23 +618,25 @@ function renderSelectedModelSamplingSettings() {
     const s = extractSamplingSettingsFromConfig(cfg);
     const safe = (v) => escapeAttrCompat(v === null || v === undefined ? '' : String(v));
     const fields = [
-        ['Temp', '--temp', 'SamplingFieldTemp', s.temp],
-        ['Top-P', '--top-p', 'SamplingFieldTopP', s.topP],
-        ['Top-K', '--top-k', 'SamplingFieldTopK', s.topK],
-        ['Min-P', '--min-p', 'SamplingFieldMinP', s.minP],
-        ['Presence Penalty', '--presence-penalty', 'SamplingFieldPresencePenalty', s.presencePenalty],
-        ['Repeat Penalty', '--repeat-penalty', 'SamplingFieldRepeatPenalty', s.repeatPenalty],
-        ['Frequency Penalty', '--frequency-penalty', 'SamplingFieldFrequencyPenalty', s.frequencyPenalty]
+        { nameKey: 'param.server.temp.name', nameFallback: '温度（随机性）', descKey: 'param.server.temp.desc', descFallback: '控制采样随机性。', flag: '--temp', id: 'SamplingFieldTemp', value: s.temp },
+        { nameKey: 'param.server.top_p.name', nameFallback: 'Top-P', descKey: 'param.server.top_p.desc', descFallback: '核采样阈值。', flag: '--top-p', id: 'SamplingFieldTopP', value: s.topP },
+        { nameKey: 'param.server.top_k.name', nameFallback: 'Top-K', descKey: 'param.server.top_k.desc', descFallback: '截断采样候选数量。', flag: '--top-k', id: 'SamplingFieldTopK', value: s.topK },
+        { nameKey: 'param.server.min_p.name', nameFallback: 'Min-P', descKey: 'param.server.min_p.desc', descFallback: '最小概率阈值。', flag: '--min-p', id: 'SamplingFieldMinP', value: s.minP },
+        { nameKey: 'param.server.top_n_sigma.name', nameFallback: 'Top-N Sigma', descKey: 'param.server.top_n_sigma.desc', descFallback: '按均值与标准差裁剪候选集。', flag: '--top-nsigma', id: 'SamplingFieldTopNSigma', value: s.topNSigma },
+        { nameKey: 'param.server.presence_penalty.name', nameFallback: '存在惩罚', descKey: 'param.server.presence_penalty.desc', descFallback: '鼓励模型引入新词。', flag: '--presence-penalty', id: 'SamplingFieldPresencePenalty', value: s.presencePenalty },
+        { nameKey: 'param.server.repeat_penalty.name', nameFallback: '重复惩罚', descKey: 'param.server.repeat_penalty.desc', descFallback: '抑制近期重复 token。', flag: '--repeat-penalty', id: 'SamplingFieldRepeatPenalty', value: s.repeatPenalty },
+        { nameKey: 'param.server.frequency_penalty.name', nameFallback: '频率惩罚', descKey: 'param.server.frequency_penalty.desc', descFallback: '按出现次数抑制重复。', flag: '--frequency-penalty', id: 'SamplingFieldFrequencyPenalty', value: s.frequencyPenalty },
+        { nameKey: 'param.server.dry_multiplier.name', nameFallback: 'DRY 惩罚倍数', descKey: 'param.server.dry_multiplier.desc', descFallback: '控制 DRY 重复抑制强度。', flag: '--dry-multiplier', id: 'SamplingFieldDryMultiplier', value: s.dryMultiplier },
+        { nameKey: 'param.server.dry_base.name', nameFallback: 'DRY 惩罚底数', descKey: 'param.server.dry_base.desc', descFallback: '控制 DRY 惩罚增长速度。', flag: '--dry-base', id: 'SamplingFieldDryBase', value: s.dryBase }
     ];
-    const numFieldHtml = fields.map((item) => {
-        const id = modalId + item[2];
-        const value = item[3] === null || item[3] === undefined ? '' : String(item[3]);
-        return `<div class="model-sampling-field"><div class="model-sampling-field-meta">${safe(item[0])} ${safe(item[1])}</div><input class="form-control" id="${safe(id)}" value="${safe(value)}" /></div>`;
-    }).join('');
+    const fieldHtml = fields.map((item) => renderModelSamplingField(item)).join('');
+    const seedFieldHtml = renderModelSamplingField({ nameKey: 'param.server.seed.name', nameFallback: '随机种子', descKey: 'param.server.seed.desc', descFallback: '固定后可提高输出可复现性；-1 表示使用随机种子。', flag: '--seed', id: 'SamplingFieldSeed', value: s.seed });
+    const samplersFieldHtml = renderModelSamplingSamplersField(s.samplers);
     const thinkingChecked = s.enableThinking === true ? ' checked' : '';
-    const thinkingFieldHtml = `<label class="model-sampling-field model-sampling-toggle-row"><span class="model-sampling-field-meta">enable_thinking --enable-thinking</span><span class="model-sampling-toggle-control"><input type="checkbox" class="model-sampling-toggle-input" id="${safe(modalId + 'SamplingFieldEnableThinking')}"${thinkingChecked} /><span class="model-sampling-toggle-track"></span></span></label>`;
-    details.innerHTML = numFieldHtml + thinkingFieldHtml;
-    const inputs = details.querySelectorAll('input');
+    const thinkingFieldHtml = `<label class="model-sampling-field model-sampling-toggle-row" style="grid-column:1 / -1;"><span><span class="model-sampling-field-meta">enable_thinking --enable-thinking</span><span class="model-sampling-field-meta" style="margin-top:2px;">${safe(t('modal.model_detail.sampling.enable_thinking_desc', '用于覆盖请求中的 thinking 开关，并同步到聊天模板参数。'))}</span></span><span class="model-sampling-toggle-control"><input type="checkbox" class="model-sampling-toggle-input" id="${safe(modalId + 'SamplingFieldEnableThinking')}"${thinkingChecked} /><span class="model-sampling-toggle-track"></span></span></label>`;
+    details.innerHTML = thinkingFieldHtml + fieldHtml + seedFieldHtml + samplersFieldHtml;
+    bindModelSamplingSamplersField(modalId);
+    const inputs = details.querySelectorAll('input, textarea');
     for (let i = 0; i < inputs.length; i++) {
         inputs[i].oninput = () => {
             updateSamplingBundleFromForm();
@@ -403,15 +674,41 @@ function getSamplingDraftFromForm() {
             out[key] = n;
         }
     };
+    setNumber('seed', read('SamplingFieldSeed'), true);
     setNumber('temperature', read('SamplingFieldTemp'), false);
+    const samplers = getModelSamplingSamplersWidgetSelection(modalId);
+    if (samplers.length) out.samplers = samplers;
     setNumber('top_p', read('SamplingFieldTopP'), false);
     setNumber('top_k', read('SamplingFieldTopK'), true);
     setNumber('min_p', read('SamplingFieldMinP'), false);
+    setNumber('top_n_sigma', read('SamplingFieldTopNSigma'), false);
     setNumber('presence_penalty', read('SamplingFieldPresencePenalty'), false);
     setNumber('repeat_penalty', read('SamplingFieldRepeatPenalty'), false);
     setNumber('frequency_penalty', read('SamplingFieldFrequencyPenalty'), false);
+    setNumber('dry_multiplier', read('SamplingFieldDryMultiplier'), false);
+    setNumber('dry_base', read('SamplingFieldDryBase'), false);
+    setNumber('dry_allowed_length', read('SamplingFieldDryAllowedLength'), true);
+    setNumber('dry_penalty_last_n', read('SamplingFieldDryPenaltyLastN'), true);
+    const drySequenceBreakers = normalizeModelSamplingStringArray(read('SamplingFieldDrySequenceBreakers'), { mode: 'json-array', allowDuplicates: true });
+    if (drySequenceBreakers.length) out.dry_sequence_breakers = drySequenceBreakers;
     const thinkingEl = document.getElementById(modalId + 'SamplingFieldEnableThinking');
     out.enable_thinking = !!(thinkingEl && thinkingEl.checked);
+    return out;
+}
+
+function mergeHiddenSamplingDraftFields(out, currentConfig) {
+    const existing = extractSamplingSettingsFromConfig(currentConfig);
+    const setHiddenNumber = (key, value, intOnly) => {
+        if (Object.prototype.hasOwnProperty.call(out, key)) return;
+        if (value === null || value === undefined || String(value).trim() === '') return;
+        const n = intOnly ? parseInt(value, 10) : parseFloat(value);
+        if (!Number.isNaN(n) && Number.isFinite(n)) out[key] = n;
+    };
+    setHiddenNumber('dry_allowed_length', existing.dryAllowedLength, true);
+    setHiddenNumber('dry_penalty_last_n', existing.dryPenaltyLastN, true);
+    if (!Object.prototype.hasOwnProperty.call(out, 'dry_sequence_breakers') && Array.isArray(existing.drySequenceBreakers) && existing.drySequenceBreakers.length) {
+        out.dry_sequence_breakers = existing.drySequenceBreakers.slice();
+    }
     return out;
 }
 
@@ -422,7 +719,7 @@ function updateSamplingBundleFromForm() {
     if (!select || !bundle || !bundle.configs) return;
     const name = select.value || '';
     if (!name || !bundle.configs[name]) return;
-    bundle.configs[name] = getSamplingDraftFromForm();
+    bundle.configs[name] = mergeHiddenSamplingDraftFields(getSamplingDraftFromForm(), bundle.configs[name]);
 }
 
 function loadModelSamplingSettings() {

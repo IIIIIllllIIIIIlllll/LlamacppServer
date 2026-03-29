@@ -17,6 +17,7 @@ import org.mark.llamacpp.server.tools.ParamTool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
@@ -371,13 +372,21 @@ public class ModelSamplingService {
 	
 	private JsonObject extractOpenAISampling(JsonObject configObj) {
 		JsonObject out = new JsonObject();
+		setIntFromKeys(out, "seed", configObj, "seed");
 		setDoubleFromKeys(out, "temperature", configObj, "temperature", "temp");
+		setStringArrayFromKeys(out, "samplers", configObj, true, "samplers");
 		setDoubleFromKeys(out, "top_p", configObj, "top_p", "topP", "top-p");
 		setDoubleFromKeys(out, "min_p", configObj, "min_p", "minP", "min-p");
+		setDoubleFromKeys(out, "top_n_sigma", configObj, "top_n_sigma", "topNSigma", "top-n-sigma");
 		setDoubleFromKeys(out, "repeat_penalty", configObj, "repeat_penalty", "repeatPenalty", "repeat-penalty");
 		setIntFromKeys(out, "top_k", configObj, "top_k", "topK", "top-k");
 		setDoubleFromKeys(out, "presence_penalty", configObj, "presence_penalty", "presencePenalty", "presence-penalty");
 		setDoubleFromKeys(out, "frequency_penalty", configObj, "frequency_penalty", "frequencyPenalty", "frequency-penalty");
+		setDoubleFromKeys(out, "dry_multiplier", configObj, "dry_multiplier", "dryMultiplier", "dry-multiplier");
+		setDoubleFromKeys(out, "dry_base", configObj, "dry_base", "dryBase", "dry-base");
+		setIntFromKeys(out, "dry_allowed_length", configObj, "dry_allowed_length", "dryAllowedLength", "dry-allowed-length");
+		setIntFromKeys(out, "dry_penalty_last_n", configObj, "dry_penalty_last_n", "dryPenaltyLastN", "dry-penalty-last-n");
+		setStringArrayFromKeys(out, "dry_sequence_breakers", configObj, false, "dry_sequence_breakers", "drySequenceBreakers", "dry-sequence-breakers");
 		setBooleanFromKeys(out, "enable_thinking", configObj, "enable_thinking");
 		applySamplingFromCmd(out, JsonUtil.getJsonString(configObj, "cmd", null));
 		return out;
@@ -401,16 +410,28 @@ public class ModelSamplingService {
 				value = token.substring(eq + 1);
 			} else if (i + 1 < tokens.size()) {
 				String next = tokens.get(i + 1);
-				if (next != null && !next.startsWith("-")) {
+				if (next != null && !looksLikeOptionToken(next)) {
 					value = next;
 				}
 			}
 			switch (flag) {
+				case "--seed":
+					if (value == null || value.isBlank()) {
+						continue;
+					}
+					setIntIfAbsent(out, "seed", value);
+					break;
 				case "--temp":
 					if (value == null || value.isBlank()) {
 						continue;
 					}
 					setDoubleIfAbsent(out, "temperature", value);
+					break;
+				case "--samplers":
+					if (value == null || value.isBlank()) {
+						continue;
+					}
+					setStringArrayIfAbsent(out, "samplers", parseCliSamplers(value));
 					break;
 				case "--top-p":
 					if (value == null || value.isBlank()) {
@@ -423,6 +444,13 @@ public class ModelSamplingService {
 						continue;
 					}
 					setDoubleIfAbsent(out, "min_p", value);
+					break;
+				case "--top-nsigma":
+				case "--top-n-sigma":
+					if (value == null || value.isBlank()) {
+						continue;
+					}
+					setDoubleIfAbsent(out, "top_n_sigma", value);
 					break;
 				case "--repeat-penalty":
 					if (value == null || value.isBlank()) {
@@ -447,6 +475,36 @@ public class ModelSamplingService {
 						continue;
 					}
 					setDoubleIfAbsent(out, "frequency_penalty", value);
+					break;
+				case "--dry-multiplier":
+					if (value == null || value.isBlank()) {
+						continue;
+					}
+					setDoubleIfAbsent(out, "dry_multiplier", value);
+					break;
+				case "--dry-base":
+					if (value == null || value.isBlank()) {
+						continue;
+					}
+					setDoubleIfAbsent(out, "dry_base", value);
+					break;
+				case "--dry-allowed-length":
+					if (value == null || value.isBlank()) {
+						continue;
+					}
+					setIntIfAbsent(out, "dry_allowed_length", value);
+					break;
+				case "--dry-penalty-last-n":
+					if (value == null || value.isBlank()) {
+						continue;
+					}
+					setIntIfAbsent(out, "dry_penalty_last_n", value);
+					break;
+				case "--dry-sequence-breaker":
+					if (value == null || value.isBlank()) {
+						continue;
+					}
+					appendStringArrayValue(out, "dry_sequence_breakers", value);
 					break;
 				case "--enable-thinking":
 					if (eq > 0) {
@@ -550,6 +608,19 @@ public class ModelSamplingService {
 			}
 		}
 	}
+
+	private void setStringArrayFromKeys(JsonObject out, String targetKey, JsonObject src, boolean splitBySemicolon, String... keys) {
+		if (out.has(targetKey) || src == null || keys == null) {
+			return;
+		}
+		for (String k : keys) {
+			List<String> values = readStringArray(src, k, splitBySemicolon);
+			if (values != null && !values.isEmpty()) {
+				setStringArrayIfAbsent(out, targetKey, values);
+				return;
+			}
+		}
+	}
 	
 	private void setDoubleIfAbsent(JsonObject out, String key, String raw) {
 		if (out.has(key)) {
@@ -579,6 +650,44 @@ public class ModelSamplingService {
 		if (v != null) {
 			out.addProperty(key, v);
 		}
+	}
+
+	private void setStringArrayIfAbsent(JsonObject out, String key, List<String> values) {
+		if (out.has(key) || values == null || values.isEmpty()) {
+			return;
+		}
+		JsonArray arr = new JsonArray();
+		for (String value : values) {
+			if (value == null) {
+				continue;
+			}
+			String s = value.trim();
+			if (s.isEmpty()) {
+				continue;
+			}
+			arr.add(s);
+		}
+		if (arr.size() > 0) {
+			out.add(key, arr);
+		}
+	}
+
+	private void appendStringArrayValue(JsonObject out, String key, String raw) {
+		if (out == null || key == null || raw == null) {
+			return;
+		}
+		String value = raw.trim();
+		if (value.isEmpty()) {
+			return;
+		}
+		JsonArray arr;
+		if (out.has(key) && out.get(key).isJsonArray()) {
+			arr = out.getAsJsonArray(key);
+		} else {
+			arr = new JsonArray();
+			out.add(key, arr);
+		}
+		arr.add(value);
 	}
 	
 	private Double readDouble(JsonObject obj, String key) {
@@ -623,6 +732,40 @@ public class ModelSamplingService {
 		return null;
 	}
 
+	private List<String> readStringArray(JsonObject obj, String key, boolean splitBySemicolon) {
+		if (obj == null || key == null || !obj.has(key)) {
+			return null;
+		}
+		JsonElement el = obj.get(key);
+		if (el == null || el.isJsonNull()) {
+			return null;
+		}
+		try {
+			if (el.isJsonArray()) {
+				List<String> out = new ArrayList<>();
+				JsonArray arr = el.getAsJsonArray();
+				for (int i = 0; i < arr.size(); i++) {
+					JsonElement item = arr.get(i);
+					if (item == null || item.isJsonNull()) {
+						continue;
+					}
+					String value = JsonUtil.jsonValueToString(item);
+					if (value != null && !value.trim().isEmpty()) {
+						out.add(value.trim());
+					}
+				}
+				return out.isEmpty() ? null : out;
+			}
+			if (el.isJsonPrimitive() && el.getAsJsonPrimitive().isString()) {
+				String raw = el.getAsString();
+				return splitBySemicolon ? parseCliSamplers(raw) : parseJsonStringArray(raw);
+			}
+		} catch (Exception e) {
+			return null;
+		}
+		return null;
+	}
+
 	private Boolean readBoolean(JsonObject obj, String key) {
 		if (obj == null || key == null || !obj.has(key)) {
 			return null;
@@ -645,6 +788,70 @@ public class ModelSamplingService {
 			return null;
 		}
 		return null;
+	}
+
+	private List<String> parseCliSamplers(String raw) {
+		if (raw == null) {
+			return null;
+		}
+		List<String> out = new ArrayList<>();
+		String[] parts = raw.split("[;,\r\n]+");
+		for (String part : parts) {
+			if (part == null) {
+				continue;
+			}
+			String s = part.trim();
+			if (!s.isEmpty()) {
+				out.add(s);
+			}
+		}
+		return out.isEmpty() ? null : out;
+	}
+
+	private List<String> parseJsonStringArray(String raw) {
+		if (raw == null) {
+			return null;
+		}
+		String text = raw.trim();
+		if (text.isEmpty()) {
+			return null;
+		}
+		try {
+			JsonElement el = JsonUtil.fromJson(text, JsonElement.class);
+			if (el != null && el.isJsonArray()) {
+				List<String> out = new ArrayList<>();
+				JsonArray arr = el.getAsJsonArray();
+				for (int i = 0; i < arr.size(); i++) {
+					JsonElement item = arr.get(i);
+					if (item == null || item.isJsonNull()) {
+						continue;
+					}
+					String s = JsonUtil.jsonValueToString(item);
+					if (s != null && !s.trim().isEmpty()) {
+						out.add(s.trim());
+					}
+				}
+				return out.isEmpty() ? null : out;
+			}
+		} catch (Exception ignore) {
+		}
+		List<String> single = new ArrayList<>();
+		single.add(text);
+		return single;
+	}
+
+	private boolean looksLikeOptionToken(String token) {
+		if (token == null) {
+			return false;
+		}
+		String s = token.trim();
+		if (s.isEmpty()) {
+			return false;
+		}
+		if (s.startsWith("--")) {
+			return true;
+		}
+		return s.startsWith("-") && !s.matches("-?\\d+(\\.\\d+)?");
 	}
 	
 	private Double parseDouble(String raw) {
