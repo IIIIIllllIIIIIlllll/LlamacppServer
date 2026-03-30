@@ -28,7 +28,7 @@ public class NettySseMcpTestServer {
 	}
 
 	public static void main(String[] args) throws Exception {
-		int port = 18081;
+		int port = 8075;
 		NettySseMcpTestServer server = new NettySseMcpTestServer(port);
 		server.start();
 		server.awaitClose();
