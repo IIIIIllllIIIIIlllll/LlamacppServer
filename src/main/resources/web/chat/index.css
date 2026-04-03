@@ -96,19 +96,30 @@ button { cursor: pointer; }
   align-items: center;
   gap: 10px;
   min-width: 0;
+  color: inherit;
+  text-decoration: none;
 }
 
 .brand-mark {
   width: 32px;
   height: 32px;
   border-radius: var(--radius);
-  display: grid;
-  place-items: center;
-  background: var(--primary);
-  color: var(--primary-fg);
-  font-weight: 700;
-  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex: 0 0 auto;
+  overflow: hidden;
+}
+
+.brand-left:hover .brand-mark {
+  opacity: 0.9;
+}
+
+.brand-mark-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
 }
 
 .brand-copy h1 {
