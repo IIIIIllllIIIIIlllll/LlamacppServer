@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>llama.cpp 对话</title>
+  <title>Easy Chat</title>
   <link rel="stylesheet" href="./index.css">
+  <link rel="stylesheet" href="/css/github.min.css">
 </head>
 <body>
   <div class="app">
@@ -13,8 +14,7 @@
         <div class="brand-left">
           <div class="brand-mark">L</div>
           <div class="brand-copy">
-            <h1>llama.cpp</h1>
-            <p>现代对话界面</p>
+            <h1>llama.cpp-hub</h1>
           </div>
         </div>
       </div>
@@ -52,8 +52,8 @@
         <div class="chat-column">
           <div id="emptyState" class="empty-state">
             <div class="empty-card">
-              <h3>llama.cpp</h3>
-              <p>输入文字、粘贴图片或上传图片开始对话，也可以直接选择下方的快捷提示。</p>
+              <h3>Easy Chat</h3>
+              <p>用于快速验证、测试模型，输入文字、粘贴图片或上传图片开始对话，也可以直接选择下方的快捷提示。<br>温馨提示：对于复杂的功能需求，还请更换其它聊天前端。</p>
               <div class="empty-hints">
                 <button class="empty-hint" data-hint="用简单的语言解释一下什么是大语言模型">什么是大语言模型？</button>
                 <button class="empty-hint" data-hint="帮我写一个 Python 快速排序算法">写一个快速排序</button>
@@ -67,16 +67,41 @@
 
       <section class="composer-shell">
         <div class="composer-card">
+          <div id="draftImageList" class="draft-image-list hidden"></div>
+          <div id="dropZone" class="drop-zone hidden">
+            <div class="drop-zone-inner">
+              <svg class="drop-zone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span>拖放图片到此处</span>
+            </div>
+          </div>
           <textarea id="promptInput" class="composer-input" placeholder="输入消息，支持粘贴图片…"></textarea>
           <input id="imageInput" class="hidden" type="file" accept="image/*" multiple>
-          <div id="draftImageList" class="draft-image-list hidden"></div>
           <div class="composer-bar">
             <div class="composer-left">
-              <button id="refreshModelsBtn" class="icon-button" type="button" aria-label="刷新模型" title="刷新模型">↻</button>
-              <button id="imageUploadBtn" class="ghost-button" type="button">上传图片</button>
               <select id="modelSelect" class="model-select" aria-label="选择模型"></select>
             </div>
             <div class="composer-right">
+              <button id="refreshModelsBtn" class="icon-button" type="button" aria-label="刷新模型" title="刷新模型">↻</button>
+              <button id="imageUploadBtn" class="image-upload-btn" type="button" title="上传图片">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                <span>图片</span>
+              </button>
+              <div id="thinkingMenuWrap" class="menu-wrap">
+                <button id="thinkingToggleBtn" class="icon-button thinking-toggle" type="button" aria-label="思维链" aria-haspopup="menu" aria-expanded="false" title="思维链">
+                  <svg class="thinking-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M9 18h6"/>
+                    <path d="M10 22h4"/>
+                    <path d="M8.8 14.8C7.7 13.95 7 12.62 7 11.13C7 8.3 9.24 6 12 6s5 2.3 5 5.13c0 1.49-.7 2.82-1.8 3.67c-.64.5-1.2 1.03-1.52 1.7H10.32c-.32-.67-.88-1.2-1.52-1.7Z"/>
+                    <path d="M12 2v1.5"/>
+                    <path d="M4.93 4.93l1.06 1.06"/>
+                    <path d="M19.07 4.93l-1.06 1.06"/>
+                  </svg>
+                </button>
+                <div id="thinkingMenu" class="thinking-menu" role="menu" aria-hidden="true">
+                  <button class="thinking-menu-item" type="button" data-thinking-value="true" role="menuitemradio">开启</button>
+                  <button class="thinking-menu-item" type="button" data-thinking-value="false" role="menuitemradio">关闭</button>
+                </div>
+              </div>
               <button id="exportBtn" class="ghost-button" type="button">导出</button>
               <button id="clearBtn" class="ghost-button" type="button">清空</button>
               <button id="stopBtn" class="ghost-button" type="button" disabled>停止</button>
@@ -84,7 +109,7 @@
             </div>
           </div>
         </div>
-        <div class="composer-hint">支持粘贴或上传图片，回车发送，Shift + 回车换行</div>
+        <div class="composer-hint">支持粘贴或拖放图片，回车发送，Shift + 回车换行</div>
       </section>
     </main>
   </div>
@@ -93,66 +118,162 @@
   <div id="toastContainer" class="toast-container" aria-live="polite"></div>
 
   <div id="settingsDrawer" class="drawer" aria-hidden="true">
-    <div class="drawer-panel">
+    <div class="drawer-panel settings-dialog">
       <div class="drawer-head">
-        <h3>设置</h3>
+        <h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;vertical-align:-3px;margin-right:6px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          设置
+        </h3>
         <button id="closeSettingsBtn" class="icon-button" type="button" aria-label="关闭">×</button>
       </div>
 
-      <div class="drawer-grid">
-        <div class="drawer-field wide">
-          <label for="endpointInput">聊天接口</label>
-          <input id="endpointInput" class="drawer-input" value="/v1/chat/completions">
-        </div>
-        <div class="drawer-field wide">
-          <label for="modelsEndpointInput">模型列表接口</label>
-          <input id="modelsEndpointInput" class="drawer-input" value="/v1/models">
-        </div>
-        <div class="drawer-field">
-          <label for="apiKeyInput">API 密钥</label>
-          <input id="apiKeyInput" class="drawer-input" type="password" placeholder="可留空">
-        </div>
-        <div class="drawer-field">
-          <label for="temperatureInput">温度</label>
-          <input id="temperatureInput" class="drawer-input" type="number" step="0.1" min="0" max="2" value="0.7">
-        </div>
-        <div class="drawer-field">
-          <label for="maxTokensInput">最大生成长度</label>
-          <input id="maxTokensInput" class="drawer-input" type="number" step="1" min="1" placeholder="默认">
-        </div>
-        <div class="drawer-field">
-          <label for="streamToggleWrap">流式输出</label>
-          <label id="streamToggleWrap" class="drawer-toggle">
-            <span>启用流式输出</span>
-            <input id="streamToggle" type="checkbox" checked>
-          </label>
-        </div>
-        <div class="drawer-field wide">
-          <label for="systemPromptInput">系统提示词</label>
-          <textarea id="systemPromptInput" class="drawer-textarea" placeholder="例如：你是一个专业、准确、简洁的中文助手。"></textarea>
+      <div class="settings-body">
+        <nav class="settings-tabs" role="tablist">
+          <button class="settings-tab active" data-settings-tab="general" role="tab" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            通用
+          </button>
+          <button class="settings-tab" data-settings-tab="sampling" role="tab" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+            采样参数
+          </button>
+        </nav>
+
+        <div class="settings-content">
+          <div class="settings-section active" data-settings-section="general">
+            <div class="settings-group">
+              <div class="settings-group-title">对话设置</div>
+              <div class="settings-field">
+                <div class="settings-field-header">
+                  <label for="systemPromptInput">系统提示词</label>
+                </div>
+                <p class="settings-field-desc">定义模型的行为和角色，会在每次对话开始时发送</p>
+                <textarea id="systemPromptInput" class="drawer-textarea" placeholder="例如：你是一个专业、准确、简洁的中文助手。"></textarea>
+              </div>
+              <div class="settings-field">
+                <div class="settings-field-header">
+                  <label>流式输出</label>
+                </div>
+                <label class="settings-toggle">
+                  <div class="settings-toggle-text">
+                    <span>启用流式输出</span>
+                    <span class="settings-field-desc">逐字显示模型回复，提供更好的交互体验</span>
+                  </div>
+                  <span class="toggle-switch">
+                    <input id="streamToggle" type="checkbox" checked>
+                    <span class="toggle-slider"></span>
+                  </span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-section" data-settings-section="sampling">
+            <div class="settings-group">
+              <div class="settings-group-title">采样参数</div>
+              <div class="settings-field">
+                <div class="settings-field-header">
+                  <label for="maxTokensInput">Max Tokens</label>
+                </div>
+                <p class="settings-field-desc">限制单次回复的最大 token 数量，留空时使用服务端默认值</p>
+                <input id="maxTokensInput" class="drawer-input" type="number" step="1" min="1" placeholder="默认">
+              </div>
+              <div class="settings-field">
+                <div class="settings-field-header">
+                  <label for="temperatureInput">温度 (Temperature)</label>
+                </div>
+                <p class="settings-field-desc">控制生成文本的随机性。值越高输出越随机，值越低输出越集中确定</p>
+                <input id="temperatureInput" class="drawer-input" type="number" step="0.1" min="0" max="2" placeholder="默认">
+              </div>
+              <div class="settings-field">
+                <div class="settings-field-header">
+                  <label for="topPInput">Top P</label>
+                </div>
+                <p class="settings-field-desc">核采样阈值，只在累计概率达到阈值的候选 token 中采样</p>
+                <input id="topPInput" class="drawer-input" type="number" step="0.05" min="0" max="1" placeholder="默认">
+              </div>
+              <div class="settings-field">
+                <div class="settings-field-header">
+                  <label for="topKInput">Top K</label>
+                </div>
+                <p class="settings-field-desc">每一步只保留概率最高的前 K 个候选 token 参与采样</p>
+                <input id="topKInput" class="drawer-input" type="number" step="1" min="0" max="2048" placeholder="默认">
+              </div>
+              <div class="settings-field">
+                <div class="settings-field-header">
+                  <label for="minPInput">Min P</label>
+                </div>
+                <p class="settings-field-desc">过滤掉概率低于阈值的 token，降低低概率噪声输出</p>
+                <input id="minPInput" class="drawer-input" type="number" step="0.01" min="0" max="1" placeholder="默认">
+              </div>
+              <div class="settings-field">
+                <div class="settings-field-header">
+                  <label for="presencePenaltyInput">Presence Penalty</label>
+                </div>
+                <p class="settings-field-desc">对已经出现过的 token 施加惩罚，鼓励模型引入新内容</p>
+                <input id="presencePenaltyInput" class="drawer-input" type="number" step="0.1" min="-2" max="2" placeholder="默认">
+              </div>
+              <div class="settings-field">
+                <div class="settings-field-header">
+                  <label for="repeatPenaltyInput">Repeat Penalty</label>
+                </div>
+                <p class="settings-field-desc">抑制近期重复 token，减少模型连续复述相同内容</p>
+                <input id="repeatPenaltyInput" class="drawer-input" type="number" step="0.05" min="0" max="10" placeholder="默认">
+              </div>
+              <div class="settings-field">
+                <div class="settings-field-header">
+                  <label for="frequencyPenaltyInput">Frequency Penalty</label>
+                </div>
+                <p class="settings-field-desc">根据 token 出现频率增加惩罚，降低模板化和高频重复表达</p>
+                <input id="frequencyPenaltyInput" class="drawer-input" type="number" step="0.1" min="-2" max="2" placeholder="默认">
+              </div>
+              <div class="settings-field">
+                <div class="settings-field-header">
+                  <label for="stopSequencesInput">Stop Sequences</label>
+                </div>
+                <p class="settings-field-desc">每行填写一个停止序列，命中后模型会停止继续生成</p>
+                <textarea id="stopSequencesInput" class="drawer-textarea" placeholder="每行一个 stop 序列"></textarea>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div class="drawer-actions">
-        <button id="checkConnectionBtn" class="ghost-button" type="button">检测连接</button>
-        <button id="saveSettingsBtn" class="primary-button" type="button">保存设置</button>
+      <div class="drawer-footer">
+        <span id="settingsStorageHint" class="settings-storage-hint"></span>
+        <div class="drawer-actions">
+          <button id="saveSettingsBtn" class="primary-button" type="button">保存设置</button>
+        </div>
       </div>
     </div>
   </div>
-
+  <script src="/js/marked.min.js"></script>
+  <script src="/js/highlight.min.js"></script>
+  <script src="/js/completion-markdown.js"></script>
   <script>
-    const STORAGE_KEY = 'chat-new-state-v3';
+
+    const CHAT_ENDPOINT = '/v1/chat/completions';
+    const MODELS_ENDPOINT = '/v1/models';
+    const EASY_CHAT_STATE_ENDPOINT = '/api/easy-chat/state';
     const MAX_IMAGE_COUNT = 6;
     const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+    let stateSaveTimer = 0;
+    let stateSaveInFlight = false;
+    let pendingStatePayload = null;
 
     const state = {
-      endpoint: '/v1/chat/completions',
-      modelsEndpoint: '/v1/models',
-      apiKey: '',
       model: '',
-      temperature: '0.7',
+      temperature: '',
       maxTokens: '',
+      topP: '',
+      topK: '',
+      minP: '',
+      presencePenalty: '',
+      repeatPenalty: '',
+      frequencyPenalty: '',
+      stopSequences: '',
       stream: true,
+      enableThinking: false,
       systemPrompt: '',
       search: '',
       conversations: [],
@@ -191,14 +312,21 @@
       chatScroll: document.getElementById('chatScroll'),
       settingsDrawer: document.getElementById('settingsDrawer'),
       closeSettingsBtn: document.getElementById('closeSettingsBtn'),
-      endpointInput: document.getElementById('endpointInput'),
-      modelsEndpointInput: document.getElementById('modelsEndpointInput'),
-      apiKeyInput: document.getElementById('apiKeyInput'),
+      thinkingMenuWrap: document.getElementById('thinkingMenuWrap'),
+      thinkingToggleBtn: document.getElementById('thinkingToggleBtn'),
+      thinkingMenu: document.getElementById('thinkingMenu'),
       temperatureInput: document.getElementById('temperatureInput'),
       maxTokensInput: document.getElementById('maxTokensInput'),
+      topPInput: document.getElementById('topPInput'),
+      topKInput: document.getElementById('topKInput'),
+      minPInput: document.getElementById('minPInput'),
+      presencePenaltyInput: document.getElementById('presencePenaltyInput'),
+      repeatPenaltyInput: document.getElementById('repeatPenaltyInput'),
+      frequencyPenaltyInput: document.getElementById('frequencyPenaltyInput'),
+      stopSequencesInput: document.getElementById('stopSequencesInput'),
       streamToggle: document.getElementById('streamToggle'),
       systemPromptInput: document.getElementById('systemPromptInput'),
-      checkConnectionBtn: document.getElementById('checkConnectionBtn'),
+      settingsStorageHint: document.getElementById('settingsStorageHint'),
       saveSettingsBtn: document.getElementById('saveSettingsBtn')
     };
 
@@ -226,47 +354,322 @@
         .replace(/'/g, '&#39;');
     }
 
-    function formatInline(text) {
-      const safe = escapeHtml(text);
-      return safe
-        .replace(/`([^`\n]+)`/g, '<code>$1</code>')
-        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+    const MATH_TOKEN_PREFIX = 'LLAMA_MATH_TOKEN_';
+    let mathJaxLoading = false;
+    let mathJaxLoadAttempt = 0;
+    let mathTypesetTimer = 0;
+    const pendingMathRoots = new Set();
+
+    function ensureMathJax() {
+      if (window.MathJax?.typesetPromise || mathJaxLoading) {
+        return;
+      }
+      mathJaxLoading = true;
+      window.MathJax = window.MathJax || {};
+      window.MathJax.tex = {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']],
+        processEscapes: true,
+        ...(window.MathJax.tex || {})
+      };
+      window.MathJax.svg = {
+        fontCache: 'global',
+        ...(window.MathJax.svg || {})
+      };
+      window.MathJax.options = {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+        ...(window.MathJax.options || {})
+      };
+
+      const sources = [
+        'https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js',
+        'https://unpkg.com/mathjax@3/es5/tex-svg.js'
+      ];
+      const script = document.createElement('script');
+      script.src = sources[mathJaxLoadAttempt];
+      script.defer = true;
+      script.onload = () => {
+        mathJaxLoading = false;
+        flushMathTypeset();
+      };
+      script.onerror = () => {
+        script.remove();
+        if (mathJaxLoadAttempt < sources.length - 1) {
+          mathJaxLoadAttempt += 1;
+          mathJaxLoading = false;
+          ensureMathJax();
+          return;
+        }
+        mathJaxLoading = false;
+        showToast('info', '数学公式渲染库加载失败，将保留原始公式文本');
+      };
+      document.head.appendChild(script);
+    }
+
+    function requestMathTypeset(root) {
+      if (!root) {
+        return;
+      }
+      pendingMathRoots.add(root);
+      ensureMathJax();
+      if (mathTypesetTimer) {
+        clearTimeout(mathTypesetTimer);
+      }
+      mathTypesetTimer = window.setTimeout(() => {
+        flushMathTypeset();
+      }, 120);
+    }
+
+    function flushMathTypeset() {
+      if (mathTypesetTimer) {
+        clearTimeout(mathTypesetTimer);
+        mathTypesetTimer = 0;
+      }
+      if (!pendingMathRoots.size || !window.MathJax?.typesetPromise) {
+        return;
+      }
+      const roots = Array.from(pendingMathRoots).filter(root => root?.isConnected);
+      pendingMathRoots.clear();
+      if (!roots.length) {
+        return;
+      }
+      if (typeof window.MathJax.typesetClear === 'function') {
+        try {
+          window.MathJax.typesetClear(roots);
+        } catch (error) {
+        }
+      }
+      window.MathJax.typesetPromise(roots).catch(() => {
+      });
+    }
+
+    function createMathToken(kind, formula, store) {
+      const token = MATH_TOKEN_PREFIX + store.length + '__';
+      store.push({
+        token,
+        kind,
+        formula: String(formula ?? '')
+      });
+      return token;
+    }
+
+    function findClosingDelimiter(text, start, delimiter, allowNewlines) {
+      for (let index = start; index <= text.length - delimiter.length; index += 1) {
+        if (text.startsWith(delimiter, index) && text[index - 1] !== '\\') {
+          return index;
+        }
+        if (!allowNewlines && text[index] === '\n') {
+          break;
+        }
+      }
+      return -1;
+    }
+
+    function replaceMathInPlainText(text, store) {
+      const input = String(text ?? '');
+      let result = '';
+      let index = 0;
+      while (index < input.length) {
+        if (input.startsWith('\\[', index)) {
+          const close = findClosingDelimiter(input, index + 2, '\\]', true);
+          if (close >= 0) {
+            const formula = input.slice(index + 2, close);
+            result += createMathToken('display', formula, store);
+            index = close + 2;
+            continue;
+          }
+        }
+        if (input.startsWith('$$', index)) {
+          const close = findClosingDelimiter(input, index + 2, '$$', true);
+          if (close >= 0) {
+            const formula = input.slice(index + 2, close);
+            result += createMathToken('display', formula, store);
+            index = close + 2;
+            continue;
+          }
+        }
+        if (input.startsWith('\\(', index)) {
+          const close = findClosingDelimiter(input, index + 2, '\\)', false);
+          if (close >= 0) {
+            const formula = input.slice(index + 2, close);
+            result += createMathToken('inline', formula, store);
+            index = close + 2;
+            continue;
+          }
+        }
+        if (input[index] === '$' && input[index - 1] !== '\\' && input[index + 1] !== '$') {
+          const nextChar = input[index + 1] || '';
+          if (nextChar && !/\s/.test(nextChar)) {
+            let close = -1;
+            for (let cursor = index + 1; cursor < input.length; cursor += 1) {
+              if (input[cursor] === '\n') {
+                break;
+              }
+              if (input[cursor] === '$' && input[cursor - 1] !== '\\' && input[cursor - 1] && !/\s/.test(input[cursor - 1])) {
+                close = cursor;
+                break;
+              }
+            }
+            if (close > index + 1) {
+              const formula = input.slice(index + 1, close);
+              result += createMathToken('inline', formula, store);
+              index = close + 1;
+              continue;
+            }
+          }
+        }
+        result += input[index];
+        index += 1;
+      }
+      return result;
+    }
+
+    function normalizeQuotedEmphasis(text) {
+      const source = String(text ?? '');
+      return source
+        .replace(/\*\*([^\p{L}\p{N}\s][^*\n]+?[^\p{L}\p{N}\s])\*\*/gu, '<strong>$1</strong>')
+        .replace(/(^|[^\*])\*([^\p{L}\p{N}\s][^*\n]+?[^\p{L}\p{N}\s])\*(?!\*)/gu, '$1<em>$2</em>');
+    }
+
+    function protectMathSegments(text) {
+      const source = String(text ?? '').replace(/\r\n/g, '\n');
+      const mathStore = [];
+      const fencedPattern = /(```[\s\S]*?```|~~~[\s\S]*?~~~)/g;
+      let result = '';
+      let lastIndex = 0;
+      let match;
+      while ((match = fencedPattern.exec(source)) !== null) {
+        const plainSegment = source.slice(lastIndex, match.index);
+        result += plainSegment.split(/(`[^`\n]+`)/g).map(segment => {
+          if (/^`[^`\n]+`$/.test(segment)) {
+            return segment;
+          }
+          return normalizeQuotedEmphasis(replaceMathInPlainText(segment, mathStore));
+        }).join('');
+        result += match[0];
+        lastIndex = match.index + match[0].length;
+      }
+      const tail = source.slice(lastIndex);
+      result += tail.split(/(`[^`\n]+`)/g).map(segment => {
+        if (/^`[^`\n]+`$/.test(segment)) {
+          return segment;
+        }
+        return normalizeQuotedEmphasis(replaceMathInPlainText(segment, mathStore));
+      }).join('');
+      return {
+        text: result,
+        math: mathStore
+      };
+    }
+
+    function restoreMathTokens(html, mathStore) {
+      let output = String(html ?? '');
+      for (const item of mathStore) {
+        const escapedFormula = escapeHtml(item.formula);
+        const wrappedFormula = item.kind === 'display'
+          ? '<span class="math-display">\\[' + escapedFormula + '\\]</span>'
+          : '<span class="math-inline">\\(' + escapedFormula + '\\)</span>';
+        output = output.replaceAll(item.token, wrappedFormula);
+      }
+      return output;
+    }
+
+    function buildInlineMarkdownFragment(text) {
+      const source = String(text ?? '');
+      const pattern = /(\*\*([^\n]+?)\*\*)|(\*([^\n]+?)\*)/g;
+      let match;
+      let cursor = 0;
+      let changed = false;
+      const fragment = document.createDocumentFragment();
+
+      function appendText(value) {
+        if (!value) {
+          return;
+        }
+        fragment.appendChild(document.createTextNode(value));
+      }
+
+      while ((match = pattern.exec(source)) !== null) {
+        const raw = match[0];
+        const inner = match[2] ?? match[4] ?? '';
+        const isStrong = !!match[1];
+        const start = match.index;
+        const end = start + raw.length;
+        const prevChar = start > 0 ? source[start - 1] : '';
+        const nextChar = end < source.length ? source[end] : '';
+        const hasBoundaryConflict = Boolean((prevChar === '*' || nextChar === '*'));
+        const hasOuterWhitespace = !inner || /^\s/.test(inner) || /\s$/.test(inner);
+
+        if (hasBoundaryConflict || hasOuterWhitespace) {
+          continue;
+        }
+
+        appendText(source.slice(cursor, start));
+        const element = document.createElement(isStrong ? 'strong' : 'em');
+        element.textContent = inner;
+        fragment.appendChild(element);
+        cursor = end;
+        changed = true;
+      }
+
+      if (!changed) {
+        return null;
+      }
+
+      appendText(source.slice(cursor));
+      return fragment;
+    }
+
+    function fixResidualInlineMarkdown(root) {
+      if (!root) {
+        return;
+      }
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      const textNodes = [];
+      let current = walker.nextNode();
+      while (current) {
+        textNodes.push(current);
+        current = walker.nextNode();
+      }
+
+      for (const node of textNodes) {
+        const parent = node.parentElement;
+        if (!parent || parent.closest('code, pre, script, style, textarea')) {
+          continue;
+        }
+        if (!/[*]{1,2}[^\n*].*[*]{1,2}/.test(node.textContent || '')) {
+          continue;
+        }
+        const fragment = buildInlineMarkdownFragment(node.textContent || '');
+        if (!fragment) {
+          continue;
+        }
+        node.replaceWith(fragment);
+      }
     }
 
     function renderMarkdown(text) {
-      const source = String(text ?? '').replace(/\r\n/g, '\n');
-      const parts = source.split(/```/);
-      const html = [];
-      for (let i = 0; i < parts.length; i += 1) {
-        if (i % 2 === 1) {
-          const codeBlock = parts[i];
-          const lineBreak = codeBlock.indexOf('\n');
-          const lang = lineBreak >= 0 ? codeBlock.slice(0, lineBreak).trim() : '';
-          const code = lineBreak >= 0 ? codeBlock.slice(lineBreak + 1) : codeBlock;
-          html.push('<pre><code' + (lang ? ' data-lang="' + escapeHtml(lang) + '"' : '') + '>' + escapeHtml(code) + '</code></pre>');
-          continue;
-        }
-        const blocks = parts[i].split(/\n{2,}/);
-        for (const block of blocks) {
-          const trimmed = block.trim();
-          if (!trimmed) {
-            continue;
-          }
-          if (/^[-*]\s+/.test(trimmed) && trimmed.split('\n').every(line => /^[-*]\s+/.test(line.trim()))) {
-            const items = trimmed.split('\n').map(line => '<li>' + formatInline(line.replace(/^[-*]\s+/, '')) + '</li>').join('');
-            html.push('<ul>' + items + '</ul>');
-            continue;
-          }
-          if (/^\d+\.\s+/.test(trimmed) && trimmed.split('\n').every(line => /^\d+\.\s+/.test(line.trim()))) {
-            const items = trimmed.split('\n').map(line => '<li>' + formatInline(line.replace(/^\d+\.\s+/, '')) + '</li>').join('');
-            html.push('<ol>' + items + '</ol>');
-            continue;
-          }
-          html.push('<p>' + trimmed.split('\n').map(line => formatInline(line)).join('<br>') + '</p>');
-        }
+      const source = String(text ?? '');
+      if (typeof markdownToSafeHtml !== 'function') {
+        return escapeHtml(source).replace(/\n/g, '<br>');
       }
-      return html.join('');
+      const protectedMath = protectMathSegments(source);
+      return restoreMathTokens(markdownToSafeHtml(protectedMath.text), protectedMath.math);
+    }
+
+    function renderRichText(target, text) {
+      if (!target) {
+        return;
+      }
+      const source = String(text ?? '');
+      target.innerHTML = renderMarkdown(source);
+      fixResidualInlineMarkdown(target);
+      if (typeof scheduleHighlight === 'function') {
+        scheduleHighlight(target, source);
+      }
+      if (/[\\$]/.test(source)) {
+        requestMathTypeset(target);
+      }
     }
 
     function nowTime() {
@@ -383,39 +786,18 @@
       }
 
       els.draftImageList.classList.remove('hidden');
-      els.draftImageList.style.display = 'flex';
-      els.draftImageList.style.flexWrap = 'wrap';
-      els.draftImageList.style.gap = '10px';
-      els.draftImageList.style.alignItems = 'flex-start';
-      els.draftImageList.style.maxWidth = '100%';
-      els.draftImageList.style.overflow = 'hidden';
       for (const image of state.draftImages) {
         const card = document.createElement('div');
         card.className = 'draft-image-card';
-        card.style.width = '96px';
-        card.style.minWidth = '96px';
-        card.style.maxWidth = '96px';
-        card.style.display = 'grid';
-        card.style.gap = '6px';
-        card.style.position = 'relative';
-        card.style.overflow = 'hidden';
-        card.style.flex = '0 0 96px';
 
         const preview = document.createElement('img');
         preview.className = 'draft-image-thumb';
         preview.src = image.dataUrl;
         preview.alt = image.name || '图片';
-        preview.width = 96;
-        preview.height = 96;
+        preview.width = 80;
+        preview.height = 80;
         preview.loading = 'lazy';
         preview.decoding = 'async';
-        preview.style.width = '96px';
-        preview.style.height = '96px';
-        preview.style.maxWidth = '96px';
-        preview.style.maxHeight = '96px';
-        preview.style.objectFit = 'cover';
-        preview.style.display = 'block';
-        preview.style.borderRadius = '12px';
 
         const removeBtn = document.createElement('button');
         removeBtn.type = 'button';
@@ -428,7 +810,6 @@
         const name = document.createElement('div');
         name.className = 'draft-image-name';
         name.textContent = image.name || '图片';
-        name.style.maxWidth = '96px';
 
         card.appendChild(preview);
         card.appendChild(removeBtn);
@@ -578,75 +959,215 @@
     }
 
     function syncSettingsInputs() {
-      els.endpointInput.value = state.endpoint;
-      els.modelsEndpointInput.value = state.modelsEndpoint;
-      els.apiKeyInput.value = state.apiKey;
       els.temperatureInput.value = state.temperature;
       els.maxTokensInput.value = state.maxTokens;
+      els.topPInput.value = state.topP;
+      els.topKInput.value = state.topK;
+      els.minPInput.value = state.minP;
+      els.presencePenaltyInput.value = state.presencePenalty;
+      els.repeatPenaltyInput.value = state.repeatPenalty;
+      els.frequencyPenaltyInput.value = state.frequencyPenalty;
+      els.stopSequencesInput.value = state.stopSequences;
       els.streamToggle.checked = !!state.stream;
       els.systemPromptInput.value = state.systemPrompt;
       els.searchInput.value = state.search;
+      renderThinkingMenu();
     }
 
-    function persistState() {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        endpoint: state.endpoint,
-        modelsEndpoint: state.modelsEndpoint,
-        apiKey: state.apiKey,
+    function renderThinkingMenu() {
+      if (els.thinkingToggleBtn) {
+        els.thinkingToggleBtn.classList.toggle('active', !!state.enableThinking);
+      }
+      if (els.thinkingMenu) {
+        const items = els.thinkingMenu.querySelectorAll('[data-thinking-value]');
+        items.forEach(item => {
+          const enabled = item.getAttribute('data-thinking-value') === 'true';
+          const selected = enabled === !!state.enableThinking;
+          item.classList.toggle('active', selected);
+          item.setAttribute('aria-checked', selected ? 'true' : 'false');
+        });
+      }
+    }
+
+    function openThinkingMenu() {
+      if (!els.thinkingMenu || !els.thinkingToggleBtn) {
+        return;
+      }
+      els.thinkingMenu.classList.add('open');
+      els.thinkingMenu.setAttribute('aria-hidden', 'false');
+      els.thinkingToggleBtn.setAttribute('aria-expanded', 'true');
+    }
+
+    function closeThinkingMenu() {
+      if (!els.thinkingMenu || !els.thinkingToggleBtn) {
+        return;
+      }
+      els.thinkingMenu.classList.remove('open');
+      els.thinkingMenu.setAttribute('aria-hidden', 'true');
+      els.thinkingToggleBtn.setAttribute('aria-expanded', 'false');
+    }
+
+    function toggleThinkingMenu() {
+      if (!els.thinkingMenu?.classList.contains('open')) {
+        openThinkingMenu();
+        return;
+      }
+      closeThinkingMenu();
+    }
+
+    async function setEnableThinking(value) {
+      state.enableThinking = !!value;
+      renderThinkingMenu();
+      closeThinkingMenu();
+      await persistState({ immediate: true, showErrorToast: true });
+    }
+
+    function updateStorageHint(text) {
+      if (els.settingsStorageHint) {
+        els.settingsStorageHint.textContent = text;
+      }
+    }
+
+    function buildPersistedState() {
+      return {
         model: state.model,
         temperature: state.temperature,
         maxTokens: state.maxTokens,
+        topP: state.topP,
+        topK: state.topK,
+        minP: state.minP,
+        presencePenalty: state.presencePenalty,
+        repeatPenalty: state.repeatPenalty,
+        frequencyPenalty: state.frequencyPenalty,
+        stopSequences: state.stopSequences,
         stream: state.stream,
+        enableThinking: state.enableThinking,
         systemPrompt: state.systemPrompt,
         sidebarCollapsed: state.sidebarCollapsed,
         search: state.search,
         conversations: state.conversations,
         currentConversationId: state.currentConversationId
-      }));
-      syncSettingsInputs();
+      };
     }
 
-    function loadState() {
+    function applyLoadedState(saved) {
+      state.model = typeof saved?.model === 'string' ? saved.model : '';
+      state.temperature = typeof saved?.temperature === 'string' ? saved.temperature : state.temperature;
+      state.maxTokens = typeof saved?.maxTokens === 'string' ? saved.maxTokens : '';
+      state.topP = typeof saved?.topP === 'string' ? saved.topP : state.topP;
+      state.topK = typeof saved?.topK === 'string' ? saved.topK : state.topK;
+      state.minP = typeof saved?.minP === 'string' ? saved.minP : state.minP;
+      state.presencePenalty = typeof saved?.presencePenalty === 'string' ? saved.presencePenalty : state.presencePenalty;
+      state.repeatPenalty = typeof saved?.repeatPenalty === 'string' ? saved.repeatPenalty : state.repeatPenalty;
+      state.frequencyPenalty = typeof saved?.frequencyPenalty === 'string' ? saved.frequencyPenalty : state.frequencyPenalty;
+      state.stopSequences = typeof saved?.stopSequences === 'string' ? saved.stopSequences : '';
+      state.stream = typeof saved?.stream === 'boolean' ? saved.stream : true;
+      state.enableThinking = typeof saved?.enableThinking === 'boolean' ? saved.enableThinking : false;
+      state.systemPrompt = typeof saved?.systemPrompt === 'string' ? saved.systemPrompt : '';
+      state.sidebarCollapsed = typeof saved?.sidebarCollapsed === 'boolean' ? saved.sidebarCollapsed : false;
+      state.search = typeof saved?.search === 'string' ? saved.search : '';
+      state.currentConversationId = typeof saved?.currentConversationId === 'string' ? saved.currentConversationId : '';
+      state.conversations = Array.isArray(saved?.conversations)
+        ? saved.conversations
+            .filter(item => item && typeof item.id === 'string')
+            .map(item => ({
+              id: item.id,
+              title: typeof item.title === 'string' ? normalizeConversationTitle(item.title) : '新对话',
+              createdAt: Number(item.createdAt || Date.now()),
+              updatedAt: Number(item.updatedAt || Date.now()),
+              messages: Array.isArray(item.messages)
+                ? item.messages
+                    .filter(message => message && typeof message.role === 'string')
+                    .map(message => ({
+                      role: message.role,
+                      content: typeof message.content === 'string' ? message.content : '',
+                      images: normalizeImages(message.images),
+                      reasoning: typeof message.reasoning === 'string' ? message.reasoning : '',
+                      time: typeof message.time === 'string' ? message.time : nowTime(),
+                      reasoningCollapsed: typeof message.reasoningCollapsed === 'boolean' ? message.reasoningCollapsed : false
+                    }))
+                : []
+            }))
+        : [];
+    }
+
+    async function writeStateToServer(payload, options = {}) {
+      const json = await fetchJson(EASY_CHAT_STATE_ENDPOINT, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(payload),
+        keepalive: !!options.keepalive
+      });
+      if (!json?.success) {
+        throw new Error(json?.error || '保存失败');
+      }
+      updateStorageHint('');
+      return true;
+    }
+
+    async function flushStateSave(options = {}) {
+      if (stateSaveTimer) {
+        clearTimeout(stateSaveTimer);
+        stateSaveTimer = 0;
+      }
+      if (stateSaveInFlight) {
+        return false;
+      }
+      const payload = pendingStatePayload;
+      if (!payload) {
+        return true;
+      }
+      pendingStatePayload = null;
+      stateSaveInFlight = true;
+      let saved = false;
       try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw) {
-          const saved = JSON.parse(raw);
-          state.endpoint = typeof saved.endpoint === 'string' ? saved.endpoint : state.endpoint;
-          state.modelsEndpoint = typeof saved.modelsEndpoint === 'string' ? saved.modelsEndpoint : state.modelsEndpoint;
-          state.apiKey = typeof saved.apiKey === 'string' ? saved.apiKey : '';
-          state.model = typeof saved.model === 'string' ? saved.model : '';
-          state.temperature = typeof saved.temperature === 'string' ? saved.temperature : state.temperature;
-          state.maxTokens = typeof saved.maxTokens === 'string' ? saved.maxTokens : '';
-          state.stream = typeof saved.stream === 'boolean' ? saved.stream : true;
-          state.systemPrompt = typeof saved.systemPrompt === 'string' ? saved.systemPrompt : '';
-          state.sidebarCollapsed = typeof saved.sidebarCollapsed === 'boolean' ? saved.sidebarCollapsed : false;
-          state.search = typeof saved.search === 'string' ? saved.search : '';
-          state.currentConversationId = typeof saved.currentConversationId === 'string' ? saved.currentConversationId : '';
-          state.conversations = Array.isArray(saved.conversations)
-            ? saved.conversations
-                .filter(item => item && typeof item.id === 'string')
-                .map(item => ({
-                  id: item.id,
-                  title: typeof item.title === 'string' ? normalizeConversationTitle(item.title) : '新对话',
-                  createdAt: Number(item.createdAt || Date.now()),
-                  updatedAt: Number(item.updatedAt || Date.now()),
-                  messages: Array.isArray(item.messages)
-                    ? item.messages
-                        .filter(message => message && typeof message.role === 'string')
-                        .map(message => ({
-                          role: message.role,
-                          content: typeof message.content === 'string' ? message.content : '',
-                          images: normalizeImages(message.images),
-                          reasoning: typeof message.reasoning === 'string' ? message.reasoning : '',
-                          time: typeof message.time === 'string' ? message.time : nowTime(),
-                          reasoningCollapsed: typeof message.reasoningCollapsed === 'boolean' ? message.reasoningCollapsed : false
-                        }))
-                    : []
-                }))
-            : [];
-        }
+        saved = await writeStateToServer(payload, options);
+        return true;
       } catch (error) {
         console.error(error);
+        pendingStatePayload = payload;
+        updateStorageHint('服务端保存失败，当前更改尚未落盘');
+        if (options.showErrorToast !== false) {
+          showToast('error', '保存失败：' + (error.message || '未知错误'));
+        }
+        return false;
+      } finally {
+        stateSaveInFlight = false;
+        if (saved && pendingStatePayload) {
+          void flushStateSave({ showErrorToast: false });
+        }
+      }
+    }
+
+    function persistState(options = {}) {
+      syncSettingsInputs();
+      pendingStatePayload = buildPersistedState();
+      if (stateSaveTimer) {
+        clearTimeout(stateSaveTimer);
+        stateSaveTimer = 0;
+      }
+      if (options.immediate) {
+        return flushStateSave(options);
+      }
+      stateSaveTimer = window.setTimeout(() => {
+        void flushStateSave({ showErrorToast: false });
+      }, typeof options.delay === 'number' ? options.delay : 300);
+      return Promise.resolve(true);
+    }
+
+    async function loadState() {
+      updateStorageHint('正在从服务端加载聊天记录…');
+      try {
+        const json = await fetchJson(EASY_CHAT_STATE_ENDPOINT, { headers: getHeaders() });
+        if (!json?.success) {
+          throw new Error(json?.error || '加载失败');
+        }
+        applyLoadedState(json?.data?.state || {});
+        updateStorageHint('聊天记录和设置保存在服务端 cache/easy-chat 中');
+      } catch (error) {
+        console.error(error);
+        updateStorageHint('服务端读取失败，当前使用临时内存状态');
+        showToast('error', '加载聊天记录失败，已使用空白状态');
       }
       ensureConversation();
       syncSettingsInputs();
@@ -730,7 +1251,7 @@
 
         const reasoningBody = document.createElement('div');
         reasoningBody.className = 'reasoning-body' + (message.reasoningCollapsed ? ' hidden' : '');
-        reasoningBody.innerHTML = renderMarkdown(message.reasoning);
+        renderRichText(reasoningBody, message.reasoning);
 
         reasoningHead.appendChild(reasoningMeta);
         reasoningHead.appendChild(reasoningCaret);
@@ -807,7 +1328,7 @@
         if (String(message.content || '').trim()) {
           const content = document.createElement('div');
           content.className = 'message-content';
-          content.innerHTML = renderMarkdown(message.content || '');
+          renderRichText(content, message.content || '');
           bubble.appendChild(content);
         }
       }
@@ -992,7 +1513,7 @@
                 }
                 const rBody = reasoningBox.querySelector('.reasoning-body');
                 if (rBody && !rBody.classList.contains('hidden')) {
-                  rBody.innerHTML = renderMarkdown(reasoning);
+                  renderRichText(rBody, reasoning);
                 }
               }
 
@@ -1002,7 +1523,7 @@
                 contentDiv.className = 'message-content';
                 bubble.appendChild(contentDiv);
               }
-              contentDiv.innerHTML = renderMarkdown(content || '');
+              renderRichText(contentDiv, content || '');
             }
 
             let actions = article.querySelector('.message-actions');
@@ -1179,7 +1700,7 @@
       updateStatus('ready', '正在生成回复…', '生成中');
 
       try {
-        const response = await fetch(state.endpoint, {
+        const response = await fetch(CHAT_ENDPOINT, {
           method: 'POST',
           headers: getHeaders(),
           body: JSON.stringify(payload),
@@ -1318,11 +1839,7 @@
     }
 
     function getHeaders() {
-      const headers = { 'Content-Type': 'application/json' };
-      if (state.apiKey.trim()) {
-        headers.Authorization = 'Bearer ' + state.apiKey.trim();
-      }
-      return headers;
+      return { 'Content-Type': 'application/json' };
     }
 
     async function fetchJson(url, options = {}) {
@@ -1334,16 +1851,22 @@
       return response.json();
     }
 
-    function saveSettings() {
-      state.endpoint = els.endpointInput.value.trim() || '/v1/chat/completions';
-      state.modelsEndpoint = els.modelsEndpointInput.value.trim() || '/v1/models';
-      state.apiKey = els.apiKeyInput.value;
+    async function saveSettings(showSavedToast = true) {
       state.temperature = els.temperatureInput.value.trim();
       state.maxTokens = els.maxTokensInput.value.trim();
+      state.topP = els.topPInput.value.trim();
+      state.topK = els.topKInput.value.trim();
+      state.minP = els.minPInput.value.trim();
+      state.presencePenalty = els.presencePenaltyInput.value.trim();
+      state.repeatPenalty = els.repeatPenaltyInput.value.trim();
+      state.frequencyPenalty = els.frequencyPenaltyInput.value.trim();
+      state.stopSequences = els.stopSequencesInput.value;
       state.stream = els.streamToggle.checked;
       state.systemPrompt = els.systemPromptInput.value;
-      persistState();
-      showToast('success', '设置已保存');
+      const saved = await persistState({ immediate: true, showErrorToast: showSavedToast });
+      if (saved && showSavedToast) {
+        showToast('success', '设置已保存到服务端');
+      }
     }
 
     function buildPayload() {
@@ -1365,15 +1888,55 @@
       const payload = {
         model: state.model,
         messages,
-        stream: state.stream
+        stream: state.stream,
+        enable_thinking: state.enableThinking
       };
-      const temperature = Number(state.temperature);
+      const rawTemperature = String(state.temperature || '').trim();
+      const temperature = rawTemperature ? Number(rawTemperature) : NaN;
       if (Number.isFinite(temperature)) {
         payload.temperature = temperature;
       }
-      const maxTokens = Number(state.maxTokens);
+      const rawMaxTokens = String(state.maxTokens || '').trim();
+      const maxTokens = rawMaxTokens ? Number(rawMaxTokens) : NaN;
       if (Number.isFinite(maxTokens) && maxTokens > 0) {
         payload.max_tokens = maxTokens;
+      }
+      const rawTopP = String(state.topP || '').trim();
+      const topP = rawTopP ? Number(rawTopP) : NaN;
+      if (Number.isFinite(topP)) {
+        payload.top_p = topP;
+      }
+      const rawTopK = String(state.topK || '').trim();
+      const topK = rawTopK ? Number(rawTopK) : NaN;
+      if (Number.isFinite(topK)) {
+        payload.top_k = topK;
+      }
+      const rawMinP = String(state.minP || '').trim();
+      const minP = rawMinP ? Number(rawMinP) : NaN;
+      if (Number.isFinite(minP)) {
+        payload.min_p = minP;
+      }
+      const rawPresencePenalty = String(state.presencePenalty || '').trim();
+      const presencePenalty = rawPresencePenalty ? Number(rawPresencePenalty) : NaN;
+      if (Number.isFinite(presencePenalty)) {
+        payload.presence_penalty = presencePenalty;
+      }
+      const rawRepeatPenalty = String(state.repeatPenalty || '').trim();
+      const repeatPenalty = rawRepeatPenalty ? Number(rawRepeatPenalty) : NaN;
+      if (Number.isFinite(repeatPenalty)) {
+        payload.repeat_penalty = repeatPenalty;
+      }
+      const rawFrequencyPenalty = String(state.frequencyPenalty || '').trim();
+      const frequencyPenalty = rawFrequencyPenalty ? Number(rawFrequencyPenalty) : NaN;
+      if (Number.isFinite(frequencyPenalty)) {
+        payload.frequency_penalty = frequencyPenalty;
+      }
+      const stop = String(state.stopSequences || '')
+        .split(/\r?\n/)
+        .map(item => item.trim())
+        .filter(Boolean);
+      if (stop.length) {
+        payload.stop = stop;
       }
       return payload;
     }
@@ -1451,10 +2014,10 @@
     }
 
     async function refreshModels() {
-      saveSettings();
+      await saveSettings(false);
       updateStatus('', '正在刷新模型列表…', '刷新中');
       try {
-        const json = await fetchJson(state.modelsEndpoint, { headers: getHeaders() });
+        const json = await fetchJson(MODELS_ENDPOINT, { headers: getHeaders() });
         const models = Array.isArray(json?.data) ? json.data : [];
         els.modelSelect.innerHTML = '';
         if (!models.length) {
@@ -1482,18 +2045,6 @@
         }
         persistState();
         updateStatus('ready', models.length ? '模型列表已刷新' : '当前未发现可用模型', models.length ? '已连接' : '无模型');
-      } catch (error) {
-        updateStatus('error', error.message || '连接失败', '连接失败');
-      }
-    }
-
-    async function checkConnection() {
-      saveSettings();
-      updateStatus('', '正在检测连接…', '检测中');
-      try {
-        const json = await fetchJson(state.modelsEndpoint, { headers: getHeaders() });
-        const models = Array.isArray(json?.data) ? json.data : [];
-        updateStatus('ready', models.length ? '连接正常' : '连接正常，但没有加载模型', '连接正常');
       } catch (error) {
         updateStatus('error', error.message || '连接失败', '连接失败');
       }
@@ -1585,7 +2136,6 @@
       const blob = new Blob([JSON.stringify({
         exportedAt: new Date().toISOString(),
         model: state.model,
-        endpoint: state.endpoint,
         systemPrompt: state.systemPrompt,
         conversation
       }, null, 2)], { type: 'application/json;charset=utf-8' });
@@ -1599,8 +2149,10 @@
     }
 
     function openSettings() {
+      closeThinkingMenu();
       els.settingsDrawer.classList.add('open');
       els.settingsDrawer.setAttribute('aria-hidden', 'false');
+      switchSettingsTab('general');
     }
 
     function closeSettings() {
@@ -1608,9 +2160,24 @@
       els.settingsDrawer.setAttribute('aria-hidden', 'true');
     }
 
+    function switchSettingsTab(tabName) {
+      const tabs = document.querySelectorAll('.settings-tab');
+      const sections = document.querySelectorAll('.settings-section');
+      tabs.forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.settingsTab === tabName);
+      });
+      sections.forEach(section => {
+        section.classList.toggle('active', section.dataset.settingsSection === tabName);
+      });
+    }
+
     function bindEvents() {
       els.settingsBtn.addEventListener('click', openSettings);
       els.closeSettingsBtn.addEventListener('click', closeSettings);
+      els.thinkingToggleBtn.addEventListener('click', event => {
+        event.stopPropagation();
+        toggleThinkingMenu();
+      });
       els.settingsDrawer.addEventListener('click', event => {
         if (event.target === els.settingsDrawer) {
           closeSettings();
@@ -1619,6 +2186,7 @@
       window.addEventListener('keydown', event => {
         if (event.key === 'Escape') {
           setSidebarOpen(false);
+          closeThinkingMenu();
           closeSettings();
         }
       });
@@ -1647,9 +2215,8 @@
       els.imageInput.addEventListener('change', async () => {
         await addDraftImages(els.imageInput.files);
       });
-      els.checkConnectionBtn.addEventListener('click', checkConnection);
-      els.saveSettingsBtn.addEventListener('click', () => {
-        saveSettings();
+      els.saveSettingsBtn.addEventListener('click', async () => {
+        await saveSettings();
         closeSettings();
       });
       els.exportBtn.addEventListener('click', exportConversation);
@@ -1733,27 +2300,80 @@
       });
 
       document.addEventListener('click', event => {
+        const thinkingItem = event.target.closest('.thinking-menu-item[data-thinking-value]');
+        if (thinkingItem) {
+          void setEnableThinking(thinkingItem.dataset.thinkingValue === 'true');
+          return;
+        }
+        if (!event.target.closest('#thinkingMenuWrap')) {
+          closeThinkingMenu();
+        }
         const hint = event.target.closest('.empty-hint[data-hint]');
         if (hint) {
           els.promptInput.value = hint.dataset.hint;
           resizePromptInput();
           els.promptInput.focus();
         }
+        const tab = event.target.closest('.settings-tab[data-settings-tab]');
+        if (tab) {
+          switchSettingsTab(tab.dataset.settingsTab);
+        }
+      });
+
+      const dropZone = document.getElementById('dropZone');
+      const composerCard = document.querySelector('.composer-card');
+      let dragCounter = 0;
+
+      composerCard.addEventListener('dragenter', event => {
+        event.preventDefault();
+        dragCounter++;
+        if (event.dataTransfer?.types?.includes('Files')) {
+          dropZone.classList.remove('hidden');
+        }
+      });
+      composerCard.addEventListener('dragleave', event => {
+        event.preventDefault();
+        dragCounter--;
+        if (dragCounter <= 0) {
+          dragCounter = 0;
+          dropZone.classList.add('hidden');
+        }
+      });
+      composerCard.addEventListener('dragover', event => {
+        event.preventDefault();
+      });
+      composerCard.addEventListener('drop', async event => {
+        event.preventDefault();
+        dragCounter = 0;
+        dropZone.classList.add('hidden');
+        if (event.dataTransfer?.files?.length) {
+          await addDraftImages(event.dataTransfer.files);
+        }
+      });
+      window.addEventListener('pagehide', () => {
+        if (stateSaveTimer) {
+          clearTimeout(stateSaveTimer);
+          stateSaveTimer = 0;
+        }
+        if (pendingStatePayload && !stateSaveInFlight) {
+          void flushStateSave({ keepalive: true, showErrorToast: false });
+        }
       });
     }
 
-    function init() {
-      loadState();
+    async function init() {
+      ensureMathJax();
+      await loadState();
       renderConversationList();
       renderMessages();
       renderDraftImages();
       bindEvents();
       syncResponsiveLayout();
-      updateStatus('', '请先刷新模型或打开设置完成配置', '未连接');
-      refreshModels();
+      updateStatus('', '正在加载模型列表…', '未连接');
+      await refreshModels();
     }
 
-    init();
+    void init();
   </script>
 </body>
 </html>
