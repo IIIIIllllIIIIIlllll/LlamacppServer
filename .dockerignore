@@ -1,0 +1,17 @@
+.git
+.github
+.idea
+.vscode
+
+build
+dist
+cache
+config
+logs
+models
+llamacpp
+downloads
+
+screenshot
+*.zip
+*.log
