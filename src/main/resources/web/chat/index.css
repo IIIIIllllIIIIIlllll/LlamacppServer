@@ -647,6 +647,23 @@ button { cursor: pointer; }
   align-items: center;
   gap: 2px;
   margin-top: 2px;
+  flex-wrap: wrap;
+}
+
+.message-response-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 6px;
+  padding-right: 6px;
+  border-right: 1px solid var(--border);
+}
+
+.message-response-count {
+  min-width: 40px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
 }
 
 .message-action {
@@ -770,6 +787,30 @@ button { cursor: pointer; }
   font-size: 13px;
   line-height: 1.6;
   color: var(--muted);
+}
+
+/* ── Assistant performance ── */
+.message-performance {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  margin-top: 8px;
+  margin-left: auto;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--muted-bg);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: normal;
+  word-break: break-word;
+  opacity: 0.92;
+}
+
+.message-performance:hover {
+  color: var(--fg);
+  border-color: #cfcfcf;
 }
 
 /* ── Bubble content ── */

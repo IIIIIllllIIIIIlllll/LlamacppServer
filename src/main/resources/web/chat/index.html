@@ -958,6 +958,283 @@
         : '图片对话';
     }
 
+    function getAssistantDisplayName(message, fallbackModel) {
+      const modelName = typeof message?.model === 'string' && message.model.trim()
+        ? message.model.trim()
+        : typeof fallbackModel === 'string' && fallbackModel.trim()
+          ? fallbackModel.trim()
+          : typeof state.model === 'string' && state.model.trim()
+            ? state.model.trim()
+            : '模型';
+      return modelName;
+    }
+
+    function normalizeTimingNumber(value) {
+      const number = typeof value === 'number' ? value : Number(value);
+      return Number.isFinite(number) ? number : null;
+    }
+
+    function normalizeTimings(value) {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return null;
+      }
+      const next = {};
+      const keys = [
+        'cache_n',
+        'prompt_n',
+        'prompt_ms',
+        'prompt_per_token_ms',
+        'prompt_per_second',
+        'predicted_n',
+        'predicted_ms',
+        'predicted_per_token_ms',
+        'predicted_per_second'
+      ];
+      for (const key of keys) {
+        const normalized = normalizeTimingNumber(value[key]);
+        if (normalized !== null) {
+          next[key] = normalized;
+        }
+      }
+      return Object.keys(next).length ? next : null;
+    }
+
+    function formatTimingValue(value, digits = 2) {
+      const number = normalizeTimingNumber(value);
+      return number === null ? '' : number.toFixed(digits).replace(/\.?0+$/, '');
+    }
+
+    function formatAssistantPerformanceText(timings) {
+      const normalized = normalizeTimings(timings);
+      if (!normalized) {
+        return '';
+      }
+      const parts = [];
+      if (normalized.prompt_ms !== undefined) {
+        parts.push('首字延迟 ' + formatTimingValue(normalized.prompt_ms, 3) + ' ms');
+      }
+      if (normalized.predicted_per_second !== undefined) {
+        parts.push('速度 ' + formatTimingValue(normalized.predicted_per_second, 2) + ' token/s');
+      }
+      if (normalized.predicted_n !== undefined) {
+        parts.push('生成 ' + formatTimingValue(normalized.predicted_n, 0) + ' token');
+      }
+      if (normalized.cache_n !== undefined && normalized.cache_n > 0) {
+        parts.push('缓存 ' + formatTimingValue(normalized.cache_n, 0) + ' token');
+      }
+      return parts.join('｜');
+    }
+
+    function formatAssistantPerformanceDetailText(timings) {
+      const normalized = normalizeTimings(timings);
+      if (!normalized) {
+        return '';
+      }
+      const lines = [];
+      if (normalized.cache_n !== undefined && normalized.cache_n > 0) {
+        lines.push('缓存命中 ' + formatTimingValue(normalized.cache_n, 0) + ' token');
+      }
+      if (
+        normalized.prompt_n !== undefined ||
+        normalized.prompt_ms !== undefined ||
+        normalized.prompt_per_token_ms !== undefined ||
+        normalized.prompt_per_second !== undefined
+      ) {
+        const promptParts = [];
+        if (normalized.prompt_n !== undefined) {
+          promptParts.push('提示词 ' + formatTimingValue(normalized.prompt_n, 0) + ' token');
+        }
+        if (normalized.prompt_ms !== undefined) {
+          promptParts.push('耗时 ' + formatTimingValue(normalized.prompt_ms, 3) + ' ms');
+        }
+        if (normalized.prompt_per_token_ms !== undefined) {
+          promptParts.push('单 token ' + formatTimingValue(normalized.prompt_per_token_ms, 3) + ' ms');
+        }
+        if (normalized.prompt_per_second !== undefined) {
+          promptParts.push('速度 ' + formatTimingValue(normalized.prompt_per_second, 2) + ' token/s');
+        }
+        if (promptParts.length) {
+          lines.push('提示阶段：' + promptParts.join('｜'));
+        }
+      }
+      if (
+        normalized.predicted_n !== undefined ||
+        normalized.predicted_ms !== undefined ||
+        normalized.predicted_per_token_ms !== undefined ||
+        normalized.predicted_per_second !== undefined
+      ) {
+        const predictedParts = [];
+        if (normalized.predicted_n !== undefined) {
+          predictedParts.push('生成 ' + formatTimingValue(normalized.predicted_n, 0) + ' token');
+        }
+        if (normalized.predicted_ms !== undefined) {
+          predictedParts.push('耗时 ' + formatTimingValue(normalized.predicted_ms, 3) + ' ms');
+        }
+        if (normalized.predicted_per_token_ms !== undefined) {
+          predictedParts.push('单 token ' + formatTimingValue(normalized.predicted_per_token_ms, 3) + ' ms');
+        }
+        if (normalized.predicted_per_second !== undefined) {
+          predictedParts.push('速度 ' + formatTimingValue(normalized.predicted_per_second, 2) + ' token/s');
+        }
+        if (predictedParts.length) {
+          lines.push('生成阶段：' + predictedParts.join('｜'));
+        }
+      }
+      return lines.join('\n');
+    }
+
+    function normalizeAssistantResponse(response, fallback = {}) {
+      const normalizedTimings = normalizeTimings(response?.timings ?? fallback.timings);
+      const performanceText = typeof response?.performanceText === 'string' && response.performanceText.trim()
+        ? response.performanceText.trim()
+        : typeof fallback.performanceText === 'string' && fallback.performanceText.trim()
+          ? fallback.performanceText.trim()
+          : normalizedTimings
+            ? formatAssistantPerformanceText(normalizedTimings)
+            : '';
+      return {
+        id: typeof response?.id === 'string' && response.id.trim() ? response.id.trim() : makeId(),
+        content: typeof response?.content === 'string' ? response.content : typeof fallback.content === 'string' ? fallback.content : '',
+        model: typeof response?.model === 'string' ? response.model : typeof fallback.model === 'string' ? fallback.model : '',
+        timings: normalizedTimings,
+        performanceText,
+        reasoning: typeof response?.reasoning === 'string' ? response.reasoning : typeof fallback.reasoning === 'string' ? fallback.reasoning : '',
+        time: typeof response?.time === 'string' ? response.time : typeof fallback.time === 'string' ? fallback.time : nowTime(),
+        reasoningCollapsed: typeof response?.reasoningCollapsed === 'boolean'
+          ? response.reasoningCollapsed
+          : typeof fallback.reasoningCollapsed === 'boolean'
+            ? fallback.reasoningCollapsed
+            : false
+      };
+    }
+
+    function normalizeConversationMessage(message) {
+      const base = {
+        role: message?.role,
+        content: typeof message?.content === 'string' ? message.content : '',
+        images: normalizeImages(message?.images),
+        model: typeof message?.model === 'string' ? message.model : '',
+        timings: normalizeTimings(message?.timings),
+        performanceText: typeof message?.performanceText === 'string' ? message.performanceText : '',
+        reasoning: typeof message?.reasoning === 'string' ? message.reasoning : '',
+        time: typeof message?.time === 'string' ? message.time : nowTime(),
+        reasoningCollapsed: typeof message?.reasoningCollapsed === 'boolean' ? message.reasoningCollapsed : false
+      };
+      if (base.role !== 'assistant') {
+        return base;
+      }
+      const fallbackResponse = normalizeAssistantResponse(message, base);
+      const responses = Array.isArray(message?.responses) && message.responses.length
+        ? message.responses.map(item => normalizeAssistantResponse(item, fallbackResponse))
+        : [fallbackResponse];
+      const activeResponseIndex = Math.min(
+        Math.max(Number.isInteger(message?.activeResponseIndex) ? message.activeResponseIndex : 0, 0),
+        responses.length - 1
+      );
+      const activeResponse = responses[activeResponseIndex];
+      return {
+        ...base,
+        responses,
+        activeResponseIndex,
+        content: activeResponse.content,
+        model: activeResponse.model,
+        timings: activeResponse.timings,
+        performanceText: activeResponse.performanceText,
+        reasoning: activeResponse.reasoning,
+        time: activeResponse.time,
+        reasoningCollapsed: activeResponse.reasoningCollapsed
+      };
+    }
+
+    function getActiveAssistantResponse(message) {
+      if (!message || message.role !== 'assistant') {
+        return null;
+      }
+      if (!Array.isArray(message.responses) || !message.responses.length) {
+        const normalized = normalizeConversationMessage(message);
+        message.responses = normalized.responses;
+        message.activeResponseIndex = normalized.activeResponseIndex;
+      }
+      const index = Math.min(
+        Math.max(Number.isInteger(message.activeResponseIndex) ? message.activeResponseIndex : 0, 0),
+        message.responses.length - 1
+      );
+      message.activeResponseIndex = index;
+      return message.responses[index] || null;
+    }
+
+    function syncAssistantMessageState(message) {
+      if (!message || message.role !== 'assistant') {
+        return message;
+      }
+      const normalized = normalizeConversationMessage(message);
+      message.responses = normalized.responses;
+      message.activeResponseIndex = normalized.activeResponseIndex;
+      message.content = normalized.content;
+      message.model = normalized.model;
+      message.timings = normalized.timings;
+      message.performanceText = normalized.performanceText;
+      message.reasoning = normalized.reasoning;
+      message.time = normalized.time;
+      message.reasoningCollapsed = normalized.reasoningCollapsed;
+      return message;
+    }
+
+    function createAssistantResponseDraft(extra = {}) {
+      return normalizeAssistantResponse({
+        content: typeof extra.content === 'string' ? extra.content : '',
+        model: typeof extra.model === 'string' ? extra.model : '',
+        timings: normalizeTimings(extra.timings),
+        performanceText: typeof extra.performanceText === 'string' ? extra.performanceText : '',
+        reasoning: typeof extra.reasoning === 'string' ? extra.reasoning : '',
+        time: typeof extra.time === 'string' ? extra.time : nowTime(),
+        reasoningCollapsed: typeof extra.reasoningCollapsed === 'boolean' ? extra.reasoningCollapsed : false
+      });
+    }
+
+    function getAssistantPerformanceText(message) {
+      if (!message || message.role !== 'assistant') {
+        return '';
+      }
+      if (message.timings) {
+        return formatAssistantPerformanceText(message.timings);
+      }
+      if (typeof message.performanceText === 'string' && message.performanceText.trim()) {
+        return message.performanceText.trim();
+      }
+      return '';
+    }
+
+    function upsertAssistantPerformanceElement(bubble, message) {
+      if (!bubble) {
+        return;
+      }
+      const performanceText = getAssistantPerformanceText(message);
+      let performanceDiv = bubble.querySelector(':scope > .message-performance');
+      if (!performanceText) {
+        if (performanceDiv) {
+          performanceDiv.remove();
+        }
+        return;
+      }
+      if (!performanceDiv) {
+        performanceDiv = document.createElement('div');
+        performanceDiv.className = 'message-performance';
+        bubble.appendChild(performanceDiv);
+      }
+      performanceDiv.textContent = performanceText;
+      const detailText = message?.timings
+        ? formatAssistantPerformanceDetailText(message.timings)
+        : performanceText;
+      if (detailText) {
+        performanceDiv.title = detailText;
+        performanceDiv.setAttribute('aria-label', detailText);
+      } else {
+        performanceDiv.removeAttribute('title');
+        performanceDiv.removeAttribute('aria-label');
+      }
+    }
+
     function syncSettingsInputs() {
       els.temperatureInput.value = state.temperature;
       els.maxTokensInput.value = state.maxTokens;
@@ -972,6 +1249,20 @@
       els.systemPromptInput.value = state.systemPrompt;
       els.searchInput.value = state.search;
       renderThinkingMenu();
+    }
+
+    function applySettingsInputsToState() {
+      state.temperature = els.temperatureInput.value.trim();
+      state.maxTokens = els.maxTokensInput.value.trim();
+      state.topP = els.topPInput.value.trim();
+      state.topK = els.topKInput.value.trim();
+      state.minP = els.minPInput.value.trim();
+      state.presencePenalty = els.presencePenaltyInput.value.trim();
+      state.repeatPenalty = els.repeatPenaltyInput.value.trim();
+      state.frequencyPenalty = els.frequencyPenaltyInput.value.trim();
+      state.stopSequences = els.stopSequencesInput.value;
+      state.stream = els.streamToggle.checked;
+      state.systemPrompt = els.systemPromptInput.value;
     }
 
     function renderThinkingMenu() {
@@ -1078,14 +1369,7 @@
               messages: Array.isArray(item.messages)
                 ? item.messages
                     .filter(message => message && typeof message.role === 'string')
-                    .map(message => ({
-                      role: message.role,
-                      content: typeof message.content === 'string' ? message.content : '',
-                      images: normalizeImages(message.images),
-                      reasoning: typeof message.reasoning === 'string' ? message.reasoning : '',
-                      time: typeof message.time === 'string' ? message.time : nowTime(),
-                      reasoningCollapsed: typeof message.reasoningCollapsed === 'boolean' ? message.reasoningCollapsed : false
-                    }))
+                    .map(message => normalizeConversationMessage(message))
                 : []
             }))
         : [];
@@ -1212,15 +1496,21 @@
     }
 
     function createMessageElement(message, index) {
+      if (message.role === 'assistant') {
+        syncAssistantMessageState(message);
+      }
       const article = document.createElement('article');
       article.className = 'message ' + (message.role === 'user' ? 'user' : 'assistant');
       article.dataset.index = String(index);
+      const assistantDisplayName = message.role === 'assistant'
+        ? getAssistantDisplayName(message)
+        : '';
 
       const head = document.createElement('div');
       head.className = 'message-head';
       head.innerHTML =
         '<span class="avatar">' + (message.role === 'user' ? '你' : 'AI') + '</span>' +
-        '<strong>' + (message.role === 'user' ? '用户' : '助手') + '</strong>' +
+        '<strong>' + escapeHtml(message.role === 'user' ? '用户' : assistantDisplayName) + '</strong>' +
         '<span>' + escapeHtml(message.time || nowTime()) + '</span>';
 
       const bubble = document.createElement('div');
@@ -1331,14 +1621,23 @@
           renderRichText(content, message.content || '');
           bubble.appendChild(content);
         }
+
+        if (message.role === 'assistant') {
+          upsertAssistantPerformanceElement(bubble, message);
+        }
       }
 
       article.appendChild(head);
       article.appendChild(bubble);
 
-      if (!isEditing && (message.content || message.reasoning || getMessageImages(message).length)) {
+      if (!isEditing && (message.content || message.reasoning || getMessageImages(message).length || getAssistantPerformanceText(message))) {
         const actions = document.createElement('div');
         actions.className = 'message-actions';
+
+        const responseSwitcher = createAssistantResponseSwitcher(message, index);
+        if (responseSwitcher) {
+          actions.appendChild(responseSwitcher);
+        }
 
         actions.appendChild(createMessageActionButton('copy', index, '复制', [
           '<rect x="9" y="9" width="11" height="11" rx="2"></rect>',
@@ -1405,6 +1704,16 @@
     function updateMessageActionStates() {
       const buttons = els.messages.querySelectorAll('button[data-message-action]');
       for (const button of buttons) {
+        const action = button.dataset.messageAction;
+        if (action === 'prev-response' || action === 'next-response') {
+          const index = Number(button.dataset.index);
+          const message = getCurrentConversation()?.messages?.[index];
+          const activeResponseIndex = Number(message?.activeResponseIndex || 0);
+          const responseCount = Array.isArray(message?.responses) ? message.responses.length : 0;
+          button.disabled = state.isSending ||
+            (action === 'prev-response' ? activeResponseIndex <= 0 : activeResponseIndex >= responseCount - 1);
+          continue;
+        }
         button.disabled = state.isSending;
       }
     }
@@ -1439,19 +1748,163 @@
       return button;
     }
 
+    function createAssistantResponseSwitcher(message, index) {
+      if (message.role !== 'assistant' || !Array.isArray(message.responses) || message.responses.length <= 1) {
+        return null;
+      }
+      const wrap = document.createElement('div');
+      wrap.className = 'message-response-switcher';
+
+      const previousBtn = createMessageActionButton('prev-response', index, '查看上一个响应',
+        '<path d="m15 18-6-6 6-6"></path>');
+      previousBtn.disabled = state.isSending || message.activeResponseIndex <= 0;
+
+      const count = document.createElement('span');
+      count.className = 'message-response-count';
+      count.textContent = String(message.activeResponseIndex + 1) + ' / ' + String(message.responses.length);
+
+      const nextBtn = createMessageActionButton('next-response', index, '查看下一个响应',
+        '<path d="m9 18 6-6-6-6"></path>');
+      nextBtn.disabled = state.isSending || message.activeResponseIndex >= message.responses.length - 1;
+
+      wrap.appendChild(previousBtn);
+      wrap.appendChild(count);
+      wrap.appendChild(nextBtn);
+      return wrap;
+    }
+
+    function updateAssistantMessageElement(article, message, index) {
+      if (!article || !message || message.role !== 'assistant') {
+        return false;
+      }
+      const headTitle = article.querySelector('.message-head strong');
+      if (headTitle) {
+        headTitle.textContent = getAssistantDisplayName(message);
+      }
+      const headTime = article.querySelector('.message-head span:last-child');
+      if (headTime) {
+        headTime.textContent = message.time || nowTime();
+      }
+      const bubble = article.querySelector('.bubble');
+      if (!bubble) {
+        return false;
+      }
+
+      let reasoningBox = bubble.querySelector('.reasoning-box');
+      if (message.reasoning) {
+        if (!reasoningBox) {
+          reasoningBox = document.createElement('div');
+          reasoningBox.className = 'reasoning-box';
+          const reasoningHead = document.createElement('button');
+          reasoningHead.type = 'button';
+          reasoningHead.className = 'reasoning-head';
+          reasoningHead.dataset.reasoningToggle = 'true';
+          reasoningHead.dataset.index = String(index);
+
+          const reasoningMeta = document.createElement('div');
+          reasoningMeta.className = 'reasoning-meta';
+          reasoningMeta.innerHTML = '<span class="reasoning-label">思维链</span><span class="reasoning-state"></span>';
+
+          const reasoningCaret = document.createElement('span');
+          reasoningCaret.className = 'reasoning-caret';
+          reasoningCaret.setAttribute('aria-hidden', 'true');
+          reasoningCaret.textContent = '›';
+
+          const reasoningBody = document.createElement('div');
+          reasoningBody.className = 'reasoning-body';
+
+          reasoningHead.appendChild(reasoningMeta);
+          reasoningHead.appendChild(reasoningCaret);
+          reasoningBox.appendChild(reasoningHead);
+          reasoningBox.appendChild(reasoningBody);
+          bubble.insertBefore(reasoningBox, bubble.firstChild);
+        }
+        const reasoningHead = reasoningBox.querySelector('.reasoning-head');
+        const reasoningState = reasoningBox.querySelector('.reasoning-state');
+        const reasoningBody = reasoningBox.querySelector('.reasoning-body');
+        if (!reasoningHead || !reasoningState || !reasoningBody) {
+          return false;
+        }
+        reasoningHead.dataset.index = String(index);
+        reasoningHead.setAttribute('aria-expanded', message.reasoningCollapsed ? 'false' : 'true');
+        reasoningState.textContent = message.reasoningCollapsed ? '点击展开' : '点击收起';
+        reasoningBody.classList.toggle('hidden', !!message.reasoningCollapsed);
+        if (!message.reasoningCollapsed) {
+          renderRichText(reasoningBody, message.reasoning);
+        }
+      } else if (reasoningBox) {
+        reasoningBox.remove();
+      }
+
+      let contentDiv = bubble.querySelector(':scope > .message-content');
+      if (String(message.content || '').trim()) {
+        if (!contentDiv) {
+          contentDiv = document.createElement('div');
+          contentDiv.className = 'message-content';
+          bubble.appendChild(contentDiv);
+        }
+        renderRichText(contentDiv, message.content || '');
+      } else if (contentDiv) {
+        contentDiv.remove();
+      }
+
+      upsertAssistantPerformanceElement(bubble, message);
+
+      const shouldShowActions = !!(message.content || message.reasoning || getAssistantPerformanceText(message));
+      let actions = article.querySelector('.message-actions');
+      if (!actions && shouldShowActions) {
+        return false;
+      }
+      if (actions && !shouldShowActions) {
+        actions.remove();
+        actions = null;
+      }
+      if (actions) {
+        const currentSwitcher = actions.querySelector(':scope > .message-response-switcher');
+        const nextSwitcher = createAssistantResponseSwitcher(message, index);
+        if (nextSwitcher) {
+          if (currentSwitcher) {
+            currentSwitcher.replaceWith(nextSwitcher);
+          } else {
+            actions.insertBefore(nextSwitcher, actions.firstChild);
+          }
+        } else if (currentSwitcher) {
+          currentSwitcher.remove();
+        }
+      }
+      return true;
+    }
+
     function pushMessage(role, content, extra = {}, options = {}) {
       const conversation = getCurrentConversation();
       if (!conversation) {
         return;
       }
-      conversation.messages.push({
+      const nextMessage = {
         role,
         content,
         images: normalizeImages(extra.images),
+        model: typeof extra.model === 'string' ? extra.model : '',
+        timings: normalizeTimings(extra.timings),
+        performanceText: typeof extra.performanceText === 'string' ? extra.performanceText : '',
         reasoning: extra.reasoning || '',
         time: extra.time || nowTime(),
         reasoningCollapsed: typeof extra.reasoningCollapsed === 'boolean' ? extra.reasoningCollapsed : false
-      });
+      };
+      if (role === 'assistant') {
+        nextMessage.responses = [createAssistantResponseDraft({
+          content,
+          model: nextMessage.model,
+          timings: nextMessage.timings,
+          performanceText: nextMessage.performanceText,
+          reasoning: nextMessage.reasoning,
+          time: nextMessage.time,
+          reasoningCollapsed: nextMessage.reasoningCollapsed
+        })];
+        nextMessage.activeResponseIndex = 0;
+        syncAssistantMessageState(nextMessage);
+      }
+      conversation.messages.push(nextMessage);
       conversation.updatedAt = Date.now();
       updateConversationTitle(conversation);
       renderConversationList();
@@ -1468,7 +1921,9 @@
       if (!conversation) {
         return null;
       }
-      conversation.messages = messages;
+      conversation.messages = Array.isArray(messages)
+        ? messages.map(item => normalizeConversationMessage(item))
+        : [];
       conversation.updatedAt = Date.now();
       state.editingMessageIndex = null;
       updateConversationTitle(conversation);
@@ -1478,95 +1933,76 @@
       return conversation;
     }
 
-    function updateLastAssistantMessage(content, reasoning) {
+    function updateAssistantMessage(index, content, reasoning, model, timings) {
       const conversation = getCurrentConversation();
-      if (!conversation) return;
+      const message = conversation?.messages?.[index];
+      if (!message || message.role !== 'assistant') {
+        return;
+      }
+      syncAssistantMessageState(message);
+      const activeResponse = getActiveAssistantResponse(message);
+      if (!activeResponse) {
+        return;
+      }
+      activeResponse.content = content;
+      activeResponse.reasoning = reasoning || '';
+      if (typeof model === 'string' && model.trim()) {
+        activeResponse.model = model.trim();
+      }
+      activeResponse.timings = normalizeTimings(timings);
+      activeResponse.performanceText = activeResponse.timings ? formatAssistantPerformanceText(activeResponse.timings) : '';
+      activeResponse.time = activeResponse.time || nowTime();
+      syncAssistantMessageState(message);
+      conversation.updatedAt = Date.now();
+
+      const article = els.messages.querySelector('article[data-index="' + index + '"]');
+      if (article) {
+        const updated = updateAssistantMessageElement(article, message, index);
+        if (!updated) {
+          renderMessages();
+        } else {
+          updateMessageActionStates();
+          requestAnimationFrame(() => {
+            els.chatScroll.scrollTop = els.chatScroll.scrollHeight;
+          });
+        }
+      } else {
+        renderMessages();
+      }
+
+      const now = Date.now();
+      if (!updateAssistantMessage._t || now - updateAssistantMessage._t > 500) {
+        updateAssistantMessage._t = now;
+        updateConversationTitle(conversation);
+        renderConversationList();
+        persistState();
+      }
+    }
+
+    function updateLastAssistantMessage(content, reasoning, model, timings, targetIndex) {
+      const conversation = getCurrentConversation();
+      if (!conversation) {
+        return;
+      }
+      if (Number.isInteger(targetIndex)) {
+        updateAssistantMessage(targetIndex, content, reasoning, model, timings);
+        return;
+      }
       for (let i = conversation.messages.length - 1; i >= 0; i -= 1) {
         if (conversation.messages[i].role === 'assistant') {
-          conversation.messages[i].content = content;
-          conversation.messages[i].reasoning = reasoning || '';
-          conversation.updatedAt = Date.now();
-
-          const article = els.messages.querySelector('article[data-index="' + i + '"]');
-          if (article) {
-            const bubble = article.querySelector('.bubble');
-            if (bubble) {
-              let reasoningBox = bubble.querySelector('.reasoning-box');
-              if (reasoning) {
-                if (!reasoningBox) {
-                  reasoningBox = document.createElement('div');
-                  reasoningBox.className = 'reasoning-box';
-                  const rHead = document.createElement('button');
-                  rHead.type = 'button';
-                  rHead.className = 'reasoning-head';
-                  rHead.dataset.reasoningToggle = 'true';
-                  rHead.dataset.index = String(i);
-                  rHead.setAttribute('aria-expanded', 'true');
-                  rHead.innerHTML =
-                    '<div class="reasoning-meta"><span class="reasoning-label">思维链</span><span class="reasoning-state">点击收起</span></div>' +
-                    '<span class="reasoning-caret" aria-hidden="true">›</span>';
-                  const rBody = document.createElement('div');
-                  rBody.className = 'reasoning-body';
-                  reasoningBox.appendChild(rHead);
-                  reasoningBox.appendChild(rBody);
-                  bubble.insertBefore(reasoningBox, bubble.firstChild);
-                }
-                const rBody = reasoningBox.querySelector('.reasoning-body');
-                if (rBody && !rBody.classList.contains('hidden')) {
-                  renderRichText(rBody, reasoning);
-                }
-              }
-
-              let contentDiv = bubble.querySelector(':scope > .message-content');
-              if (!contentDiv) {
-                contentDiv = document.createElement('div');
-                contentDiv.className = 'message-content';
-                bubble.appendChild(contentDiv);
-              }
-              renderRichText(contentDiv, content || '');
-            }
-
-            let actions = article.querySelector('.message-actions');
-            if (!actions && (content || reasoning)) {
-              actions = document.createElement('div');
-              actions.className = 'message-actions';
-              actions.appendChild(createMessageActionButton('copy', i, '复制',
-                '<rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M6 15V6a2 2 0 0 1 2-2h9"></path>'));
-              actions.appendChild(createMessageActionButton('edit', i, '编辑',
-                '<path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path>'));
-              actions.appendChild(createMessageActionButton('regenerate', i, '重新生成',
-                '<path d="M19 8a7 7 0 1 0 2 5"></path><path d="M19 3v5h-5"></path>'));
-              actions.appendChild(createMessageActionButton('delete', i, '删除',
-                '<path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M19 6l-1 14H6L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path>'));
-              article.appendChild(actions);
-            }
-
-            requestAnimationFrame(() => {
-              els.chatScroll.scrollTop = els.chatScroll.scrollHeight;
-            });
-          } else {
-            renderMessages();
-          }
-
-          const now = Date.now();
-          if (!updateLastAssistantMessage._t || now - updateLastAssistantMessage._t > 500) {
-            updateLastAssistantMessage._t = now;
-            updateConversationTitle(conversation);
-            renderConversationList();
-            persistState();
-          }
+          updateAssistantMessage(i, content, reasoning, model, timings);
           return;
         }
       }
     }
 
-    function showTypingIndicator() {
+    function showTypingIndicator(modelName) {
       removeTypingIndicator();
       const indicator = document.createElement('div');
       indicator.className = 'typing-indicator';
       indicator.id = 'typingIndicator';
       indicator.innerHTML =
-        '<div class="message-head"><span class="avatar">AI</span><strong>助手</strong></div>' +
+        '<div class="message-head"><span class="avatar">AI</span><strong>' + escapeHtml(getAssistantDisplayName(null, modelName)) + '</strong></div>' +
         '<div class="typing-bubble"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></div>';
       els.messages.appendChild(indicator);
       requestAnimationFrame(() => {
@@ -1596,8 +2032,19 @@
         return;
       }
       message.reasoningCollapsed = !message.reasoningCollapsed;
+      const activeResponse = getActiveAssistantResponse(message);
+      if (activeResponse) {
+        activeResponse.reasoningCollapsed = message.reasoningCollapsed;
+      }
+      const article = els.messages.querySelector('article[data-index="' + index + '"]');
+      if (article) {
+        const updated = updateAssistantMessageElement(article, message, index);
+        if (updated) {
+          updateMessageActionStates();
+          return;
+        }
+      }
       renderMessages();
-      persistState();
     }
 
     async function copyText(value) {
@@ -1622,10 +2069,17 @@
         return;
       }
       const text = String(message.content || '').trim();
+      const performanceText = getAssistantPerformanceText(message);
       const imageCount = getMessageImages(message).length;
-      const copyValue = text
-        ? (imageCount ? text + '\n\n[附带 ' + imageCount + ' 张图片]' : text)
-        : (imageCount ? '[图片消息，共 ' + imageCount + ' 张]' : '');
+      let copyValue = text;
+      if (performanceText) {
+        copyValue = copyValue ? copyValue + '\n\n' + performanceText : performanceText;
+      }
+      if (imageCount) {
+        copyValue = copyValue
+          ? copyValue + '\n\n[附带 ' + imageCount + ' 张图片]'
+          : '[图片消息，共 ' + imageCount + ' 张]';
+      }
       try {
         await copyText(copyValue);
         showToast('success', '已复制到剪贴板');
@@ -1668,6 +2122,16 @@
       message.content = nextContent;
       if (message.role === 'assistant') {
         message.reasoning = '';
+        message.timings = null;
+        message.performanceText = '';
+        const activeResponse = getActiveAssistantResponse(message);
+        if (activeResponse) {
+          activeResponse.content = nextContent;
+          activeResponse.reasoning = '';
+          activeResponse.timings = null;
+          activeResponse.performanceText = '';
+          syncAssistantMessageState(message);
+        }
       }
       conversation.updatedAt = Date.now();
       state.editingMessageIndex = null;
@@ -1678,7 +2142,35 @@
       showToast('success', '消息已更新');
     }
 
-    async function requestAssistantResponse() {
+    function switchAssistantResponse(index, offset) {
+      if (state.isSending) {
+        return;
+      }
+      const message = getCurrentConversation()?.messages?.[index];
+      if (!message || message.role !== 'assistant' || !Array.isArray(message.responses) || message.responses.length <= 1) {
+        return;
+      }
+      const nextIndex = Math.min(
+        Math.max(Number(message.activeResponseIndex || 0) + offset, 0),
+        message.responses.length - 1
+      );
+      if (nextIndex === message.activeResponseIndex) {
+        return;
+      }
+      message.activeResponseIndex = nextIndex;
+      syncAssistantMessageState(message);
+      const article = els.messages.querySelector('article[data-index="' + index + '"]');
+      if (article) {
+        const updated = updateAssistantMessageElement(article, message, index);
+        if (updated) {
+          updateMessageActionStates();
+          return;
+        }
+      }
+      renderMessages();
+    }
+
+    async function requestAssistantResponse(options = {}) {
       if (state.isSending) {
         return;
       }
@@ -1694,8 +2186,9 @@
       els.stopBtn.disabled = false;
       updateMessageActionStates();
 
-      const payload = buildPayload();
-      showTypingIndicator();
+      const payload = buildPayload(options.historyMessages);
+      const requestModel = payload.model;
+      showTypingIndicator(requestModel);
       els.statusDot.classList.add('loading');
       updateStatus('ready', '正在生成回复…', '生成中');
 
@@ -1714,32 +2207,44 @@
 
         const contentType = response.headers.get('content-type') || '';
         removeTypingIndicator();
-        pushMessage('assistant', '', {}, { incremental: true });
+        let assistantIndex = Number.isInteger(options.targetAssistantIndex) ? options.targetAssistantIndex : null;
+        if (!Number.isInteger(assistantIndex)) {
+          pushMessage('assistant', '', { model: requestModel }, { incremental: true });
+          const conversation = getCurrentConversation();
+          assistantIndex = conversation ? conversation.messages.length - 1 : null;
+        }
         let result;
         if (state.stream && contentType.includes('text/event-stream')) {
-          result = await consumeSse(response);
+          result = await consumeSse(response, assistantIndex);
         } else {
           result = extractTextFromJson(await response.json());
-          updateLastAssistantMessage(result.content || '', result.reasoning || '');
+          updateLastAssistantMessage(result.content || '', result.reasoning || '', result.model || requestModel, result.timings, assistantIndex);
         }
 
         if (!(result.content || result.reasoning)) {
-          updateLastAssistantMessage('模型返回了空内容。', '');
+          updateLastAssistantMessage('模型返回了空内容。', '', result.model || requestModel, result.timings, assistantIndex);
         }
         updateStatus('ready', '回复生成完成', '已完成');
       } catch (error) {
         removeTypingIndicator();
         const conversation = getCurrentConversation();
-        const hasEmptyAssistant = conversation?.messages?.length &&
-          conversation.messages[conversation.messages.length - 1].role === 'assistant';
+        const targetAssistant = Number.isInteger(options.targetAssistantIndex)
+          ? conversation?.messages?.[options.targetAssistantIndex]
+          : null;
+        const hasEmptyAssistant = targetAssistant?.role === 'assistant' ||
+          (conversation?.messages?.length && conversation.messages[conversation.messages.length - 1].role === 'assistant');
+        let assistantIndex = Number.isInteger(options.targetAssistantIndex)
+          ? options.targetAssistantIndex
+          : conversation?.messages?.length - 1;
         if (!hasEmptyAssistant) {
-          pushMessage('assistant', '', {}, { incremental: true });
+          pushMessage('assistant', '', { model: requestModel }, { incremental: true });
+          assistantIndex = getCurrentConversation()?.messages?.length - 1;
         }
         if (error.name === 'AbortError') {
-          updateLastAssistantMessage('响应已中断。', '');
+          updateLastAssistantMessage('响应已中断。', '', requestModel, null, assistantIndex);
           updateStatus('error', '生成已停止', '已停止');
         } else {
-          updateLastAssistantMessage('请求失败：' + (error.message || '未知错误'), '');
+          updateLastAssistantMessage('请求失败：' + (error.message || '未知错误'), '', requestModel, null, assistantIndex);
           updateStatus('error', error.message || '请求失败', '请求失败');
           showToast('error', '请求失败');
         }
@@ -1773,8 +2278,21 @@
         updateStatus('error', '没有可用于重试的用户消息', '无法重试');
         return;
       }
-      setConversationMessages(nextMessages);
-      await requestAssistantResponse();
+      syncAssistantMessageState(message);
+      message.responses.push(createAssistantResponseDraft({
+        model: state.model || message.model,
+        time: nowTime()
+      }));
+      message.activeResponseIndex = message.responses.length - 1;
+      syncAssistantMessageState(message);
+      conversation.updatedAt = Date.now();
+      renderConversationList();
+      renderMessages();
+      persistState();
+      await requestAssistantResponse({
+        historyMessages: nextMessages,
+        targetAssistantIndex: index
+      });
     }
 
     function deleteMessage(index) {
@@ -1852,30 +2370,24 @@
     }
 
     async function saveSettings(showSavedToast = true) {
-      state.temperature = els.temperatureInput.value.trim();
-      state.maxTokens = els.maxTokensInput.value.trim();
-      state.topP = els.topPInput.value.trim();
-      state.topK = els.topKInput.value.trim();
-      state.minP = els.minPInput.value.trim();
-      state.presencePenalty = els.presencePenaltyInput.value.trim();
-      state.repeatPenalty = els.repeatPenaltyInput.value.trim();
-      state.frequencyPenalty = els.frequencyPenaltyInput.value.trim();
-      state.stopSequences = els.stopSequencesInput.value;
-      state.stream = els.streamToggle.checked;
-      state.systemPrompt = els.systemPromptInput.value;
+      applySettingsInputsToState();
       const saved = await persistState({ immediate: true, showErrorToast: showSavedToast });
       if (saved && showSavedToast) {
         showToast('success', '设置已保存到服务端');
       }
     }
 
-    function buildPayload() {
+    function buildPayload(historyOverride) {
       const conversation = getCurrentConversation();
       const messages = [];
       if (state.systemPrompt.trim()) {
         messages.push({ role: 'system', content: state.systemPrompt.trim() });
       }
-      const history = Array.isArray(conversation?.messages) ? conversation.messages : [];
+      const history = Array.isArray(historyOverride)
+        ? historyOverride
+        : Array.isArray(conversation?.messages)
+          ? conversation.messages
+          : [];
       for (const item of history) {
         const content = typeof item.content === 'string' ? item.content : '';
         const images = getMessageImages(item);
@@ -1946,6 +2458,8 @@
       const message = choice?.message;
       const delta = choice?.delta;
       return {
+        model: typeof json?.model === 'string' ? json.model : '',
+        timings: normalizeTimings(json?.timings),
         content: contentToText(
           message?.content ??
           delta?.content ??
@@ -1962,12 +2476,14 @@
       };
     }
 
-    async function consumeSse(response) {
+    async function consumeSse(response, targetIndex) {
       const reader = response.body.getReader();
       const decoder = new TextDecoder('utf-8');
       let buffer = '';
       let answer = '';
       let reasoning = '';
+      let model = '';
+      let timings = null;
 
       while (true) {
         const { value, done } = await reader.read();
@@ -1988,13 +2504,20 @@
             continue;
           }
           if (data === '[DONE]') {
-            return { content: answer, reasoning };
+            return { content: answer, reasoning, model, timings };
           }
           let json;
           try {
             json = JSON.parse(data);
           } catch (error) {
             continue;
+          }
+          if (!model && typeof json?.model === 'string' && json.model.trim()) {
+            model = json.model.trim();
+          }
+          const extractedTimings = normalizeTimings(json?.timings);
+          if (extractedTimings) {
+            timings = extractedTimings;
           }
           const choice = Array.isArray(json.choices) ? json.choices[0] : null;
           const delta = choice?.delta || {};
@@ -2007,16 +2530,17 @@
                 : '';
           answer += chunkContent;
           reasoning += chunkReasoning;
-          updateLastAssistantMessage(answer, reasoning);
+          updateLastAssistantMessage(answer, reasoning, model, timings, targetIndex);
         }
       }
-      return { content: answer, reasoning };
+      return { content: answer, reasoning, model, timings };
     }
 
     async function refreshModels() {
-      await saveSettings(false);
+      applySettingsInputsToState();
       updateStatus('', '正在刷新模型列表…', '刷新中');
       try {
+        const previousModel = state.model;
         const json = await fetchJson(MODELS_ENDPOINT, { headers: getHeaders() });
         const models = Array.isArray(json?.data) ? json.data : [];
         els.modelSelect.innerHTML = '';
@@ -2043,7 +2567,9 @@
             state.model = els.modelSelect.value || '';
           }
         }
-        persistState();
+        if (state.model !== previousModel) {
+          persistState();
+        }
         updateStatus('ready', models.length ? '模型列表已刷新' : '当前未发现可用模型', models.length ? '已连接' : '无模型');
       } catch (error) {
         updateStatus('error', error.message || '连接失败', '连接失败');
@@ -2107,7 +2633,6 @@
       renderConversationList();
       renderMessages();
       renderDraftImages();
-      persistState();
       setSidebarOpen(false);
     }
 
@@ -2195,7 +2720,6 @@
           setSidebarOpen(!state.sidebarOpen);
         } else {
           setSidebarCollapsed(!state.sidebarCollapsed);
-          persistState();
         }
       });
       els.sidebarBackdrop.addEventListener('click', () => {
@@ -2205,7 +2729,6 @@
       els.searchInput.addEventListener('input', () => {
         state.search = els.searchInput.value;
         renderConversationList();
-        persistState();
       });
       els.newChatBtn.addEventListener('click', createConversation);
       els.refreshModelsBtn.addEventListener('click', refreshModels);
@@ -2258,6 +2781,10 @@
           const wrap = actionButton.closest('article[data-index]');
           const input = wrap?.querySelector('textarea[data-edit-input]');
           saveEditingMessage(index, input?.value || '');
+        } else if (actionButton.dataset.messageAction === 'prev-response') {
+          switchAssistantResponse(index, -1);
+        } else if (actionButton.dataset.messageAction === 'next-response') {
+          switchAssistantResponse(index, 1);
         } else if (actionButton.dataset.messageAction === 'regenerate') {
           regenerateMessage(index);
         } else if (actionButton.dataset.messageAction === 'delete') {
