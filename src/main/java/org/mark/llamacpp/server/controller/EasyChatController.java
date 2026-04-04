@@ -4,9 +4,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashSet;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -113,11 +115,15 @@ public class EasyChatController implements BaseController {
 
 	private JsonObject loadState(Path stateDir, Path stateFile) throws Exception {
 		JsonObject storedState = this.readJsonObject(stateFile);
+		Path conversationDir = this.getConversationDirPath(stateDir);
+		Map<String, JsonObject> recoveredConversationMap = this.loadConversationFileMap(conversationDir);
 		if (storedState == null) {
-			throw new IllegalStateException("easy-chat 状态文件格式无效");
+			JsonObject recoveredState = new JsonObject();
+			recoveredState.add("conversations", this.appendRecoveredConversations(new JsonArray(), recoveredConversationMap));
+			return recoveredState;
 		}
 		JsonObject loadedState = storedState.deepCopy();
-		JsonArray conversations = this.loadConversations(stateDir, storedState);
+		JsonArray conversations = this.loadConversations(stateDir, storedState, recoveredConversationMap);
 		loadedState.add("conversations", conversations);
 		return loadedState;
 	}
@@ -132,7 +138,8 @@ public class EasyChatController implements BaseController {
 		return conversations.size();
 	}
 
-	private JsonArray loadConversations(Path stateDir, JsonObject storedState) throws Exception {
+	private JsonArray loadConversations(Path stateDir, JsonObject storedState, Map<String, JsonObject> recoveredConversationMap)
+			throws Exception {
 		JsonArray summaries = this.getConversationArray(storedState);
 		Path conversationDir = this.getConversationDirPath(stateDir);
 		JsonArray conversations = new JsonArray();
@@ -142,22 +149,25 @@ public class EasyChatController implements BaseController {
 				continue;
 			}
 			JsonObject summary = element.getAsJsonObject();
-			conversations.add(this.loadConversation(summary, conversationDir));
+			String id = JsonUtil.getJsonString(summary, "id", null);
+			String storageKey = this.normalizeStorageKey(JsonUtil.getJsonString(summary, "storageKey", null), id);
+			JsonObject recoveredConversation = recoveredConversationMap.remove(storageKey);
+			conversations.add(this.loadConversation(summary, conversationDir, storageKey, recoveredConversation));
 		}
-		return conversations;
+		return this.appendRecoveredConversations(conversations, recoveredConversationMap);
 	}
 
-	private JsonObject loadConversation(JsonObject summary, Path conversationDir) throws Exception {
-		JsonObject conversation = new JsonObject();
-		String id = JsonUtil.getJsonString(summary, "id", null);
-		String storageKey = this.normalizeStorageKey(JsonUtil.getJsonString(summary, "storageKey", null), id);
+	private JsonObject loadConversation(JsonObject summary, Path conversationDir, String storageKey, JsonObject recoveredConversation)
+			throws Exception {
+		JsonObject conversation = recoveredConversation == null ? new JsonObject() : recoveredConversation.deepCopy();
 		Path conversationFile = this.getConversationFilePath(conversationDir, storageKey);
-		if (Files.exists(conversationFile)) {
+		if (conversation.entrySet().isEmpty() && Files.exists(conversationFile)) {
 			JsonObject storedConversation = this.readJsonObject(conversationFile);
 			if (storedConversation != null) {
 				conversation = storedConversation.deepCopy();
 			}
 		}
+		String id = JsonUtil.getJsonString(summary, "id", null);
 		for (Map.Entry<String, JsonElement> entry : summary.entrySet()) {
 			String key = entry.getKey();
 			if ("messages".equals(key) || "storageKey".equals(key) || "messageCount".equals(key)) {
@@ -172,6 +182,61 @@ public class EasyChatController implements BaseController {
 			conversation.add("messages", new JsonArray());
 		}
 		return conversation;
+	}
+
+	private Map<String, JsonObject> loadConversationFileMap(Path conversationDir) throws Exception {
+		Map<String, JsonObject> conversationMap = new HashMap<>();
+		if (!Files.exists(conversationDir)) {
+			return conversationMap;
+		}
+		try (Stream<Path> stream = Files.list(conversationDir)) {
+			stream.filter(Files::isRegularFile)
+				.filter(path -> path.getFileName().toString().endsWith(".json"))
+				.forEach(path -> {
+					try {
+						JsonObject conversation = this.readJsonObject(path);
+						if (conversation != null) {
+							conversationMap.put(this.getStorageKeyFromFile(path), conversation);
+						}
+					} catch (Exception e) {
+						throw new RuntimeException(e);
+					}
+				});
+		} catch (RuntimeException e) {
+			if (e.getCause() instanceof Exception ex) {
+				throw ex;
+			}
+			throw e;
+		}
+		return conversationMap;
+	}
+
+	private JsonArray appendRecoveredConversations(JsonArray conversations, Map<String, JsonObject> recoveredConversationMap) {
+		if (recoveredConversationMap.isEmpty()) {
+			return conversations;
+		}
+		List<JsonObject> recoveredConversations = new ArrayList<>(recoveredConversationMap.values());
+		recoveredConversations.sort((left, right) -> Long.compare(
+				this.getConversationSortTime(right),
+				this.getConversationSortTime(left)));
+		for (JsonObject conversation : recoveredConversations) {
+			conversations.add(conversation.deepCopy());
+		}
+		return conversations;
+	}
+
+	private long getConversationSortTime(JsonObject conversation) {
+		long updatedAt = JsonUtil.getJsonLong(conversation, "updatedAt", 0L);
+		long createdAt = JsonUtil.getJsonLong(conversation, "createdAt", 0L);
+		return Math.max(updatedAt, createdAt);
+	}
+
+	private String getStorageKeyFromFile(Path path) {
+		String fileName = path.getFileName().toString();
+		if (fileName.endsWith(".json")) {
+			return fileName.substring(0, fileName.length() - 5);
+		}
+		return fileName;
 	}
 
 	private Set<String> writeConversationFiles(Path conversationDir, JsonArray conversations) throws Exception {

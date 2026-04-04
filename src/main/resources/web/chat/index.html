@@ -300,11 +300,19 @@
     const CHAT_ENDPOINT = '/v1/chat/completions';
     const MODELS_ENDPOINT = '/v1/models';
     const EASY_CHAT_STATE_ENDPOINT = '/api/easy-chat/state';
+    const LOCAL_BACKUP_DB_NAME = 'easy-chat-backup';
+    const LOCAL_BACKUP_STORE_NAME = 'snapshots';
+    const LOCAL_BACKUP_KEY = 'state';
     const MAX_IMAGE_COUNT = 6;
     const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
     let stateSaveTimer = 0;
+    let stateSaveRetryTimer = 0;
     let stateSaveInFlight = false;
     let pendingStatePayload = null;
+    let localBackupTimer = 0;
+    let localBackupInFlight = false;
+    let pendingLocalBackup = null;
+    let localBackupDbPromise = null;
 
     const state = {
       model: '',
@@ -1649,6 +1657,174 @@
       }
     }
 
+    function clonePersistedPayload(payload) {
+      if (typeof structuredClone === 'function') {
+        try {
+          return structuredClone(payload);
+        } catch (error) {
+        }
+      }
+      return JSON.parse(JSON.stringify(payload));
+    }
+
+    function summarizePersistedState(payload) {
+      const conversations = Array.isArray(payload?.conversations) ? payload.conversations : [];
+      let latestUpdatedAt = 0;
+      let messageCount = 0;
+      for (const conversation of conversations) {
+        latestUpdatedAt = Math.max(
+          latestUpdatedAt,
+          Number(conversation?.updatedAt || 0),
+          Number(conversation?.createdAt || 0)
+        );
+        if (Array.isArray(conversation?.messages)) {
+          messageCount += conversation.messages.length;
+        }
+      }
+      return {
+        latestUpdatedAt,
+        conversationCount: conversations.length,
+        messageCount
+      };
+    }
+
+    function shouldPreferLocalState(localPayload, remotePayload) {
+      const local = summarizePersistedState(localPayload);
+      const remote = summarizePersistedState(remotePayload);
+      if (local.conversationCount && !remote.conversationCount) {
+        return true;
+      }
+      if (local.latestUpdatedAt > remote.latestUpdatedAt + 1000) {
+        return true;
+      }
+      return local.latestUpdatedAt === remote.latestUpdatedAt && local.messageCount > remote.messageCount;
+    }
+
+    function openLocalBackupDb() {
+      if (localBackupDbPromise) {
+        return localBackupDbPromise;
+      }
+      if (!window.indexedDB) {
+        localBackupDbPromise = Promise.resolve(null);
+        return localBackupDbPromise;
+      }
+      localBackupDbPromise = new Promise(resolve => {
+        const request = window.indexedDB.open(LOCAL_BACKUP_DB_NAME, 1);
+        request.onupgradeneeded = () => {
+          const db = request.result;
+          if (!db.objectStoreNames.contains(LOCAL_BACKUP_STORE_NAME)) {
+            db.createObjectStore(LOCAL_BACKUP_STORE_NAME, { keyPath: 'id' });
+          }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => {
+          console.error(request.error);
+          resolve(null);
+        };
+      });
+      return localBackupDbPromise;
+    }
+
+    async function writeLocalBackupSnapshot(snapshot) {
+      const db = await openLocalBackupDb();
+      if (!db) {
+        return false;
+      }
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(LOCAL_BACKUP_STORE_NAME, 'readwrite');
+        tx.objectStore(LOCAL_BACKUP_STORE_NAME).put({
+          id: LOCAL_BACKUP_KEY,
+          savedAt: Number(snapshot?.savedAt || Date.now()),
+          payload: snapshot?.payload || {}
+        });
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => reject(tx.error || new Error('本地备份写入失败'));
+        tx.onabort = () => reject(tx.error || new Error('本地备份写入被中断'));
+      });
+    }
+
+    async function readLocalBackupSnapshot() {
+      const db = await openLocalBackupDb();
+      if (!db) {
+        return null;
+      }
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(LOCAL_BACKUP_STORE_NAME, 'readonly');
+        const request = tx.objectStore(LOCAL_BACKUP_STORE_NAME).get(LOCAL_BACKUP_KEY);
+        request.onsuccess = () => resolve(request.result || null);
+        request.onerror = () => reject(request.error || new Error('本地备份读取失败'));
+        tx.onabort = () => reject(tx.error || new Error('本地备份读取被中断'));
+      });
+    }
+
+    async function flushLocalBackup() {
+      if (localBackupTimer) {
+        clearTimeout(localBackupTimer);
+        localBackupTimer = 0;
+      }
+      if (localBackupInFlight) {
+        return false;
+      }
+      const snapshot = pendingLocalBackup;
+      if (!snapshot) {
+        return true;
+      }
+      pendingLocalBackup = null;
+      localBackupInFlight = true;
+      let written = false;
+      try {
+        written = await writeLocalBackupSnapshot(snapshot);
+        return written;
+      } catch (error) {
+        console.error(error);
+        pendingLocalBackup = snapshot;
+        return false;
+      } finally {
+        localBackupInFlight = false;
+        if (written && pendingLocalBackup) {
+          void flushLocalBackup();
+        }
+      }
+    }
+
+    function queueLocalBackup(payload, options = {}) {
+      pendingLocalBackup = {
+        savedAt: Date.now(),
+        payload: clonePersistedPayload(payload)
+      };
+      if (localBackupTimer) {
+        clearTimeout(localBackupTimer);
+        localBackupTimer = 0;
+      }
+      if (options.immediate) {
+        return flushLocalBackup();
+      }
+      localBackupTimer = window.setTimeout(() => {
+        void flushLocalBackup();
+      }, typeof options.delay === 'number' ? options.delay : 180);
+      return Promise.resolve(true);
+    }
+
+    function clearStateSaveRetryTimer() {
+      if (stateSaveRetryTimer) {
+        clearTimeout(stateSaveRetryTimer);
+        stateSaveRetryTimer = 0;
+      }
+    }
+
+    function scheduleStateSaveRetry(delay = 2000) {
+      if (stateSaveRetryTimer || !pendingStatePayload) {
+        return;
+      }
+      stateSaveRetryTimer = window.setTimeout(() => {
+        stateSaveRetryTimer = 0;
+        if (!pendingStatePayload || stateSaveInFlight) {
+          return;
+        }
+        void flushStateSave({ showErrorToast: false });
+      }, delay);
+    }
+
     function buildPersistedState() {
       return {
         sidebarCollapsed: state.sidebarCollapsed,
@@ -1722,6 +1898,7 @@
       let saved = false;
       try {
         saved = await writeStateToServer(payload, options);
+        clearStateSaveRetryTimer();
         return true;
       } catch (error) {
         console.error(error);
@@ -1730,6 +1907,7 @@
         if (options.showErrorToast !== false) {
           showToast('error', '保存失败：' + (error.message || '未知错误'));
         }
+        scheduleStateSaveRetry(typeof options.retryDelay === 'number' ? options.retryDelay : 2000);
         return false;
       } finally {
         stateSaveInFlight = false;
@@ -1741,7 +1919,16 @@
 
     function persistState(options = {}) {
       syncSettingsInputs();
-      pendingStatePayload = buildPersistedState();
+      const payload = clonePersistedPayload(buildPersistedState());
+      pendingStatePayload = payload;
+      void queueLocalBackup(payload, {
+        immediate: !!options.localImmediate,
+        delay: typeof options.localDelay === 'number' ? options.localDelay : 180
+      });
+      if (options.skipServer) {
+        return Promise.resolve(true);
+      }
+      clearStateSaveRetryTimer();
       if (stateSaveTimer) {
         clearTimeout(stateSaveTimer);
         stateSaveTimer = 0;
@@ -1757,21 +1944,55 @@
 
     async function loadState() {
       updateStorageHint('正在从服务端加载聊天记录…');
+      let remoteState = {};
+      let hasRemoteState = false;
+      let localSnapshot = null;
       try {
+        [localSnapshot] = await Promise.all([
+          readLocalBackupSnapshot().catch(error => {
+            console.error(error);
+            return null;
+          })
+        ]);
         const json = await fetchJson(EASY_CHAT_STATE_ENDPOINT, { headers: getHeaders() });
         if (!json?.success) {
           throw new Error(json?.error || '加载失败');
         }
-        applyLoadedState(json?.data?.state || {});
-        updateStorageHint('');
+        remoteState = json?.data?.state || {};
+        hasRemoteState = true;
       } catch (error) {
         console.error(error);
-        updateStorageHint('服务端读取失败，当前使用临时内存状态');
-        showToast('error', '加载聊天记录失败，已使用空白状态');
+        if (!localSnapshot) {
+          updateStorageHint('服务端读取失败，当前使用临时内存状态');
+          showToast('error', '加载聊天记录失败，已使用空白状态');
+        }
+      }
+      if (!localSnapshot) {
+        try {
+          localSnapshot = await readLocalBackupSnapshot();
+        } catch (error) {
+          console.error(error);
+        }
+      }
+      let recoveredFromLocal = false;
+      let nextState = remoteState;
+      if (localSnapshot?.payload && (!hasRemoteState || shouldPreferLocalState(localSnapshot.payload, remoteState))) {
+        nextState = localSnapshot.payload;
+        recoveredFromLocal = true;
+      }
+      applyLoadedState(nextState || {});
+      if (recoveredFromLocal) {
+        updateStorageHint(hasRemoteState ? '已恢复本地较新的聊天备份，正在同步到服务端…' : '服务端读取失败，已从本地备份恢复聊天记录');
+        showToast('info', hasRemoteState ? '检测到本地有较新的聊天备份，已自动恢复' : '已从本地备份恢复聊天记录');
+      } else {
+        updateStorageHint('');
       }
       ensureConversation();
       syncRuntimeStateFromCurrentAssistant();
       syncSettingsInputs();
+      if (recoveredFromLocal) {
+        await persistState({ immediate: true, showErrorToast: false, localImmediate: true });
+      }
     }
 
     function formatConversationTime(value) {
@@ -2236,7 +2457,9 @@
       } else {
         renderMessages();
       }
-      persistState();
+      if (options.persist !== false) {
+        persistState(options.persistOptions || {});
+      }
     }
 
     function setConversationMessages(messages) {
@@ -2292,11 +2515,11 @@
       }
 
       const now = Date.now();
-      if (!updateAssistantMessage._t || now - updateAssistantMessage._t > 500) {
+      if (!updateAssistantMessage._t || now - updateAssistantMessage._t > 1000) {
         updateAssistantMessage._t = now;
         updateConversationTitle(conversation);
         renderConversationList();
-        persistState();
+        persistState({ skipServer: true, localDelay: 0 });
       }
     }
 
@@ -2528,7 +2751,7 @@
         removeTypingIndicator();
         let assistantIndex = Number.isInteger(options.targetAssistantIndex) ? options.targetAssistantIndex : null;
         if (!Number.isInteger(assistantIndex)) {
-          pushMessage('assistant', '', { model: requestModel }, { incremental: true });
+          pushMessage('assistant', '', { model: requestModel }, { incremental: true, persist: false });
           const conversation = getCurrentConversation();
           assistantIndex = conversation ? conversation.messages.length - 1 : null;
         }
@@ -2556,7 +2779,7 @@
           ? options.targetAssistantIndex
           : conversation?.messages?.length - 1;
         if (!hasEmptyAssistant) {
-          pushMessage('assistant', '', { model: requestModel }, { incremental: true });
+          pushMessage('assistant', '', { model: requestModel }, { incremental: true, persist: false });
           assistantIndex = getCurrentConversation()?.messages?.length - 1;
         }
         if (error.name === 'AbortError') {
@@ -2577,7 +2800,7 @@
         renderConversationList();
         syncConversationMeta();
         updateMessageActionStates();
-        persistState();
+        await persistState({ immediate: true, showErrorToast: false, localImmediate: true });
       }
     }
 
@@ -2933,12 +3156,13 @@
         return;
       }
 
-      pushMessage('user', prompt, { images });
+      pushMessage('user', prompt, { images }, { persist: false });
       state.editingMessageIndex = null;
       els.promptInput.value = '';
       state.draftImages = [];
       renderDraftImages();
       resizePromptInput();
+      await persistState({ immediate: true, showErrorToast: true, localImmediate: true });
       await requestAssistantResponse();
     }
 
@@ -3398,8 +3622,17 @@
           clearTimeout(stateSaveTimer);
           stateSaveTimer = 0;
         }
+        clearStateSaveRetryTimer();
+        if (pendingLocalBackup && !localBackupInFlight) {
+          void flushLocalBackup();
+        }
         if (pendingStatePayload && !stateSaveInFlight) {
           void flushStateSave({ keepalive: true, showErrorToast: false });
+        }
+      });
+      window.addEventListener('online', () => {
+        if (pendingStatePayload && !stateSaveInFlight) {
+          void flushStateSave({ showErrorToast: false });
         }
       });
     }
