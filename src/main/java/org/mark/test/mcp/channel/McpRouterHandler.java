@@ -21,6 +21,7 @@ import io.netty.handler.codec.http.LastHttpContent;
 public class McpRouterHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
 
 	private static final Logger logger = LoggerFactory.getLogger(McpRouterHandler.class);
+	private static final Pattern STREAMABLE_PATH = Pattern.compile("^/mcp/([^/]+)$");
 	private static final Pattern SSE_PATH = Pattern.compile("^/mcp/([^/]+)/sse$");
 	private static final Pattern MESSAGE_PATH = Pattern.compile("^/mcp/([^/]+)/message$");
 
@@ -44,18 +45,13 @@ public class McpRouterHandler extends SimpleChannelInboundHandler<FullHttpReques
 			return;
 		}
 		String path = this.server.cleanPath(request.uri());
-		Matcher sseMatcher = SSE_PATH.matcher(path);
-		if (sseMatcher.matches()) {
-			String serviceKey = sseMatcher.group(1);
+		Matcher streamableMatcher = STREAMABLE_PATH.matcher(path);
+		if (streamableMatcher.matches()) {
+			String serviceKey = streamableMatcher.group(1);
 			if (request.method() == HttpMethod.GET) {
 				String sessionId = this.server.readSessionIdHeader(request);
-				if (sessionId != null && !sessionId.isBlank()) {
-					logger.info("MCP路由分发Streamable GET: serviceKey={}, sessionId={}", serviceKey, sessionId);
-					this.server.handleStreamableGet(ctx, serviceKey, sessionId);
-					return;
-				}
-				logger.info("MCP路由分发旧版SSE连接: serviceKey={}", serviceKey);
-				this.server.handleLegacySseConnect(ctx, serviceKey);
+				logger.info("MCP路由分发Streamable GET: serviceKey={}, sessionId={}", serviceKey, sessionId);
+				this.server.handleStreamableGet(ctx, serviceKey, sessionId);
 				return;
 			}
 			if (request.method() == HttpMethod.POST) {
@@ -68,6 +64,12 @@ public class McpRouterHandler extends SimpleChannelInboundHandler<FullHttpReques
 				this.server.handleStreamableDelete(ctx, request, serviceKey);
 				return;
 			}
+		}
+		Matcher sseMatcher = SSE_PATH.matcher(path);
+		if (request.method() == HttpMethod.GET && sseMatcher.matches()) {
+			logger.info("MCP路由分发旧版SSE连接: serviceKey={}", sseMatcher.group(1));
+			this.server.handleLegacySseConnect(ctx, sseMatcher.group(1));
+			return;
 		}
 		Matcher msgMatcher = MESSAGE_PATH.matcher(path);
 		if (request.method() == HttpMethod.POST && msgMatcher.matches()) {

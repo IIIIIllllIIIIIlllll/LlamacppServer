@@ -20,8 +20,9 @@ public class McpToolRegistry {
 	
 	
 	/**
-	 * 	注册工具到指定的serviceKey下。比如注册：register("default_tools", tool1);  register("default_tools", tool2); 后，通过：/mcp/default_tools/sse就能拿到工具：tool1和tool2。
-	 * @param serviceKey 可以理解这个MCP服务的key，通过URL：/mcp/{serviceKey}/sse访问这个工具
+	 * 	注册工具到指定的serviceKey下。比如注册：register("default_tools", tool1); register("default_tools", tool2); 后，
+	 * 	可以通过该 serviceKey 访问对应的 MCP 服务。旧版 SSE 使用 `/mcp/{serviceKey}/sse`，Streamable HTTP 使用 `/mcp/{serviceKey}`。
+	 * @param serviceKey 可以理解这个 MCP 服务的 key
 	 * @param tool	加入的工具
 	 */
 	public void register(String serviceKey, IMCPTool tool) {

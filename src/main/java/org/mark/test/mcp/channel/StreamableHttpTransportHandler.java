@@ -21,6 +21,10 @@ public class StreamableHttpTransportHandler {
 	}
 
 	public void handleGet(ChannelHandlerContext ctx, String serviceKey, String sessionId) {
+		if (sessionId == null || sessionId.isBlank()) {
+			this.server.handleBadRequest(ctx, "缺少MCP-Session-Id");
+			return;
+		}
 		this.server.openStreamableSseStream(ctx, serviceKey, sessionId);
 	}
 
