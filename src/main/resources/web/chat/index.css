@@ -1313,10 +1313,13 @@ button { cursor: pointer; }
 }
 
 .composer-hint {
+  width: min(100%, 768px);
+  margin: 4px auto 0;
   text-align: center;
   color: var(--muted);
   font-size: 12px;
-  margin-top: 4px;
+  transform: translateX(var(--chat-center-offset));
+  transition: transform 0.2s ease;
 }
 
 /* ── Drawer / Settings ── */
