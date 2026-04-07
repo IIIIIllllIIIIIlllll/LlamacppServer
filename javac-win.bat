@@ -119,7 +119,7 @@ set "RUN_BAT=%BUILD_DIR%\run.bat"
 > "%RUN_BAT%" echo @echo off
 >>"%RUN_BAT%" echo setlocal EnableExtensions
 >>"%RUN_BAT%" echo cd /d "%%~dp0"
->>"%RUN_BAT%" echo start "" javaw.exe -Xms512m -Xmx512m -classpath "./classes;./lib/*" org.mark.llamacpp.server.LlamaServer %*
+>>"%RUN_BAT%" echo start "" javaw.exe -Xms512m -Xmx512m -XX:MaxDirectMemorySize=256m -classpath "./classes;./lib/*" org.mark.llamacpp.server.LlamaServer %*
 >>"%RUN_BAT%" echo endlocal
 
 :END
