@@ -336,19 +336,12 @@
     const CHAT_ENDPOINT = '/v1/chat/completions';
     const MODELS_ENDPOINT = '/v1/models';
     const EASY_CHAT_STATE_ENDPOINT = '/api/easy-chat/state';
-    const LOCAL_BACKUP_DB_NAME = 'easy-chat-backup';
-    const LOCAL_BACKUP_STORE_NAME = 'snapshots';
-    const LOCAL_BACKUP_KEY = 'state';
     const MAX_IMAGE_COUNT = 6;
     const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
     let stateSaveTimer = 0;
     let stateSaveRetryTimer = 0;
     let stateSaveInFlight = false;
     let pendingStatePayload = null;
-    let localBackupTimer = 0;
-    let localBackupInFlight = false;
-    let pendingLocalBackup = null;
-    let localBackupDbPromise = null;
 
     const state = {
       model: '',
@@ -656,10 +649,7 @@
     }
 
     function normalizeQuotedEmphasis(text) {
-      const source = String(text ?? '');
-      return source
-        .replace(/\*\*([^\p{L}\p{N}\s][^*\n]+?[^\p{L}\p{N}\s])\*\*/gu, '<strong>$1</strong>')
-        .replace(/(^|[^\*])\*([^\p{L}\p{N}\s][^*\n]+?[^\p{L}\p{N}\s])\*(?!\*)/gu, '$1<em>$2</em>');
+      return String(text ?? '');
     }
 
     function protectMathSegments(text) {
@@ -1409,9 +1399,25 @@
       return Object.keys(next).length ? next : null;
     }
 
+    function mergeTimings(...values) {
+      const next = {};
+      for (const value of values) {
+        const normalized = normalizeTimings(value);
+        if (!normalized) {
+          continue;
+        }
+        Object.assign(next, normalized);
+      }
+      return Object.keys(next).length ? next : null;
+    }
+
     function formatTimingValue(value, digits = 2) {
       const number = normalizeTimingNumber(value);
-      return number === null ? '' : number.toFixed(digits).replace(/\.?0+$/, '');
+      if (number === null) {
+        return '';
+      }
+      const fixed = number.toFixed(digits);
+      return digits > 0 ? fixed.replace(/\.?0+$/, '') : fixed;
     }
 
     function formatAssistantPerformanceText(timings) {
@@ -1420,8 +1426,8 @@
         return '';
       }
       const parts = [];
-      const totalTokens = normalized.prompt_n !== undefined || normalized.predicted_n !== undefined
-        ? (normalized.prompt_n ?? 0) + (normalized.predicted_n ?? 0)
+      const totalTokens = normalized.cache_n !== undefined || normalized.prompt_n !== undefined || normalized.predicted_n !== undefined
+        ? (normalized.cache_n ?? 0) + (normalized.prompt_n ?? 0) + (normalized.predicted_n ?? 0)
         : null;
       if (normalized.prompt_ms !== undefined) {
         parts.push('首字延迟 ' + formatTimingValue(normalized.prompt_ms, 3) + ' ms');
@@ -1955,123 +1961,6 @@
       };
     }
 
-    function shouldPreferLocalState(localPayload, remotePayload) {
-      const local = summarizePersistedState(localPayload);
-      const remote = summarizePersistedState(remotePayload);
-      if (local.conversationCount && !remote.conversationCount) {
-        return true;
-      }
-      if (local.latestUpdatedAt > remote.latestUpdatedAt + 1000) {
-        return true;
-      }
-      return local.latestUpdatedAt === remote.latestUpdatedAt && local.messageCount > remote.messageCount;
-    }
-
-    function openLocalBackupDb() {
-      if (localBackupDbPromise) {
-        return localBackupDbPromise;
-      }
-      if (!window.indexedDB) {
-        localBackupDbPromise = Promise.resolve(null);
-        return localBackupDbPromise;
-      }
-      localBackupDbPromise = new Promise(resolve => {
-        const request = window.indexedDB.open(LOCAL_BACKUP_DB_NAME, 1);
-        request.onupgradeneeded = () => {
-          const db = request.result;
-          if (!db.objectStoreNames.contains(LOCAL_BACKUP_STORE_NAME)) {
-            db.createObjectStore(LOCAL_BACKUP_STORE_NAME, { keyPath: 'id' });
-          }
-        };
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => {
-          console.error(request.error);
-          resolve(null);
-        };
-      });
-      return localBackupDbPromise;
-    }
-
-    async function writeLocalBackupSnapshot(snapshot) {
-      const db = await openLocalBackupDb();
-      if (!db) {
-        return false;
-      }
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction(LOCAL_BACKUP_STORE_NAME, 'readwrite');
-        tx.objectStore(LOCAL_BACKUP_STORE_NAME).put({
-          id: LOCAL_BACKUP_KEY,
-          savedAt: Number(snapshot?.savedAt || Date.now()),
-          payload: snapshot?.payload || {}
-        });
-        tx.oncomplete = () => resolve(true);
-        tx.onerror = () => reject(tx.error || new Error('本地备份写入失败'));
-        tx.onabort = () => reject(tx.error || new Error('本地备份写入被中断'));
-      });
-    }
-
-    async function readLocalBackupSnapshot() {
-      const db = await openLocalBackupDb();
-      if (!db) {
-        return null;
-      }
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction(LOCAL_BACKUP_STORE_NAME, 'readonly');
-        const request = tx.objectStore(LOCAL_BACKUP_STORE_NAME).get(LOCAL_BACKUP_KEY);
-        request.onsuccess = () => resolve(request.result || null);
-        request.onerror = () => reject(request.error || new Error('本地备份读取失败'));
-        tx.onabort = () => reject(tx.error || new Error('本地备份读取被中断'));
-      });
-    }
-
-    async function flushLocalBackup() {
-      if (localBackupTimer) {
-        clearTimeout(localBackupTimer);
-        localBackupTimer = 0;
-      }
-      if (localBackupInFlight) {
-        return false;
-      }
-      const snapshot = pendingLocalBackup;
-      if (!snapshot) {
-        return true;
-      }
-      pendingLocalBackup = null;
-      localBackupInFlight = true;
-      let written = false;
-      try {
-        written = await writeLocalBackupSnapshot(snapshot);
-        return written;
-      } catch (error) {
-        console.error(error);
-        pendingLocalBackup = snapshot;
-        return false;
-      } finally {
-        localBackupInFlight = false;
-        if (written && pendingLocalBackup) {
-          void flushLocalBackup();
-        }
-      }
-    }
-
-    function queueLocalBackup(payload, options = {}) {
-      pendingLocalBackup = {
-        savedAt: Date.now(),
-        payload: clonePersistedPayload(payload)
-      };
-      if (localBackupTimer) {
-        clearTimeout(localBackupTimer);
-        localBackupTimer = 0;
-      }
-      if (options.immediate) {
-        return flushLocalBackup();
-      }
-      localBackupTimer = window.setTimeout(() => {
-        void flushLocalBackup();
-      }, typeof options.delay === 'number' ? options.delay : 180);
-      return Promise.resolve(true);
-    }
-
     function clearStateSaveRetryTimer() {
       if (stateSaveRetryTimer) {
         clearTimeout(stateSaveRetryTimer);
@@ -2196,10 +2085,6 @@
       syncSettingsInputs();
       const payload = clonePersistedPayload(buildPersistedState());
       pendingStatePayload = payload;
-      void queueLocalBackup(payload, {
-        immediate: !!options.localImmediate,
-        delay: typeof options.localDelay === 'number' ? options.localDelay : 180
-      });
       if (options.skipServer) {
         return Promise.resolve(true);
       }
@@ -2220,54 +2105,22 @@
     async function loadState() {
       updateStorageHint('正在从服务端加载聊天记录…');
       let remoteState = {};
-      let hasRemoteState = false;
-      let localSnapshot = null;
       try {
-        [localSnapshot] = await Promise.all([
-          readLocalBackupSnapshot().catch(error => {
-            console.error(error);
-            return null;
-          })
-        ]);
         const json = await fetchJson(EASY_CHAT_STATE_ENDPOINT, { headers: getHeaders() });
         if (!json?.success) {
           throw new Error(json?.error || '加载失败');
         }
         remoteState = json?.data?.state || {};
-        hasRemoteState = true;
       } catch (error) {
         console.error(error);
-        if (!localSnapshot) {
-          updateStorageHint('服务端读取失败，当前使用临时内存状态');
-          showToast('error', '加载聊天记录失败，已使用空白状态');
-        }
+        updateStorageHint('服务端读取失败，当前使用临时内存状态');
+        showToast('error', '加载聊天记录失败，已使用空白状态');
       }
-      if (!localSnapshot) {
-        try {
-          localSnapshot = await readLocalBackupSnapshot();
-        } catch (error) {
-          console.error(error);
-        }
-      }
-      let recoveredFromLocal = false;
-      let nextState = remoteState;
-      if (localSnapshot?.payload && (!hasRemoteState || shouldPreferLocalState(localSnapshot.payload, remoteState))) {
-        nextState = localSnapshot.payload;
-        recoveredFromLocal = true;
-      }
-      applyLoadedState(nextState || {});
-      if (recoveredFromLocal) {
-        updateStorageHint(hasRemoteState ? '已恢复本地较新的聊天备份，正在同步到服务端…' : '服务端读取失败，已从本地备份恢复聊天记录');
-        showToast('info', hasRemoteState ? '检测到本地有较新的聊天备份，已自动恢复' : '已从本地备份恢复聊天记录');
-      } else {
-        updateStorageHint('');
-      }
+      applyLoadedState(remoteState || {});
+      updateStorageHint('');
       ensureConversation();
       syncRuntimeStateFromCurrentAssistant();
       syncSettingsInputs();
-      if (recoveredFromLocal) {
-        await persistState({ immediate: true, showErrorToast: false, localImmediate: true });
-      }
     }
 
     function formatConversationTime(value) {
@@ -2827,7 +2680,6 @@
         updateAssistantMessage._t = now;
         updateConversationTitle(conversation);
         renderConversationList();
-        persistState({ skipServer: true, localDelay: 0 });
       }
     }
 
@@ -2900,7 +2752,6 @@
       } else {
         renderMessages();
       }
-      persistState({ skipServer: true, localDelay: 0 });
     }
 
     function showTypingIndicator(modelName) {
@@ -3159,6 +3010,13 @@
           let result;
           if (payload.stream && contentType.includes('text/event-stream')) {
             result = await consumeSse(response, currentAssistantIndex);
+            updateLastAssistantMessage(
+              result.content || '',
+              result.reasoning || '',
+              result.model || requestModel,
+              result.timings,
+              currentAssistantIndex
+            );
           } else {
             result = extractTextFromJson(await response.json());
             updateLastAssistantMessage(result.content || '', result.reasoning || '', result.model || requestModel, result.timings, currentAssistantIndex);
@@ -3182,7 +3040,7 @@
             for (const toolMessage of toolMessages) {
               pushMessage('tool', toolMessage.content || '', toolMessage, { incremental: true, persist: false });
             }
-            await persistState({ immediate: true, showErrorToast: true, localImmediate: true });
+            await persistState({ immediate: true, showErrorToast: true });
             historyMessages = getCurrentConversation()?.messages || [];
             nextAssistantIndex = null;
             currentAssistantIndex = null;
@@ -3235,7 +3093,7 @@
         renderConversationList();
         syncConversationMeta();
         updateMessageActionStates();
-        await persistState({ immediate: true, showErrorToast: false, localImmediate: true });
+        await persistState({ immediate: true, showErrorToast: false });
       }
     }
 
@@ -3538,7 +3396,7 @@
         }
         const extractedTimings = normalizeTimings(json?.timings);
         if (extractedTimings) {
-          timings = extractedTimings;
+          timings = mergeTimings(timings, extractedTimings);
         }
         const choice = Array.isArray(json.choices) ? json.choices[0] : null;
         const delta = choice?.delta || {};
@@ -3600,7 +3458,7 @@
       applySettingsInputsToState();
       updateStatus('', '正在刷新模型列表…', '刷新中');
       try {
-        const previousModel = getCurrentAssistant()?.model || state.model;
+        const previousModel = state.model;
         const json = await fetchJson(MODELS_ENDPOINT, { headers: getHeaders() });
         const models = Array.isArray(json?.data) ? json.data : [];
         els.modelSelect.innerHTML = '';
@@ -3649,7 +3507,7 @@
         updateStatus('error', '请输入消息或添加图片', '空消息');
         return;
       }
-      if (!getCurrentAssistant()?.model) {
+      if (!state.model) {
         updateStatus('error', '请先选择模型', '未选择模型');
         return;
       }
@@ -3660,7 +3518,7 @@
       state.draftImages = [];
       renderDraftImages();
       resizePromptInput();
-      await persistState({ immediate: true, showErrorToast: true, localImmediate: true });
+      await persistState({ immediate: true, showErrorToast: true });
       await requestAssistantResponse();
     }
 
@@ -3970,6 +3828,7 @@
       });
       els.modelSelect.addEventListener('change', () => {
         state.model = els.modelSelect.value;
+        syncCurrentAssistantFromRuntimeState();
         syncSettingsInputs();
         persistState();
       });
@@ -4136,9 +3995,6 @@
           stateSaveTimer = 0;
         }
         clearStateSaveRetryTimer();
-        if (pendingLocalBackup && !localBackupInFlight) {
-          void flushLocalBackup();
-        }
         if (pendingStatePayload && !stateSaveInFlight) {
           void flushStateSave({ keepalive: true, showErrorToast: false });
         }

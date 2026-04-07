@@ -17,6 +17,7 @@
   --sidebar-bg: #f7f7f7;
   --sidebar-border: #dcdcdc;
   --sidebar-width: 260px;
+  --chat-center-offset: 0px;
   --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   --sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
   --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
@@ -568,6 +569,8 @@ button { cursor: pointer; }
   flex-direction: column;
   min-height: 100%;
   min-width: 0;
+  transform: translateX(var(--chat-center-offset));
+  transition: transform 0.2s ease;
 }
 
 /* ── Empty state ── */
@@ -1072,6 +1075,8 @@ button { cursor: pointer; }
   gap: 8px;
   overflow: visible;
   position: relative;
+  transform: translateX(var(--chat-center-offset));
+  transition: transform 0.2s ease;
 }
 
 /* ── Image upload button ── */
@@ -2004,6 +2009,12 @@ body.sidebar-collapsed .sidebar {
   opacity: 0;
   pointer-events: none;
   transform: translateX(-12px);
+}
+
+@media (min-width: 1081px) {
+  body:not(.sidebar-collapsed) {
+    --chat-center-offset: calc(var(--sidebar-width) / -2);
+  }
 }
 
 /* ── Send button ── */

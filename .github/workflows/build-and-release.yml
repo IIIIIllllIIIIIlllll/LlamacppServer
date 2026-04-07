@@ -153,7 +153,7 @@ jobs:
           cd "$(dirname "$0")"
           chmod +x ./jre/bin/java
           find ./jre -name jspawnhelper -exec chmod 755 {} \; 2>/dev/null || true
-          ./jre/bin/java -Xms512m -Xmx512m -classpath "./classes:./lib/*" org.mark.llamacpp.server.LlamaServer "$@"
+          ./jre/bin/java -Xms512m -Xmx512m -XX:MaxDirectMemorySize=256m -classpath "./classes:./lib/*" org.mark.llamacpp.server.LlamaServer "$@"
           EOF
           chmod +x build/run.sh
 
@@ -162,7 +162,7 @@ jobs:
           cat > build/run.bat << 'EOF'
           @echo off
           cd /d "%~dp0"
-          start "" jre\bin\javaw.exe -Xms512m -Xmx512m -classpath "./classes;./lib/*" org.mark.llamacpp.server.LlamaServer %*
+          start "" jre\bin\javaw.exe -Xms512m -Xmx512m -XX:MaxDirectMemorySize=256m -classpath "./classes;./lib/*" org.mark.llamacpp.server.LlamaServer %*
 
           EOF
 
