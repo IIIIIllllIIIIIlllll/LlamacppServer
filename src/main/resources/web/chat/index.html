@@ -1273,7 +1273,6 @@
 
     function syncRuntimeStateFromCurrentAssistant() {
       const assistant = getCurrentAssistant();
-      state.model = typeof assistant?.model === 'string' ? assistant.model : '';
       state.temperature = assistant?.temperature || '';
       state.maxTokens = assistant?.maxTokens || '';
       state.topP = assistant?.topP || '';
@@ -1296,7 +1295,6 @@
       if (!assistant) {
         return;
       }
-      assistant.model = typeof state.model === 'string' ? state.model : '';
       if (!state.privacyMode) {
         assistant.name = normalizeAssistantName(els.assistantNameInput?.value, assistant.name);
       }
@@ -3463,7 +3461,7 @@
       applySettingsInputsToState();
       updateStatus('', '正在刷新模型列表…', '刷新中');
       try {
-        const previousModel = getCurrentAssistant()?.model || state.model;
+        const previousModel = state.model;
         const json = await fetchJson(MODELS_ENDPOINT, { headers: getHeaders() });
         const models = Array.isArray(json?.data) ? json.data : [];
         els.modelSelect.innerHTML = '';
