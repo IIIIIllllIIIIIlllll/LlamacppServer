@@ -327,9 +327,8 @@
       </div>
     </div>
   </div>
-  <script src="/js/marked.min.js"></script>
+  <script src="/js/marked.umd.js"></script>
   <script src="/js/highlight.min.js"></script>
-  <script src="/js/completion-markdown.js"></script>
   <script src="./chat-mcp.js"></script>
   <script>
 
@@ -701,7 +700,7 @@
           if (/^`[^`\n]+`$/.test(segment)) {
             return segment;
           }
-          return normalizeQuotedEmphasis(replaceMathInPlainText(segment, mathStore));
+          return replaceMathInPlainText(segment, mathStore);
         }).join('');
         result += match[0];
         lastIndex = match.index + match[0].length;
@@ -711,7 +710,7 @@
         if (/^`[^`\n]+`$/.test(segment)) {
           return segment;
         }
-        return normalizeQuotedEmphasis(replaceMathInPlainText(segment, mathStore));
+        return replaceMathInPlainText(segment, mathStore);
       }).join('');
       return {
         text: result,
@@ -807,24 +806,42 @@
 
     function renderMarkdown(text) {
       const source = String(text ?? '');
-      if (typeof markdownToSafeHtml !== 'function') {
+      if (!window.marked || typeof window.marked.parse !== 'function') {
         return escapeHtml(source).replace(/\n/g, '<br>');
       }
       const protectedMath = protectMathSegments(source);
-      return restoreMathTokens(markdownToSafeHtml(protectedMath.text), protectedMath.math);
+      let rendered = '';
+      try {
+        rendered = window.marked.parse(protectedMath.text, {
+          gfm: true,
+          breaks: true,
+          mangle: false,
+          headerIds: false
+        });
+      } catch (error) {
+        return escapeHtml(source).replace(/\n/g, '<br>');
+      }
+      return restoreMathTokens(rendered, protectedMath.math);
     }
 
-    function renderRichText(target, text) {
+    function renderRichText(target, text, options = {}) {
       if (!target) {
         return;
       }
       const source = String(text ?? '');
-      target.innerHTML = renderMarkdown(source);
-      fixResidualInlineMarkdown(target);
-      if (typeof scheduleHighlight === 'function') {
-        scheduleHighlight(target, source);
+      const isStreaming = !!options.isStreaming;
+      if (isStreaming) {
+        target.innerHTML = escapeHtml(source).replace(/\n/g, '<br>');
+      } else {
+        target.innerHTML = renderMarkdown(source);
       }
-      if (/[\\$]/.test(source)) {
+      if (!isStreaming && window.hljs && typeof window.hljs.highlightElement === 'function' && (source.includes('```') || source.includes('`'))) {
+        const blocks = target.querySelectorAll('pre code');
+        for (const block of blocks) {
+          window.hljs.highlightElement(block);
+        }
+      }
+      if (!isStreaming && /[\\$]/.test(source)) {
         requestMathTypeset(target);
       }
     }
@@ -2254,7 +2271,7 @@
 
         const reasoningBody = document.createElement('div');
         reasoningBody.className = 'reasoning-body' + (message.reasoningCollapsed ? ' hidden' : '');
-        renderRichText(reasoningBody, message.reasoning);
+        renderRichText(reasoningBody, message.reasoning, { isStreaming: !!message.isStreaming });
 
         reasoningHead.appendChild(reasoningMeta);
         reasoningHead.appendChild(reasoningCaret);
@@ -2331,7 +2348,7 @@
         if (String(message.content || '').trim() && message.role !== 'tool') {
           const content = document.createElement('div');
           content.className = 'message-content';
-          renderRichText(content, message.content || '');
+          renderRichText(content, message.content || '', { isStreaming: !!message.isStreaming });
           bubble.appendChild(content);
         }
 
@@ -2550,7 +2567,7 @@
         reasoningState.textContent = message.reasoningCollapsed ? '点击展开' : '点击收起';
         reasoningBody.classList.toggle('hidden', !!message.reasoningCollapsed);
         if (!message.reasoningCollapsed) {
-          renderRichText(reasoningBody, message.reasoning);
+          renderRichText(reasoningBody, message.reasoning, { isStreaming: !!message.isStreaming });
         }
       } else if (reasoningBox) {
         reasoningBox.remove();
@@ -2563,7 +2580,7 @@
           contentDiv.className = 'message-content';
           bubble.appendChild(contentDiv);
         }
-        renderRichText(contentDiv, message.content || '');
+        renderRichText(contentDiv, message.content || '', { isStreaming: !!message.isStreaming });
       } else if (contentDiv) {
         contentDiv.remove();
       }

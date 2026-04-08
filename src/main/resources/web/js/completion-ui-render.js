@@ -15,6 +15,85 @@ function tf(key, params, fallback) {
   return out;
 }
 
+function completionEscapeHtml(text) {
+  return String(text == null ? '' : text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function completionMarkdownToHtml(text) {
+  const input = String(text == null ? '' : text);
+  if (!window.marked || typeof window.marked.parse !== 'function') {
+    return completionEscapeHtml(input).replace(/\n/g, '<br>');
+  }
+  let parsed = '';
+  try {
+    parsed = window.marked.parse(completionEscapeHtml(input), {
+      gfm: true,
+      breaks: true,
+      mangle: false,
+      headerIds: false
+    });
+  } catch (e) {
+    return completionEscapeHtml(input).replace(/\n/g, '<br>');
+  }
+  return String(parsed || '');
+}
+
+function wrapHtmlFragment(fragment) {
+  const raw = String(fragment == null ? '' : fragment).trim();
+  if (!raw) return '';
+  if (/<html[\s>]/i.test(raw)) return raw;
+  return '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body>' + raw + '</body></html>';
+}
+
+function extractRunnableHtml(text) {
+  const input = String(text == null ? '' : text);
+  const trimmed = input.trim();
+  if (!trimmed) return '';
+  if (/^\s*<!doctype html[\s>]/i.test(trimmed) || /^\s*<html[\s>]/i.test(trimmed)) {
+    return wrapHtmlFragment(trimmed);
+  }
+  const fence = /```+([a-zA-Z0-9_-]*)\s*([\s\S]*?)```+/g;
+  let match = null;
+  while ((match = fence.exec(input)) !== null) {
+    const lang = String(match[1] || '').toLowerCase();
+    if (!lang || !(lang === 'html' || lang === 'htm' || lang === 'xhtml')) continue;
+    const body = String(match[2] || '').trim();
+    if (body) return wrapHtmlFragment(body);
+  }
+  return '';
+}
+
+let completionMarkdownRaf = 0;
+const pendingCompletionMarkdownRenders = new Map();
+
+function renderMessageContentNow(el, text) {
+  if (!el) return;
+  const raw = String(text == null ? '' : text);
+  el.innerHTML = completionMarkdownToHtml(raw);
+  if (window.hljs && typeof window.hljs.highlightElement === 'function' && (raw.includes('```') || raw.includes('`'))) {
+    const blocks = el.querySelectorAll('pre code');
+    for (const block of blocks) window.hljs.highlightElement(block);
+  }
+}
+
+function flushCompletionMarkdownRenders() {
+  completionMarkdownRaf = 0;
+  for (const [node, value] of pendingCompletionMarkdownRenders.entries()) {
+    renderMessageContentNow(node, value);
+  }
+  pendingCompletionMarkdownRenders.clear();
+}
+
+function requestRenderMessageContent(el, text) {
+  if (!el) return;
+  pendingCompletionMarkdownRenders.set(el, text);
+  if (completionMarkdownRaf) return;
+  completionMarkdownRaf = requestAnimationFrame(flushCompletionMarkdownRenders);
+}
+
 function normalizeSpeakerName(name, fallback) {
   const raw = (name == null ? '' : String(name)).trim();
   const cleaned = raw.replace(/[\r\n:]+/g, ' ').trim();
