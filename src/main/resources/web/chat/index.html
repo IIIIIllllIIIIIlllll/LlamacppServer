@@ -331,6 +331,12 @@
       </div>
       <div class="mcp-dialog-body">
         <p class="settings-field-desc">仅支持 Streamable HTTP 与 SSE。JSON 中 transport 仅允许 streamable_http 或 sse。</p>
+        <div class="settings-field">
+          <div class="settings-field-header">
+            <label for="mcpServerNameInput">服务器名称</label>
+          </div>
+          <input id="mcpServerNameInput" class="drawer-input" type="text" placeholder="例如：Weather Service">
+        </div>
         <div class="mcp-template-actions">
           <button id="mcpUseStreamableTemplateBtn" class="ghost-button" type="button">Streamable HTTP 模板</button>
           <button id="mcpUseSseTemplateBtn" class="ghost-button" type="button">SSE 模板</button>
@@ -440,8 +446,9 @@
       mcpAddDialog: document.getElementById('mcpAddDialog'),
       mcpDialogCloseBtn: document.getElementById('mcpDialogCloseBtn'),
       mcpDialogCancelBtn: document.getElementById('mcpDialogCancelBtn'),
-      mcpDialogSaveBtn: document.getElementById('mcpDialogSaveBtn'),
-      mcpJsonInput: document.getElementById('mcpJsonInput'),
+       mcpDialogSaveBtn: document.getElementById('mcpDialogSaveBtn'),
+       mcpServerNameInput: document.getElementById('mcpServerNameInput'),
+       mcpJsonInput: document.getElementById('mcpJsonInput'),
       mcpUseStreamableTemplateBtn: document.getElementById('mcpUseStreamableTemplateBtn'),
       mcpUseSseTemplateBtn: document.getElementById('mcpUseSseTemplateBtn'),
       mcpRefreshBtn: document.getElementById('mcpRefreshBtn'),

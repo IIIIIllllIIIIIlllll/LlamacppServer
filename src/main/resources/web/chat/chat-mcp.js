@@ -689,7 +689,9 @@
     }
 
     function buildConfigPayload(config) {
-      const serverId = 'mcp_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+      const serverId = config && typeof config.name === 'string' && config.name.trim()
+        ? config.name.trim()
+        : 'mcp_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
       const serverConfig = {
         type: normalizeTransportType(config && config.type),
         url: config && config.url ? config.url : '',
@@ -717,6 +719,7 @@
         return;
       }
       const normalizedConfig = {
+        name: config && typeof config.name === 'string' ? config.name.trim() : '',
         type: normalizeConfigTransport(config && config.type),
         url: sanitizeAddUrl(config && config.url),
         headers: normalizeConfigHeaders(config && config.headers),
@@ -789,7 +792,8 @@
 
     async function addServerFromDialog() {
       const config = parseJsonServerConfig(els.mcpJsonInput ? els.mcpJsonInput.value : '');
-      await connectServer(config);
+      const name = els.mcpServerNameInput ? els.mcpServerNameInput.value.trim() : '';
+      await connectServer({ ...config, name: name });
       closeAddDialog();
     }
 
