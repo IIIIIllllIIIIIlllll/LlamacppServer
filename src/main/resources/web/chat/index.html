@@ -294,16 +294,11 @@
               <div class="settings-group-title">MCP</div>
               <div class="settings-field">
                 <div class="settings-field-header">
-                  <label for="mcpUrlInput">MCP 服务地址</label>
+                  <label>MCP 服务配置</label>
                 </div>
-                <p class="settings-field-desc">支持 SSE 与 Streamable HTTP，连接后可将该服务的工具暴露给当前助手使用</p>
+                <p class="settings-field-desc">支持 SSE 与 Streamable HTTP，可在新增弹窗中通过 JSON 配置 URL、请求头、超时参数等信息</p>
                 <div class="mcp-connect-row">
-                  <select id="mcpTransportSelect" class="drawer-input mcp-transport-select" aria-label="MCP 传输类型">
-                    <option value="sse">SSE</option>
-                    <option value="streamable-http">Streamable HTTP</option>
-                  </select>
-                  <input id="mcpUrlInput" class="drawer-input" type="url" placeholder="https://example.com/mcp">
-                  <button id="mcpAddBtn" class="primary-button" type="button">连接</button>
+                  <button id="mcpOpenAddDialogBtn" class="primary-button" type="button">新增 MCP 服务器</button>
                   <button id="mcpRefreshBtn" class="ghost-button" type="button">刷新</button>
                 </div>
               </div>
@@ -324,6 +319,27 @@
         <div class="drawer-actions">
           <button id="saveSettingsBtn" class="primary-button" type="button">保存设置</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="mcpAddDialog" class="mcp-dialog-backdrop" aria-hidden="true">
+    <div class="mcp-dialog" role="dialog" aria-modal="true" aria-labelledby="mcpAddDialogTitle">
+      <div class="mcp-dialog-head">
+        <h4 id="mcpAddDialogTitle">新增 MCP 服务器</h4>
+        <button id="mcpDialogCloseBtn" class="icon-button mcp-dialog-close" type="button" aria-label="关闭">✕</button>
+      </div>
+      <div class="mcp-dialog-body">
+        <p class="settings-field-desc">仅支持 Streamable HTTP 与 SSE。JSON 中 transport 仅允许 streamable_http 或 sse。</p>
+        <div class="mcp-template-actions">
+          <button id="mcpUseStreamableTemplateBtn" class="ghost-button" type="button">Streamable HTTP 模板</button>
+          <button id="mcpUseSseTemplateBtn" class="ghost-button" type="button">SSE 模板</button>
+        </div>
+        <textarea id="mcpJsonInput" class="drawer-textarea mcp-json-input" spellcheck="false" aria-label="MCP JSON 配置"></textarea>
+      </div>
+      <div class="mcp-dialog-footer">
+        <button id="mcpDialogCancelBtn" class="ghost-button" type="button">取消</button>
+        <button id="mcpDialogSaveBtn" class="primary-button" type="button">保存并连接</button>
       </div>
     </div>
   </div>
@@ -420,9 +436,14 @@
       assistantUsageHint: document.getElementById('assistantUsageHint'),
       settingsStorageHint: document.getElementById('settingsStorageHint'),
       saveSettingsBtn: document.getElementById('saveSettingsBtn'),
-      mcpTransportSelect: document.getElementById('mcpTransportSelect'),
-      mcpUrlInput: document.getElementById('mcpUrlInput'),
-      mcpAddBtn: document.getElementById('mcpAddBtn'),
+      mcpOpenAddDialogBtn: document.getElementById('mcpOpenAddDialogBtn'),
+      mcpAddDialog: document.getElementById('mcpAddDialog'),
+      mcpDialogCloseBtn: document.getElementById('mcpDialogCloseBtn'),
+      mcpDialogCancelBtn: document.getElementById('mcpDialogCancelBtn'),
+      mcpDialogSaveBtn: document.getElementById('mcpDialogSaveBtn'),
+      mcpJsonInput: document.getElementById('mcpJsonInput'),
+      mcpUseStreamableTemplateBtn: document.getElementById('mcpUseStreamableTemplateBtn'),
+      mcpUseSseTemplateBtn: document.getElementById('mcpUseSseTemplateBtn'),
       mcpRefreshBtn: document.getElementById('mcpRefreshBtn'),
       mcpSummary: document.getElementById('mcpSummary'),
       mcpServerList: document.getElementById('mcpServerList')
@@ -3710,6 +3731,9 @@
     }
 
     function closeSettings() {
+      if (mcpModule?.closeAddDialog) {
+        mcpModule.closeAddDialog({ restoreFocus: false });
+      }
       els.settingsDrawer.classList.remove('open');
       els.settingsDrawer.setAttribute('aria-hidden', 'true');
     }

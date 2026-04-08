@@ -1541,10 +1541,102 @@ button { cursor: pointer; }
 }
 
 .mcp-connect-row {
-  display: grid;
-  grid-template-columns: 160px minmax(0, 1fr) auto auto;
-  gap: 10px;
+  display: flex;
   align-items: center;
+  gap: 10px;
+}
+
+.mcp-connect-row .primary-button {
+  flex: 0 0 auto;
+}
+
+.mcp-connect-row .ghost-button {
+  flex: 0 0 auto;
+}
+
+.mcp-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 160;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  background: color-mix(in srgb, #000 62%, transparent);
+}
+
+.mcp-dialog-backdrop.open {
+  display: flex;
+}
+
+.mcp-dialog {
+  width: min(860px, calc(100vw - 96px));
+  max-height: calc(100vh - 96px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg);
+  overflow: hidden;
+  box-shadow: 0 20px 80px rgba(0, 0, 0, 0.32);
+}
+
+.mcp-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--secondary) 40%, var(--bg));
+}
+
+.mcp-dialog-head h4 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.mcp-dialog-close {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  font-size: 14px;
+}
+
+.mcp-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 20px;
+  overflow: auto;
+}
+
+.mcp-template-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.mcp-json-input {
+  width: 100%;
+  min-height: 280px;
+  max-height: min(52vh, 600px);
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.mcp-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
 }
 
 .mcp-transport-select {
@@ -2329,7 +2421,35 @@ body.sidebar-collapsed .sidebar {
   }
 
   .mcp-connect-row {
-    grid-template-columns: 1fr;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .mcp-connect-row .primary-button,
+  .mcp-connect-row .ghost-button {
+    width: 100%;
+  }
+
+  .mcp-dialog-backdrop {
+    padding: 8px;
+  }
+
+  .mcp-dialog {
+    width: min(100vw - 16px, 860px);
+    max-height: calc(100vh - 16px);
+  }
+
+  .mcp-json-input {
+    min-height: 260px;
+  }
+
+  .mcp-dialog-footer {
+    flex-direction: column;
+  }
+
+  .mcp-dialog-footer .ghost-button,
+  .mcp-dialog-footer .primary-button {
+    width: 100%;
   }
 
   .drawer-footer {

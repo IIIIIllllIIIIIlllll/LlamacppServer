@@ -46,6 +46,17 @@
     return text;
   }
 
+  function getMcpTemplateConfig(transport) {
+    const normalized = normalizeTransportType(transport);
+    return {
+      transport: normalized === 'streamable-http' ? 'streamable_http' : 'sse',
+      url: 'your mcp server url',
+      headers: {},
+      timeout: 5,
+      sse_read_timeout: 300
+    };
+  }
+
   function normalizeToolDefinition(tool, serverUrl, server) {
     const source = toPlainObject(tool);
     const inputSchema =
@@ -608,45 +619,187 @@
       return url;
     }
 
-    function buildConfigPayload(type, url) {
+    function normalizeConfigTransport(value) {
+      const normalized = normalizeTransportType(value);
+      if (normalized !== 'sse' && normalized !== 'streamable-http') {
+        throw new Error('transport 仅支持 sse 或 streamable_http');
+      }
+      return normalized;
+    }
+
+    function normalizeConfigHeaders(value) {
+      if (value == null) {
+        return {};
+      }
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new Error('headers 必须是 JSON 对象');
+      }
+      const headers = {};
+      Object.keys(value).forEach(function (key) {
+        const name = typeof key === 'string' ? key.trim() : '';
+        if (!name) {
+          return;
+        }
+        const headerValue = value[key];
+        if (headerValue == null) {
+          return;
+        }
+        headers[name] = String(headerValue);
+      });
+      return headers;
+    }
+
+    function normalizeOptionalNumber(value, fieldName) {
+      if (value == null || value === '') {
+        return null;
+      }
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric) || numeric <= 0) {
+        throw new Error(fieldName + ' 必须是大于 0 的数字');
+      }
+      return numeric;
+    }
+
+    function parseJsonServerConfig(rawText) {
+      const text = typeof rawText === 'string' ? rawText.trim() : '';
+      if (!text) {
+        throw new Error('请先输入 MCP JSON 配置');
+      }
+      let parsed;
+      try {
+        parsed = JSON.parse(text);
+      } catch (error) {
+        throw new Error('JSON 格式错误，请检查后重试');
+      }
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('MCP 配置必须是 JSON 对象');
+      }
+      const type = normalizeConfigTransport(parsed.transport || parsed.type);
+      const url = sanitizeAddUrl(parsed.url || parsed.baseUrl);
+      const headers = normalizeConfigHeaders(parsed.headers);
+      const timeout = normalizeOptionalNumber(parsed.timeout, 'timeout');
+      const sseReadTimeout = normalizeOptionalNumber(parsed.sse_read_timeout, 'sse_read_timeout');
+      return {
+        type: type,
+        url: url,
+        headers: headers,
+        timeout: timeout,
+        sse_read_timeout: sseReadTimeout
+      };
+    }
+
+    function buildConfigPayload(config) {
       const serverId = 'mcp_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+      const serverConfig = {
+        type: normalizeTransportType(config && config.type),
+        url: config && config.url ? config.url : '',
+        isActive: true
+      };
+      const headers = config && config.headers && typeof config.headers === 'object' ? config.headers : {};
+      if (Object.keys(headers).length) {
+        serverConfig.headers = headers;
+      }
+      if (config && Number.isFinite(config.timeout)) {
+        serverConfig.timeout = config.timeout;
+      }
+      if (config && Number.isFinite(config.sse_read_timeout)) {
+        serverConfig.sse_read_timeout = config.sse_read_timeout;
+      }
       return {
         mcpServers: {
-          [serverId]: {
-            type: normalizeTransportType(type),
-            url: url,
-            isActive: true
-          }
+          [serverId]: serverConfig
         }
       };
     }
 
-    async function addServer() {
+    async function connectServer(config) {
       if (!apiFetch) {
         return;
       }
-      const type = els.mcpTransportSelect ? normalizeTransportType(els.mcpTransportSelect.value) : 'sse';
-      const url = sanitizeAddUrl(els.mcpUrlInput ? els.mcpUrlInput.value : '');
+      const normalizedConfig = {
+        type: normalizeConfigTransport(config && config.type),
+        url: sanitizeAddUrl(config && config.url),
+        headers: normalizeConfigHeaders(config && config.headers),
+        timeout: normalizeOptionalNumber(config && config.timeout, 'timeout'),
+        sse_read_timeout: normalizeOptionalNumber(config && config.sse_read_timeout, 'sse_read_timeout')
+      };
       const json = await apiFetch('/api/mcp/add', {
         method: 'POST',
         headers: getHeaders(),
-        body: JSON.stringify(buildConfigPayload(type, url))
+        body: JSON.stringify(buildConfigPayload(normalizedConfig))
       });
       if (!json || json.success === false) {
         throw new Error((json && json.error) || '连接 MCP 服务失败');
       }
       await refreshRegistry({ silentToast: true });
       const nextUrls = getAssistantUrls();
-      if (!nextUrls.includes(url)) {
-        nextUrls.push(url);
+      if (!nextUrls.includes(normalizedConfig.url)) {
+        nextUrls.push(normalizedConfig.url);
         updateCurrentAssistantUrls(nextUrls);
-      }
-      if (els.mcpUrlInput) {
-        els.mcpUrlInput.value = '';
       }
       renderServerList();
       await persistState({ immediate: true, showErrorToast: true });
       showToast('success', 'MCP 服务已连接');
+    }
+
+    function getTemplateText(transport) {
+      return JSON.stringify(getMcpTemplateConfig(transport), null, 2);
+    }
+
+    function setDialogTemplate(transport) {
+      if (!els.mcpJsonInput) {
+        return;
+      }
+      els.mcpJsonInput.value = getTemplateText(transport);
+      els.mcpJsonInput.focus();
+      els.mcpJsonInput.setSelectionRange(els.mcpJsonInput.value.length, els.mcpJsonInput.value.length);
+    }
+
+    function openAddDialog(transport) {
+      if (!els.mcpAddDialog) {
+        return;
+      }
+      if (els.mcpJsonInput && !String(els.mcpJsonInput.value || '').trim()) {
+        els.mcpJsonInput.value = getTemplateText(transport || 'streamable-http');
+      }
+      els.mcpAddDialog.classList.add('open');
+      els.mcpAddDialog.setAttribute('aria-hidden', 'false');
+      if (document.body) {
+        document.body.classList.add('mcp-dialog-open');
+      }
+      if (els.mcpJsonInput) {
+        els.mcpJsonInput.focus();
+      }
+    }
+
+    function closeAddDialog(options) {
+      if (!els.mcpAddDialog) {
+        return;
+      }
+      const opts = options || {};
+      els.mcpAddDialog.classList.remove('open');
+      els.mcpAddDialog.setAttribute('aria-hidden', 'true');
+      if (document.body) {
+        document.body.classList.remove('mcp-dialog-open');
+      }
+      if (opts.restoreFocus !== false && els.mcpOpenAddDialogBtn) {
+        els.mcpOpenAddDialogBtn.focus();
+      }
+    }
+
+    async function addServerFromDialog() {
+      const config = parseJsonServerConfig(els.mcpJsonInput ? els.mcpJsonInput.value : '');
+      await connectServer(config);
+      closeAddDialog();
+    }
+
+    async function addServer() {
+      const type = els.mcpTransportSelect ? normalizeTransportType(els.mcpTransportSelect.value) : 'sse';
+      const url = sanitizeAddUrl(els.mcpUrlInput ? els.mcpUrlInput.value : '');
+      await connectServer({ type: type, url: url, headers: {} });
+      if (els.mcpUrlInput) {
+        els.mcpUrlInput.value = '';
+      }
     }
 
     async function removeServer(url) {
@@ -694,6 +847,67 @@
         return;
       }
       eventsBound = true;
+      if (els.mcpOpenAddDialogBtn) {
+        els.mcpOpenAddDialogBtn.addEventListener('click', function () {
+          openAddDialog('streamable-http');
+        });
+      }
+      if (els.mcpDialogCloseBtn) {
+        els.mcpDialogCloseBtn.addEventListener('click', function () {
+          closeAddDialog();
+        });
+      }
+      if (els.mcpDialogCancelBtn) {
+        els.mcpDialogCancelBtn.addEventListener('click', function () {
+          closeAddDialog();
+        });
+      }
+      if (els.mcpUseStreamableTemplateBtn) {
+        els.mcpUseStreamableTemplateBtn.addEventListener('click', function () {
+          setDialogTemplate('streamable-http');
+        });
+      }
+      if (els.mcpUseSseTemplateBtn) {
+        els.mcpUseSseTemplateBtn.addEventListener('click', function () {
+          setDialogTemplate('sse');
+        });
+      }
+      if (els.mcpDialogSaveBtn) {
+        els.mcpDialogSaveBtn.addEventListener('click', function () {
+          addServerFromDialog().catch(function (error) {
+            showToast('error', error && error.message ? error.message : '连接 MCP 服务失败');
+          });
+        });
+      }
+      if (els.mcpAddDialog) {
+        els.mcpAddDialog.addEventListener('click', function (event) {
+          if (event.target === els.mcpAddDialog) {
+            closeAddDialog();
+          }
+        });
+      }
+      if (els.mcpJsonInput) {
+        els.mcpJsonInput.addEventListener('keydown', function (event) {
+          if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+            event.preventDefault();
+            addServerFromDialog().catch(function (error) {
+              showToast('error', error && error.message ? error.message : '连接 MCP 服务失败');
+            });
+            return;
+          }
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            closeAddDialog();
+          }
+        });
+      }
+      document.addEventListener('keydown', function (event) {
+        if (event.key !== 'Escape' || !els.mcpAddDialog || !els.mcpAddDialog.classList.contains('open')) {
+          return;
+        }
+        event.preventDefault();
+        closeAddDialog();
+      });
       if (els.mcpAddBtn) {
         els.mcpAddBtn.addEventListener('click', function () {
           addServer().catch(function (error) {
@@ -824,6 +1038,7 @@
       bindEvents: bindEvents,
       refreshRegistry: refreshRegistry,
       render: renderServerList,
+      closeAddDialog: closeAddDialog,
       addServer: addServer,
       removeServer: removeServer,
       getEnabledTools: getEnabledTools,
