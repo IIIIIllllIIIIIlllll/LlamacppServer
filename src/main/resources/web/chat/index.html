@@ -2344,6 +2344,41 @@
       return false;
     }
 
+    async function ensureServerStateReadyForRequest() {
+      if (!ensureStateReadyForOperation()) {
+        return false;
+      }
+      try {
+        const json = await fetchJson(EASY_CHAT_STATE_ENDPOINT, {
+          headers: getHeaders(),
+          timeoutMs: STATE_LOAD_TIMEOUT_MS
+        });
+        if (!json?.success) {
+          throw new Error(json?.error || '状态校验失败');
+        }
+        const serverRevision = normalizeRevision(json?.data?.revision);
+        if (serverRevision && stateRevision && serverRevision !== stateRevision) {
+          updateStatus('error', '检测到会话已在其他页面更新，正在同步最新状态', '状态冲突');
+          showToast('error', '检测到会话状态变化，已先同步服务端数据，请重试发送');
+          await loadState();
+          renderConversationList();
+          renderMessages();
+          renderDraftImages();
+          syncPrivacyModeButton();
+          syncSendButtonState();
+          return false;
+        }
+        if (!stateRevision && serverRevision) {
+          stateRevision = serverRevision;
+        }
+        return true;
+      } catch (error) {
+        updateStatus('error', '发送前状态校验失败：' + (error?.message || '网络错误'), '校验失败');
+        showToast('error', '发送前无法确认服务端状态，请检查网络后重试');
+        return false;
+      }
+    }
+
     function isStateRevisionConflictError(error) {
       const message = String(error?.message || '');
       return message.includes(STATE_REVISION_CONFLICT_CODE);
@@ -3588,6 +3623,12 @@
       if (state.isSending) {
         return;
       }
+      if (!options?.preflightChecked) {
+        const preflightReady = await ensureServerStateReadyForRequest();
+        if (!preflightReady) {
+          return;
+        }
+      }
       syncRuntimeStateFromCurrentAssistant();
       if (!state.model) {
         updateStatus('error', '请先选择模型', '未选择模型');
@@ -4160,6 +4201,10 @@
       if (!ensureStateReadyForOperation()) {
         return;
       }
+      const preflightReady = await ensureServerStateReadyForRequest();
+      if (!preflightReady) {
+        return;
+      }
       if (state.isSending) {
         return;
       }
@@ -4185,7 +4230,7 @@
       renderDraftImages();
       resizePromptInput();
       await persistState({ immediate: true, showErrorToast: true });
-      await requestAssistantResponse();
+      await requestAssistantResponse({ preflightChecked: true });
     }
 
     function createConversation() {
