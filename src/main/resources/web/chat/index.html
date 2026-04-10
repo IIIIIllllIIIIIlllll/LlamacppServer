@@ -366,6 +366,9 @@
     const CHAT_ENDPOINT = '/v1/chat/completions';
     const MODELS_ENDPOINT = '/v1/models';
     const EASY_CHAT_STATE_ENDPOINT = '/api/easy-chat/state';
+    const STATE_REVISION_CONFLICT_CODE = 'STATE_REVISION_CONFLICT';
+    const STATE_LOAD_TIMEOUT_MS = 30000;
+    const STATE_SAVE_TIMEOUT_MS = 20000;
     const MAX_IMAGE_COUNT = 6;
     const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
     const MAX_TEXT_FILE_SIZE = 512 * 1024;
@@ -374,6 +377,9 @@
     let stateSaveRetryTimer = 0;
     let stateSaveInFlight = false;
     let pendingStatePayload = null;
+    let stateRevision = '';
+    let stateLoadedFromServer = false;
+    let stateLoadInProgress = false;
 
     const state = {
       model: '',
@@ -2276,6 +2282,7 @@
 
     function buildPersistedState() {
       return {
+        baseRevision: stateRevision,
         model: state.model,
         sidebarCollapsed: state.sidebarCollapsed,
         search: state.search,
@@ -2284,6 +2291,76 @@
         conversations: state.conversations,
         currentConversationId: state.currentConversationId
       };
+    }
+
+    function normalizeRevision(value) {
+      return typeof value === 'string' ? value.trim() : '';
+    }
+
+    function updateInteractionLockState() {
+      const locked = stateLoadInProgress || !stateLoadedFromServer;
+      const elements = document.querySelectorAll('button, input, textarea, select');
+      for (const element of elements) {
+        if (!(element instanceof HTMLButtonElement || element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement)) {
+          continue;
+        }
+        if (element.id === 'statusDot' || element.id === 'statusShortText') {
+          continue;
+        }
+        if (locked) {
+          if (!element.hasAttribute('data-pre-lock-disabled')) {
+            element.setAttribute('data-pre-lock-disabled', element.disabled ? '1' : '0');
+          }
+          element.disabled = true;
+        } else {
+          const preLocked = element.getAttribute('data-pre-lock-disabled');
+          if (preLocked === '0') {
+            element.disabled = false;
+          }
+          element.removeAttribute('data-pre-lock-disabled');
+        }
+      }
+    }
+
+    function setStateLoadGuard(loading, statusText) {
+      stateLoadInProgress = !!loading;
+      if (loading) {
+        updateStatus('', statusText || '正在同步会话数据，请稍候…', '同步中');
+      } else if (!stateLoadedFromServer) {
+        updateStatus('error', statusText || '无法连接服务器，已禁止本地操作', '连接失败');
+      }
+      updateInteractionLockState();
+    }
+
+    function ensureStateReadyForOperation() {
+      if (!stateLoadInProgress && stateLoadedFromServer) {
+        return true;
+      }
+      if (stateLoadInProgress) {
+        showToast('info', '正在同步会话数据，请等待完成后再操作');
+      } else {
+        showToast('error', '网络错误：无法连接服务器加载会话数据，请先恢复连接');
+      }
+      return false;
+    }
+
+    function isStateRevisionConflictError(error) {
+      const message = String(error?.message || '');
+      return message.includes(STATE_REVISION_CONFLICT_CODE);
+    }
+
+    async function handleStateRevisionConflict() {
+      pendingStatePayload = null;
+      clearStateSaveRetryTimer();
+      stateSaveInFlight = false;
+      updateStorageHint('检测到远端状态已变化，已停止自动覆盖，正在重新加载');
+      showToast('error', '检测到状态冲突，已阻止覆盖并自动重新加载');
+      await loadState();
+      renderConversationList();
+      renderMessages();
+      renderDraftImages();
+      syncPrivacyModeButton();
+      syncSendButtonState();
     }
 
     function applyLoadedState(saved) {
@@ -2329,11 +2406,13 @@
         method: 'POST',
         headers: getHeaders(),
         body: JSON.stringify(payload),
-        keepalive: !!options.keepalive
+        keepalive: !!options.keepalive,
+        timeoutMs: STATE_SAVE_TIMEOUT_MS
       });
       if (!json?.success) {
         throw new Error(json?.error || '保存失败');
       }
+      stateRevision = normalizeRevision(json?.data?.revision);
       updateStorageHint('');
       return true;
     }
@@ -2342,6 +2421,11 @@
       if (stateSaveTimer) {
         clearTimeout(stateSaveTimer);
         stateSaveTimer = 0;
+      }
+      if (!stateLoadedFromServer) {
+        pendingStatePayload = null;
+        updateStorageHint('服务端状态未加载，已禁止写回以保护历史记录');
+        return false;
       }
       if (stateSaveInFlight) {
         return false;
@@ -2359,6 +2443,10 @@
         return true;
       } catch (error) {
         console.error(error);
+        if (isStateRevisionConflictError(error)) {
+          await handleStateRevisionConflict();
+          return false;
+        }
         pendingStatePayload = payload;
         updateStorageHint('服务端保存失败，当前更改尚未落盘');
         if (options.showErrorToast !== false) {
@@ -2376,11 +2464,21 @@
 
     function persistState(options = {}) {
       syncSettingsInputs();
-      const payload = clonePersistedPayload(buildPersistedState());
-      pendingStatePayload = payload;
       if (options.skipServer) {
         return Promise.resolve(true);
       }
+      if (!stateLoadedFromServer) {
+        pendingStatePayload = null;
+        if (stateSaveTimer) {
+          clearTimeout(stateSaveTimer);
+          stateSaveTimer = 0;
+        }
+        clearStateSaveRetryTimer();
+        updateStorageHint('服务端状态未加载，已禁止写回以保护历史记录');
+        return Promise.resolve(false);
+      }
+      const payload = clonePersistedPayload(buildPersistedState());
+      pendingStatePayload = payload;
       clearStateSaveRetryTimer();
       if (stateSaveTimer) {
         clearTimeout(stateSaveTimer);
@@ -2397,23 +2495,40 @@
 
     async function loadState() {
       updateStorageHint('正在从服务端加载聊天记录…');
+      setStateLoadGuard(true, '正在从服务端同步聊天记录…');
       let remoteState = {};
+      let loadedFromServer = false;
+      let loadErrorMessage = '';
       try {
-        const json = await fetchJson(EASY_CHAT_STATE_ENDPOINT, { headers: getHeaders() });
+        const json = await fetchJson(EASY_CHAT_STATE_ENDPOINT, {
+          headers: getHeaders(),
+          timeoutMs: STATE_LOAD_TIMEOUT_MS
+        });
         if (!json?.success) {
           throw new Error(json?.error || '加载失败');
         }
         remoteState = json?.data?.state || {};
+        stateRevision = normalizeRevision(json?.data?.revision);
+        loadedFromServer = true;
       } catch (error) {
         console.error(error);
-        updateStorageHint('服务端读取失败，当前使用临时内存状态');
-        showToast('error', '加载聊天记录失败，已使用空白状态');
+        stateRevision = '';
+        loadErrorMessage = error?.message || '网络错误';
+        updateStorageHint('网络错误：无法连接服务器加载会话数据，已禁止本地操作');
+        showToast('error', '网络错误：无法连接服务器加载会话数据');
       }
-      applyLoadedState(remoteState || {});
-      updateStorageHint('');
-      ensureConversation();
-      syncRuntimeStateFromCurrentAssistant();
-      syncSettingsInputs();
+      stateLoadedFromServer = loadedFromServer;
+      if (loadedFromServer) {
+        applyLoadedState(remoteState || {});
+        updateStorageHint('');
+        ensureConversation();
+        syncRuntimeStateFromCurrentAssistant();
+        syncSettingsInputs();
+        setStateLoadGuard(false, '');
+      } else {
+        setStateLoadGuard(false, loadErrorMessage || '网络错误：无法连接服务器加载会话数据');
+      }
+      return loadedFromServer;
     }
 
     function formatConversationTime(value) {
@@ -3729,7 +3844,32 @@
     }
 
     async function fetchJson(url, options = {}) {
-      const response = await fetch(url, options);
+      const requestOptions = { ...options };
+      const timeoutMs = Number(requestOptions.timeoutMs);
+      delete requestOptions.timeoutMs;
+      const hasTimeout = Number.isFinite(timeoutMs) && timeoutMs > 0;
+      const controller = hasTimeout ? new AbortController() : null;
+      const timeoutId = hasTimeout
+        ? window.setTimeout(() => {
+            controller.abort();
+          }, timeoutMs)
+        : 0;
+      if (controller && !requestOptions.signal) {
+        requestOptions.signal = controller.signal;
+      }
+      let response;
+      try {
+        response = await fetch(url, requestOptions);
+      } catch (error) {
+        if (controller && controller.signal.aborted) {
+          throw new Error('请求超时，请检查网络连接');
+        }
+        throw error;
+      } finally {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+      }
       if (!response.ok) {
         const text = await response.text();
         throw new Error(text || '请求失败：' + response.status);
@@ -3738,6 +3878,9 @@
     }
 
     async function saveSettings(showSavedToast = true) {
+      if (!ensureStateReadyForOperation()) {
+        return;
+      }
       applySettingsInputsToState();
       const saved = await persistState({ immediate: true, showErrorToast: showSavedToast });
       if (saved && showSavedToast) {
@@ -4014,6 +4157,9 @@
     }
 
     async function sendMessage() {
+      if (!ensureStateReadyForOperation()) {
+        return;
+      }
       if (state.isSending) {
         return;
       }
@@ -4043,6 +4189,9 @@
     }
 
     function createConversation() {
+      if (!ensureStateReadyForOperation()) {
+        return;
+      }
       if (state.abortController) {
         state.abortController.abort();
       }
@@ -4072,6 +4221,9 @@
     }
 
     function openConversation(id) {
+      if (!ensureStateReadyForOperation()) {
+        return;
+      }
       if (!id || id === state.currentConversationId) {
         return;
       }
@@ -4090,6 +4242,9 @@
     }
 
     function clearCurrentConversation() {
+      if (!ensureStateReadyForOperation()) {
+        return;
+      }
       const conversation = getCurrentConversation();
       if (!conversation) {
         return;
@@ -4123,6 +4278,9 @@
     }
 
     async function deleteConversation(id) {
+      if (!ensureStateReadyForOperation()) {
+        return;
+      }
       const target = state.conversations.find(item => item.id === id);
       if (!target) {
         return;
@@ -4203,6 +4361,9 @@
     }
 
     async function switchConversationAssistant(assistantId) {
+      if (!ensureStateReadyForOperation()) {
+        return;
+      }
       const conversation = getCurrentConversation();
       const assistant = getAssistantById(assistantId);
       if (!conversation || !assistant || conversation.assistantId === assistant.id) {
@@ -4221,6 +4382,9 @@
     }
 
     async function createAssistantProfile() {
+      if (!ensureStateReadyForOperation()) {
+        return;
+      }
       applySettingsInputsToState();
       const currentAssistant = getCurrentAssistant();
       const conversation = getCurrentConversation();
@@ -4243,6 +4407,9 @@
     }
 
     async function deleteCurrentAssistantProfile() {
+      if (!ensureStateReadyForOperation()) {
+        return;
+      }
       const currentAssistant = getCurrentAssistant();
       if (!currentAssistant) {
         return;
@@ -4578,6 +4745,16 @@
         }
       });
       window.addEventListener('online', () => {
+        if (!stateLoadedFromServer) {
+          void loadState().then(() => {
+            renderConversationList();
+            renderMessages();
+            renderDraftImages();
+            syncPrivacyModeButton();
+            syncSendButtonState();
+          });
+          return;
+        }
         if (pendingStatePayload && !stateSaveInFlight) {
           void flushStateSave({ showErrorToast: false });
         }
@@ -4586,6 +4763,7 @@
 
     async function init() {
       ensureMathJax();
+      setStateLoadGuard(true, '正在从服务端同步聊天记录…');
       if (window.ChatMcpModule?.create) {
         mcpModule = window.ChatMcpModule.create({
           state,
@@ -4599,6 +4777,16 @@
         });
       }
       await loadState();
+      if (!stateLoadedFromServer) {
+        renderConversationList();
+        renderMessages();
+        renderDraftImages();
+        syncPrivacyModeButton();
+        syncSendButtonState();
+        bindEvents();
+        syncResponsiveLayout();
+        return;
+      }
       if (mcpModule) {
         try {
           await mcpModule.refreshRegistry({ silentToast: true });

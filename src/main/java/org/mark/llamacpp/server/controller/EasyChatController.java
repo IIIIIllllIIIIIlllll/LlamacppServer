@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Stream;
 
 import org.mark.llamacpp.server.LlamaServer;
@@ -35,6 +36,9 @@ public class EasyChatController implements BaseController {
 
 	private static final Logger logger = LoggerFactory.getLogger(EasyChatController.class);
 	private static final Object STATE_LOCK = new Object();
+	private static final String STATE_REVISION_KEY = "_revision";
+	private static final String BASE_REVISION_FIELD = "baseRevision";
+	private static final String REVISION_CONFLICT_CODE = "STATE_REVISION_CONFLICT";
 
 	private static final String PATH_STATE = "/api/easy-chat/state";
 
@@ -68,15 +72,18 @@ public class EasyChatController implements BaseController {
 			Path conversationDir = this.getConversationDirPath(stateDir);
 			JsonObject state = new JsonObject();
 			boolean exists;
+			String revision = "";
 			synchronized (STATE_LOCK) {
 				exists = Files.exists(stateFile);
 				if (exists) {
 					state = this.loadState(stateDir, stateFile);
+					revision = this.resolveStateRevision(stateFile, this.readJsonObject(stateFile));
 				}
 			}
 			Map<String, Object> data = new HashMap<>();
 			data.put("state", state);
 			data.put("exists", exists);
+			data.put("revision", revision);
 			data.put("file", stateFile.toAbsolutePath().normalize().toString());
 			data.put("conversationDir", conversationDir.toAbsolutePath().normalize().toString());
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
@@ -96,16 +103,17 @@ public class EasyChatController implements BaseController {
 			Path stateDir = this.getStateDirPath();
 			Path stateFile = this.getStateFilePath(stateDir);
 			Path conversationDir = this.getConversationDirPath(stateDir);
-			int conversationCount;
+			SaveStateResult saveResult;
 			synchronized (STATE_LOCK) {
-				conversationCount = this.saveState(body, stateFile, conversationDir);
+				saveResult = this.saveState(body, stateFile, conversationDir);
 			}
 			Map<String, Object> data = new HashMap<>();
 			data.put("saved", true);
 			data.put("file", stateFile.toAbsolutePath().normalize().toString());
 			data.put("size", Files.size(stateFile));
 			data.put("conversationDir", conversationDir.toAbsolutePath().normalize().toString());
-			data.put("conversationCount", conversationCount);
+			data.put("conversationCount", saveResult.conversationCount());
+			data.put("revision", saveResult.revision());
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
 		} catch (Exception e) {
 			logger.info("保存 easy-chat 状态失败", e);
@@ -128,14 +136,27 @@ public class EasyChatController implements BaseController {
 		return loadedState;
 	}
 
-	private int saveState(JsonObject body, Path stateFile, Path conversationDir) throws Exception {
+	private SaveStateResult saveState(JsonObject body, Path stateFile, Path conversationDir) throws Exception {
+		boolean hasBaseRevision = body.has(BASE_REVISION_FIELD);
+		String baseRevision = JsonUtil.getJsonString(body, BASE_REVISION_FIELD, "");
+		String normalizedBaseRevision = baseRevision == null ? "" : baseRevision.trim();
+		if (hasBaseRevision && Files.exists(stateFile)) {
+			JsonObject currentState = this.readJsonObject(stateFile);
+			String currentRevision = this.resolveStateRevision(stateFile, currentState);
+			if (normalizedBaseRevision.isEmpty() || !normalizedBaseRevision.equals(currentRevision)) {
+				throw new IllegalStateException(REVISION_CONFLICT_CODE);
+			}
+		}
 		JsonObject state = body.deepCopy();
+		state.remove(BASE_REVISION_FIELD);
 		JsonArray conversations = this.getConversationArray(body);
 		Set<String> expectedFiles = this.writeConversationFiles(conversationDir, conversations);
 		state.add("conversations", this.buildConversationSummaries(conversations));
+		String nextRevision = UUID.randomUUID().toString();
+		state.addProperty(STATE_REVISION_KEY, nextRevision);
 		this.writeJsonFile(stateFile, state);
 		this.deleteStaleConversationFiles(conversationDir, expectedFiles);
-		return conversations.size();
+		return new SaveStateResult(conversations.size(), nextRevision);
 	}
 
 	private JsonArray loadConversations(Path stateDir, JsonObject storedState, Map<String, JsonObject> recoveredConversationMap)
@@ -350,6 +371,19 @@ public class EasyChatController implements BaseController {
 		return Base64.getUrlEncoder().withoutPadding().encodeToString(source.getBytes(StandardCharsets.UTF_8));
 	}
 
+	private String resolveStateRevision(Path stateFile, JsonObject state) throws Exception {
+		String revision = JsonUtil.getJsonString(state, STATE_REVISION_KEY, "");
+		if (revision != null && !revision.isBlank()) {
+			return revision.trim();
+		}
+		if (!Files.exists(stateFile)) {
+			return "";
+		}
+		long modifiedAt = Files.getLastModifiedTime(stateFile).toMillis();
+		long size = Files.size(stateFile);
+		return "legacy-" + Long.toUnsignedString(modifiedAt, 36) + "-" + Long.toUnsignedString(size, 36);
+	}
+
 	private Path getConversationFilePath(Path conversationDir, String storageKey) {
 		return conversationDir.resolve(storageKey + ".json").toAbsolutePath().normalize();
 	}
@@ -369,4 +403,6 @@ public class EasyChatController implements BaseController {
 	private Path getConversationDirPath(Path stateDir) {
 		return stateDir.resolve("conversations").toAbsolutePath().normalize();
 	}
+
+	private record SaveStateResult(int conversationCount, String revision) {}
 }
