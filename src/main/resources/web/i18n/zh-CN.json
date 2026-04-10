@@ -680,6 +680,8 @@
   "param.server.no_mmproj_offload.desc": "--no-mmproj-offload：卸载mmproj投影到CPU，当GPU显存不足时，可以开启该选项，但是CPU处理图片的性能往往不如GPU。",
   "param.server.ctx_checkpoints.name": "上下文检查点数量",
   "param.server.ctx_checkpoints.desc": "每个插槽创建的最大上下文检查点数量，如果显存不足（某些模型可能有显存泄露的问题，如Gemma-4，见llama.cpp的issue：#21690 ），请减少该值或者设置为0。（默认值：8）",
+  "param.server.split_mode.name": "拆分模式",
+  "param.server.split_mode.desc": "你有多个GPU的时候才需要设置这个！多GPU的拆分模式。layer：层并行，默认推荐的方案，适合大部分场景，尤其是不同型号的GPU之间；row：简单来说就是性能更低的tensor；tensor：张量并行，llama.cpp新开发功能，需要相同型号的GPU，否则效果很差。",
   "page.params.group.basic": "基础参数",
   "page.params.group.sampling": "采样参数",
   "page.params.group.performance": "性能与缓存",

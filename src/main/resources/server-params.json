@@ -550,5 +550,23 @@
 	"group": "page.params.group.performance",
 	"groupOrder": 30,
 	"groupCollapsed": true
+  },
+  {
+  "name": "param.server.split_mode.name",
+  "fullName": "--split-mode",
+  "abbreviation": "-sm",
+  "type": "STRING",
+  "defaultValue": "none",
+  "values": [
+    "none",
+    "layer",
+    "row",
+    "tensor"
+  ],
+  "description": "param.server.split_mode.desc",
+  "sort": 24,
+  "group": "page.params.group.performance",
+  "groupOrder": 30,
+  "groupCollapsed": true
   }
 ]

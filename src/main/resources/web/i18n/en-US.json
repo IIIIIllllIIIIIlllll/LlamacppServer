@@ -680,6 +680,8 @@
   "param.server.no_mmproj_offload.desc": "--no-mmproj-offload: Offload mmproj projection to CPU. You can enable this option when GPU VRAM is insufficient, but CPU image processing performance is typically inferior to that of the GPU.",
   "param.server.ctx_checkpoints.name": "CTX Checkpoints",
   "param.server.ctx_checkpoints.desc": "max number of context checkpoints to create per slot. If there is insufficient video memory (some models may have vram leak issues, such as Gemma-4, see issue #21690 in llama.cpp), please reduce this value or set it to 0. (default: 8)",
+  "param.server.split_mode.name": "Split Mode",
+  "param.server.split_mode.desc": "Only required for multiple GPUs. Split mode: layer (default recommended, suitable for most scenarios and mixed GPU models), row (lower performance version of tensor), tensor (new llama.cpp feature, requires identical GPU models for optimal performance).",
   "page.params.group.basic": "Basic Parameters",
   "page.params.group.sampling": "Sampling Parameters",
   "page.params.group.performance": "Performance & Cache",
