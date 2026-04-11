@@ -2108,9 +2108,14 @@
       if (!els.systemPromptInput) {
         return;
       }
+      const parent = els.systemPromptInput.closest('.settings-content');
+      const parentScrollTop = parent ? parent.scrollTop : 0;
       els.systemPromptInput.style.height = 'auto';
       const nextHeight = Math.max(340, els.systemPromptInput.scrollHeight || 0);
       els.systemPromptInput.style.height = nextHeight + 'px';
+      if (parent) {
+        parent.scrollTop = parentScrollTop;
+      }
     }
 
     function syncSettingsInputs() {
