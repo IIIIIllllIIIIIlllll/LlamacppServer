@@ -996,7 +996,7 @@ public class LlamaServerManager {
 				return;
 			}
 			int port = this.getNextAvailablePort();
-			String commandStr = buildCommandStr(targetModel, port, llamaBinPath, device, mg, enableVision, cmd, extraParams, chatTemplateFilePath);
+			String commandStr = this.buildCommandStr(targetModel, port, llamaBinPath, device, mg, enableVision, cmd, extraParams, chatTemplateFilePath);
 			String processName = "llama-server-" + modelId;
 			LlamaCppProcess process = new LlamaCppProcess(processName, commandStr, llamaBinPath);
 
