@@ -16,6 +16,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import org.mark.llamacpp.server.LlamaServerManager;
+import org.mark.llamacpp.server.service.LlamaRecordService;
 import org.mark.llamacpp.server.service.ModelSamplingService;
 import org.mark.llamacpp.server.tools.JsonUtil;
 import org.mark.llamacpp.server.tools.ParamTool;
@@ -258,6 +259,8 @@ public class OllamaChatService {
 				promptEvalDuration = OllamaApiTool.readLong(timingFields, "prompt_eval_duration");
 				evalCount = OllamaApiTool.readLong(timingFields, "eval_count");
 				evalDuration = OllamaApiTool.readLong(timingFields, "eval_duration");
+				
+				LlamaRecordService.getInstance().handleStream(modelName, responseBody);
 			}
 			try {
 				JsonArray choices = parsed.getAsJsonArray("choices");
@@ -380,6 +383,7 @@ public class OllamaChatService {
 				JsonObject extractedTimings = chunk.has("timings") && chunk.get("timings").isJsonObject() ? chunk.getAsJsonObject("timings") : null;
 				if (extractedTimings != null) {
 					timings = extractedTimings;
+					LlamaRecordService.getInstance().handleStream(modelName, data);
 				}
 				
 				String deltaContent = null;

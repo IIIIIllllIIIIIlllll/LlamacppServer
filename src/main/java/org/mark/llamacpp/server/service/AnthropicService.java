@@ -245,7 +245,7 @@ public class AnthropicService {
             }
         }
 
-        this.forwardMessagesToChatCompletions(ctx, request, JsonUtil.toJson(oaiReq), port, isStream);
+        this.forwardMessagesToChatCompletions(ctx, request, JsonUtil.toJson(oaiReq), port, isStream, modelName);
     }
     
     
@@ -377,7 +377,7 @@ public class AnthropicService {
         });
     }
 
-    private void forwardMessagesToChatCompletions(ChannelHandlerContext ctx, FullHttpRequest request, String requestBody, int port, boolean isStream) {
+    private void forwardMessagesToChatCompletions(ChannelHandlerContext ctx, FullHttpRequest request, String requestBody, int port, boolean isStream, String modelName) {
         HttpMethod method = request.method();
         Map<String, String> headers = new HashMap<>();
         for (Map.Entry<String, String> entry : request.headers()) {
@@ -419,9 +419,9 @@ public class AnthropicService {
 
                 int responseCode = connection.getResponseCode();
                 if (isStream) {
-                    this.handleAnthropicStreamFromOai(ctx, connection, responseCode);
+                    this.handleAnthropicStreamFromOai(ctx, connection, responseCode, modelName);
                 } else {
-                    this.handleAnthropicNonStreamFromOai(ctx, connection, responseCode);
+                    this.handleAnthropicNonStreamFromOai(ctx, connection, responseCode, modelName);
                 }
             } catch (Exception e) {
                 logger.info("Error forwarding Anthropic->OpenAI request to llama.cpp", e);
@@ -477,7 +477,7 @@ public class AnthropicService {
         });
     }
 
-    private void handleAnthropicNonStreamFromOai(ChannelHandlerContext ctx, HttpURLConnection connection, int responseCode) throws IOException {
+    private void handleAnthropicNonStreamFromOai(ChannelHandlerContext ctx, HttpURLConnection connection, int responseCode, String modelName) throws IOException {
         String responseBody;
         if (responseCode >= 200 && responseCode < 300) {
             try (BufferedReader br = new BufferedReader(new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
@@ -527,6 +527,7 @@ public class AnthropicService {
                 ctx.close();
             }
         });
+        LlamaRecordService.getInstance().handleStream(modelName, responseBody);
     }
 
     private void handleStreamResponse(ChannelHandlerContext ctx, HttpURLConnection connection, int responseCode) throws IOException {
@@ -622,7 +623,7 @@ public class AnthropicService {
         });
     }
 
-    private void handleAnthropicStreamFromOai(ChannelHandlerContext ctx, HttpURLConnection connection, int responseCode) throws IOException {
+    private void handleAnthropicStreamFromOai(ChannelHandlerContext ctx, HttpURLConnection connection, int responseCode, String modelName) throws IOException {
         HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.valueOf(responseCode));
         response.headers().set(HttpHeaderNames.CONTENT_TYPE, "text/event-stream; charset=UTF-8");
         response.headers().set(HttpHeaderNames.CACHE_CONTROL, "no-cache");
@@ -666,6 +667,11 @@ public class AnthropicService {
                     }
                     break;
                 }
+				else 
+				// 统计生成信息 — timings 只在最后一个 chunk 出现，天然作为结束标记
+				if(data.contains("\"timings\"")) {
+					LlamaRecordService.getInstance().handleStream(modelName, data);
+				}
 
                 JsonObject chunk;
                 try {

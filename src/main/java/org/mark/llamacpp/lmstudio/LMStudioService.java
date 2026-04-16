@@ -25,6 +25,7 @@ import org.mark.llamacpp.server.LlamaServerManager;
 import org.mark.llamacpp.server.exception.RequestMethodException;
 import org.mark.llamacpp.server.service.ModelSamplingService;
 import org.mark.llamacpp.server.service.OpenAIService;
+			import org.mark.llamacpp.server.service.LlamaRecordService;
 import org.mark.llamacpp.server.tools.JsonUtil;
 import org.mark.llamacpp.server.tools.ParamTool;
 import org.slf4j.Logger;
@@ -626,6 +627,7 @@ public class LMStudioService {
 				sb.append(line);
 			}
 			responseBody = sb.toString();
+			LlamaRecordService.getInstance().handleStream(modelName, responseBody);
 		} catch (IOException e) {
 			//logger.info("读取llama.cpp非流式响应失败", e);
 			//this.sendOpenAIErrorResponseWithCleanup(ctx, 500, null, e.getMessage(), null);
@@ -801,6 +803,7 @@ public class LMStudioService {
 						JsonObject extractedTimings = parsed.has("timings") && parsed.get("timings").isJsonObject() ? parsed.getAsJsonObject("timings") : null;
 						if (extractedTimings != null) {
 							timings = extractedTimings;
+							LlamaRecordService.getInstance().handleStream(modelName, data);
 						}
 
 						JsonArray choices = parsed.has("choices") && parsed.get("choices").isJsonArray() ? parsed.getAsJsonArray("choices") : null;
@@ -977,6 +980,7 @@ public class LMStudioService {
 						JsonObject extractedTimings = parsed.has("timings") && parsed.get("timings").isJsonObject() ? parsed.getAsJsonObject("timings") : null;
 						if (extractedTimings != null) {
 							timings = extractedTimings;
+							LlamaRecordService.getInstance().handleStream(modelName, data);
 						}
 						JsonObject extractedUsage = parsed.has("usage") && parsed.get("usage").isJsonObject() ? parsed.getAsJsonObject("usage") : null;
 						if (extractedUsage != null) {

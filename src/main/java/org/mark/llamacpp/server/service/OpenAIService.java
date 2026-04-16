@@ -840,8 +840,9 @@ public class OpenAIService {
 						logger.info("收到流式响应结束标记");
 						break;
 					}
-					// 统计生成信息
-					if(data.contains("\"finish_reason\":\"stop\"")) {
+					else 
+					// 统计生成信息 — timings 只在最后一个 chunk 出现，天然作为结束标记
+					if(data.contains("\"timings\"")) {
 						LlamaRecordService.getInstance().handleStream(modelName, data);
 					}
 					
