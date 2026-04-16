@@ -789,5 +789,9 @@
   "page.benchmark_v2.status.done": "完成",
   "page.benchmark_v2.status.failed": "失败",
   "page.benchmark_v2.status.request_failed": "请求失败",
-  "param.test": "asd"
+  "param.test": "asd",
+  "model_detail.usage.cumulative_prompt": "累计处理",
+  "model_detail.usage.cumulative_predict": "累计生成",
+  "model_detail.usage.no_records": "无记录",
+  "modal.model_detail.tab.props": "Props"
 }

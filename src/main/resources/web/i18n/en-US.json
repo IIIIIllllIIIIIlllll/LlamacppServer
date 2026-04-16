@@ -789,5 +789,9 @@
   "page.benchmark_v2.status.done": "Done",
   "page.benchmark_v2.status.failed": "Failed",
   "page.benchmark_v2.status.request_failed": "Request failed",
-  "param.test": "asd"
+  "param.test": "asd",
+  "model_detail.usage.cumulative_prompt": "Cumulative prompt",
+  "model_detail.usage.cumulative_predict": "Cumulative predict",
+  "model_detail.usage.no_records": "No records",
+  "modal.model_detail.tab.props": "Props"
 }

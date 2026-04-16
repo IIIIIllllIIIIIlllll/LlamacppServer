@@ -7,9 +7,9 @@ function viewModelDetails(modelId) {
             const model = detailsData.model;
             if (recordData && recordData.success && recordData.data) {
                 const record = recordData.data;
-                model.usage = `累计处理: ${record.prompt_n || 0} tokens; 累计生成: ${record.predicted_n || 0} tokens`;
+                model.usage = `${t('model_detail.usage.cumulative_prompt', '累计处理')}: ${record.prompt_n || 0} tokens; ${t('model_detail.usage.cumulative_predict', '累计生成')}: ${record.predicted_n || 0} tokens`;
             } else {
-                model.usage = '无记录';
+                model.usage = t('model_detail.usage.no_records', '无记录');
             }
             window.__modelDetailModelId = modelId;
             showModelDetailModal(model);
@@ -32,7 +32,7 @@ function showModelDetailModal(model) {
     let tabs = `<div style="display:flex; gap:8px; margin-bottom:12px;">` +
                 `<button class="btn btn-secondary" id="${modalId}TabInfo">${t('modal.model_detail.tab.overview', '概览')}</button>` +
                 `<button class="btn btn-secondary" id="${modalId}TabSampling">${t('modal.model_detail.tab.sampling', '采样设置')}</button>` +
-                `<button class="btn btn-secondary" id="${modalId}TabProps">props</button>` +
+                `<button class="btn btn-secondary" id="${modalId}TabProps">${t('modal.model_detail.tab.props', 'Props')}</button>` +
                 `<button class="btn btn-secondary" id="${modalId}TabChatTemplate">${t('modal.model_detail.tab.chat_template', '聊天模板')}</button>` +
                 `<button class="btn btn-secondary" id="${modalId}TabToken">${t('modal.model_detail.tab.token', 'Token计算')}</button>` +
                 `</div>`;
