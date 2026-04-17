@@ -16,6 +16,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import org.mark.llamacpp.server.LlamaServerManager;
+import org.mark.llamacpp.server.service.ChatTemplateKwargsService;
 import org.mark.llamacpp.server.service.LlamaRecordService;
 import org.mark.llamacpp.server.service.ModelSamplingService;
 import org.mark.llamacpp.server.tools.JsonUtil;
@@ -162,7 +163,8 @@ public class OllamaChatService {
 		this.applyOllamaOptionsToOpenAI(openAiReq, ollamaReq.get("options"));
 		// 复制options中的其它参数
 		OllamaApiTool.applyOllamaToolsToOpenAI(openAiReq, ollamaReq);
-
+		// 注入chat-template-kwargs
+		ChatTemplateKwargsService.getInstance().handleOpenAI(openAiReq);
 		// 强制转换采样设置
 		ModelSamplingService service = ModelSamplingService.getInstance();
 		service.handleOpenAI(openAiReq);

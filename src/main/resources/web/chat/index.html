@@ -4400,6 +4400,10 @@
           messages.push({ role: 'user', content: buildUserContent(item) });
         } else if (item.role === 'assistant' && (content.trim() || hasAssistantToolCalls(item))) {
           const assistantMessage = { role: 'assistant', content };
+          const reasoning = typeof item.reasoning === 'string' && item.reasoning.trim() ? item.reasoning : '';
+          if (reasoning) {
+            assistantMessage.reasoning_content = reasoning;
+          }
           if (hasAssistantToolCalls(item)) {
             assistantMessage.tool_calls = finalizeMcpToolCalls(item.toolCalls).map(toolCall => ({
               id: toolCall.id,

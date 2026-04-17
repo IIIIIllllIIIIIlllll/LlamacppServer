@@ -67,7 +67,7 @@ public class ModelSamplingService {
 		if (requestJson == null) {
 			return;
 		}
-		reloadCaches(false);
+		this.reloadCaches(false);
 		String modelId = JsonUtil.getJsonString(requestJson, "model", null);
 		if (modelId == null) {
 			return;
@@ -80,7 +80,7 @@ public class ModelSamplingService {
 		if (sampling == null) {
 			return;
 		}
-		injectSampling(requestJson, sampling);
+		this.injectSampling(requestJson, sampling);
 		this.applyThinkingBySampling(requestJson, sampling);
 	}
 	

@@ -139,7 +139,7 @@ public class ChatRequestStreamingTransformer {
 				}
 			}
 		}
-		
+		// 注入请求体中的思维链开关
 		this.applyThinkingInjection(bufferedFields);
 
 		modelName = this.readModelName(bufferedFields.get("model"));
@@ -150,9 +150,11 @@ public class ChatRequestStreamingTransformer {
 			throw new StreamingRequestException(400, "Invalid parameter: model", "model");
 		}
 
+		// 这里做chat-template-kwargs注入
+		this.applyChatTemplateKwargsInjection(bufferedFields, modelName);
 		// 这里做采样覆盖操作。
 		this.applySamplingInjection(bufferedFields, modelName);
-
+		
 		Boolean streamValue = this.readBooleanLenient(bufferedFields.get("stream"));
 		if (streamValue != null) {
 			isStream = streamValue.booleanValue();
@@ -360,6 +362,18 @@ public class ChatRequestStreamingTransformer {
 		output.write(JsonUtil.toJson(fieldName).getBytes(StandardCharsets.UTF_8));
 		output.write(':');
 		output.write(JsonUtil.toJson(value).getBytes(StandardCharsets.UTF_8));
+	}
+	
+	/**
+	 * 	
+	 * @param requestJson
+	 * @param modelName
+	 */
+	private void applyChatTemplateKwargsInjection(JsonObject requestJson, String modelName) {
+		if (requestJson == null || modelName == null || modelName.isBlank()) {
+			return;
+		}
+		ChatTemplateKwargsService.getInstance().handleOpenAI(requestJson);
 	}
 	
 	/**

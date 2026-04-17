@@ -238,6 +238,7 @@ public class OpenAIService {
 			
 			// 统一处理 enable_thinking / thinking.type 等兼容字段，保持与流式链路一致。
 			this.applyThinkingInjection(requestJson);
+			this.applyChatTemplateKwargsInjection(requestJson);
 			// 这里做采样代理，针对llamacpp中的请求，注入采样参数。
 			ModelSamplingService service = ModelSamplingService.getInstance();
 			service.handleOpenAI(requestJson);
@@ -274,6 +275,16 @@ public class OpenAIService {
 	private void applyThinkingInjection(JsonObject requestJson) {
 		ParamTool.handleOpenAIChatThinking(requestJson);
 	}
+	
+	/**
+	 * 	注入 chat-template-kwargs
+	 * @param requestJson
+	 */
+	private void applyChatTemplateKwargsInjection(JsonObject requestJson) {
+		ChatTemplateKwargsService.getInstance().handleOpenAI(requestJson);
+		System.err.println(requestJson);
+	}
+	
 	
 	/**
 	 * 	处理 OpenAI 文本补全请求：/v1/completions

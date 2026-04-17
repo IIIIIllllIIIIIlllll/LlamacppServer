@@ -35,6 +35,7 @@ function showModelDetailModal(model) {
                 `<button class="btn btn-secondary" id="${modalId}TabProps">${t('modal.model_detail.tab.props', 'Props')}</button>` +
                 `<button class="btn btn-secondary" id="${modalId}TabChatTemplate">${t('modal.model_detail.tab.chat_template', '聊天模板')}</button>` +
                 `<button class="btn btn-secondary" id="${modalId}TabToken">${t('modal.model_detail.tab.token', 'Token计算')}</button>` +
+                `<button class="btn btn-secondary" id="${modalId}TabKwargs">${t('modal.model_detail.tab.kwargs', 'Kwargs')}</button>` +
                 `</div>`;
     let wrapperStart = isMobileView
         ? `<div style="display:flex; flex-direction:column; flex:1; min-height:0;">`
@@ -91,17 +92,25 @@ function showModelDetailModal(model) {
                             `<div style="display:flex; flex-direction:column; min-height:0;">` +
                                 `<textarea class="form-control" id="${modalId}TokenPromptOutput" rows="12" readonly style="flex:1; min-height:0; resize:none; background:#f9fafb;"></textarea>` +
                             `</div>` +
+                   `</div>` +
+                `</div>`;
+    let kwargsPanel = `<div id="${modalId}KwargsPanel" style="display:none; height:100%;">` +
+                        `<div style="display:flex; gap:8px; margin-bottom:8px;">` +
+                        `<button class="btn btn-primary" id="${modalId}KwargsApplyBtn">${t('common.apply', '应用')}</button>` +
+                        `<button class="btn btn-secondary" id="${modalId}KwargsClearBtn">${t('common.clear', '清空')}</button>` +
                         `</div>` +
-                    `</div>`;
+                        `<textarea id="${modalId}KwargsTextarea" style="width:100%; height:calc(100% - 48px); font-family:monospace; font-size:14px; resize:none; padding:10px; border-radius:0.75rem; border:1px solid #d1d5db;" placeholder="请输入 JSON 内容..."></textarea>` +
+                        `</div>`;
     let bodyEnd = `</div>`;
     let wrapperEnd = `</div>`;
-    content.innerHTML = wrapperStart + tabs + bodyStart + infoPanel + samplingPanel + propsPanel + chatTemplatePanel + tokenPanel + bodyEnd + wrapperEnd;
+    content.innerHTML = wrapperStart + tabs + bodyStart + infoPanel + samplingPanel + propsPanel + chatTemplatePanel + tokenPanel + kwargsPanel + bodyEnd + wrapperEnd;
     modal.classList.add('show');
     const tabInfo = document.getElementById(modalId + 'TabInfo');
     const tabSampling = document.getElementById(modalId + 'TabSampling');
     const tabProps = document.getElementById(modalId + 'TabProps');
     const tabChatTemplate = document.getElementById(modalId + 'TabChatTemplate');
     const tabToken = document.getElementById(modalId + 'TabToken');
+    const tabKwargs = document.getElementById(modalId + 'TabKwargs');
     const samplingConfigSelect = document.getElementById(modalId + 'SamplingConfigSelect');
     const samplingSaveBtn = document.getElementById(modalId + 'SamplingSaveBtn');
     const samplingAddBtn = document.getElementById(modalId + 'SamplingAddBtn');
@@ -113,11 +122,15 @@ function showModelDetailModal(model) {
     const tplDeleteBtn = document.getElementById(modalId + 'ChatTemplateDeleteBtn');
     const tokenCalcBtn = document.getElementById(modalId + 'TokenCalcBtn');
     const tokenInputEl = document.getElementById(modalId + 'TokenInput');
+    const kwargsApplyBtn = document.getElementById(modalId + 'KwargsApplyBtn');
+    const kwargsClearBtn = document.getElementById(modalId + 'KwargsClearBtn');
+    const kwargsTextarea = document.getElementById(modalId + 'KwargsTextarea');
     if (tabInfo) tabInfo.onclick = () => openModelDetailTab('info');
     if (tabSampling) tabSampling.onclick = () => { openModelDetailTab('sampling'); loadModelSamplingSettings(); };
     if (tabProps) tabProps.onclick = () => { openModelDetailTab('props'); loadModelProps(); };
     if (tabChatTemplate) tabChatTemplate.onclick = () => { openModelDetailTab('chatTemplate'); loadModelChatTemplate(false); };
     if (tabToken) tabToken.onclick = () => openModelDetailTab('token');
+    if (tabKwargs) tabKwargs.onclick = () => { openModelDetailTab('kwargs'); loadModelChatTemplateKwargs(); };
     if (samplingConfigSelect) samplingConfigSelect.onchange = () => renderSelectedModelSamplingSettings();
     if (samplingSaveBtn) samplingSaveBtn.onclick = () => saveModelSamplingSelection();
     if (samplingAddBtn) samplingAddBtn.onclick = () => addModelSamplingConfig();
@@ -137,6 +150,75 @@ function showModelDetailModal(model) {
             }
         };
     }
+    if (kwargsApplyBtn) kwargsApplyBtn.onclick = () => {
+        const modelId = window.__modelDetailModelId;
+        if (!modelId) {
+            showToast(t('toast.error', '错误'), t('modal.model_detail.kwargs.no_model', '未找到当前模型ID'), 'error');
+            return;
+        }
+        const content = kwargsTextarea?.value?.trim();
+        if (!content) {
+            if (!confirm(t('modal.model_detail.kwargs.confirm_delete', '确定要删除当前模型的 kwargs 配置吗？'))) {
+                return;
+            }
+            kwargsApplyBtn.disabled = true;
+            kwargsApplyBtn.textContent = t('common.deleting', '删除中...');
+            fetch('/api/model/chat_template_kwargs/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ modelId: modelId })
+            })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    kwargsTextarea.value = '';
+                    showToast(t('toast.success', '成功'), t('modal.model_detail.kwargs.deleted', 'kwargs 配置已删除'), 'success');
+                } else {
+                    showToast(t('toast.error', '错误'), res.error || t('modal.model_detail.kwargs.delete_failed', '删除失败'), 'error');
+                }
+            })
+            .catch(e => {
+                showToast(t('toast.error', '错误'), t('modal.model_detail.kwargs.delete_failed', '删除失败') + ': ' + e.message, 'error');
+            })
+            .finally(() => {
+                kwargsApplyBtn.disabled = false;
+                kwargsApplyBtn.textContent = t('common.apply', '应用');
+            });
+            return;
+        }
+        let kwargsObj;
+        try {
+            kwargsObj = JSON.parse(content);
+        } catch (e) {
+            showToast(t('toast.error', '错误'), t('modal.model_detail.kwargs.invalid', 'JSON 格式错误') + ': ' + e.message, 'error');
+            return;
+        }
+        kwargsApplyBtn.disabled = true;
+        kwargsApplyBtn.textContent = t('common.saving', '保存中...');
+        fetch('/api/model/chat_template_kwargs/set', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ modelId: modelId, chat_template_kwargs: kwargsObj })
+        })
+        .then(r => r.json())
+        .then(res => {
+            if (res.success) {
+                showToast(t('toast.success', '成功'), t('modal.model_detail.kwargs.saved', 'kwargs 保存成功'), 'success');
+            } else {
+                showToast(t('toast.error', '错误'), res.error || t('modal.model_detail.kwargs.save_failed', '保存失败'), 'error');
+            }
+        })
+        .catch(e => {
+            showToast(t('toast.error', '错误'), t('modal.model_detail.kwargs.save_failed', '保存失败') + ': ' + e.message, 'error');
+        })
+        .finally(() => {
+            kwargsApplyBtn.disabled = false;
+            kwargsApplyBtn.textContent = t('common.apply', '应用');
+        });
+    };
+    if (kwargsClearBtn) kwargsClearBtn.onclick = () => {
+        kwargsTextarea.value = '';
+    };
     openModelDetailTab('info');
 }
 
@@ -147,16 +229,19 @@ function openModelDetailTab(tab) {
     const props = document.getElementById(modalId + 'PropsPanel');
     const chatTemplate = document.getElementById(modalId + 'ChatTemplatePanel');
     const token = document.getElementById(modalId + 'TokenPanel');
+    const kwargs = document.getElementById(modalId + 'KwargsPanel');
     const btnInfo = document.getElementById(modalId + 'TabInfo');
     const btnSampling = document.getElementById(modalId + 'TabSampling');
     const btnProps = document.getElementById(modalId + 'TabProps');
     const btnChatTemplate = document.getElementById(modalId + 'TabChatTemplate');
     const btnToken = document.getElementById(modalId + 'TabToken');
+    const btnKwargs = document.getElementById(modalId + 'TabKwargs');
     if (info) info.style.display = tab === 'info' ? '' : 'none';
     if (sampling) sampling.style.display = tab === 'sampling' ? '' : 'none';
     if (props) props.style.display = tab === 'props' ? '' : 'none';
     if (chatTemplate) chatTemplate.style.display = tab === 'chatTemplate' ? '' : 'none';
     if (token) token.style.display = tab === 'token' ? '' : 'none';
+    if (kwargs) kwargs.style.display = tab === 'kwargs' ? '' : 'none';
     const applyTabBtnStyle = (btn, active) => {
         if (!btn) return;
         btn.classList.remove('btn-primary');
@@ -167,7 +252,8 @@ function openModelDetailTab(tab) {
     applyTabBtnStyle(btnSampling, tab === 'sampling');
     applyTabBtnStyle(btnProps, tab === 'props');
     applyTabBtnStyle(btnChatTemplate, tab === 'chatTemplate');
-    applyTabBtnStyle(btnToken, tab === 'token');
+   applyTabBtnStyle(btnToken, tab === 'token');
+    applyTabBtnStyle(btnKwargs, tab === 'kwargs');
 }
 
 function loadModelProps() {
@@ -218,7 +304,7 @@ function normalizeModelConfigBundle(rawEntry) {
         const selectedConfig = selectedRaw && configs[selectedRaw] ? selectedRaw : (Object.keys(configs)[0] || '');
         return { selectedConfig, configs };
     }
-    return {
+   return {
         selectedConfig: '默认配置',
         configs: { '默认配置': rawEntry }
     };
@@ -942,6 +1028,25 @@ function deleteModelSamplingConfig() {
         .catch(() => {
             showToast(t('toast.error', '错误'), t('common.network_request_failed', '网络请求失败'), 'error');
         });
+}
+
+function loadModelChatTemplateKwargs() {
+    const modelId = window.__modelDetailModelId;
+    const el = document.getElementById('modelDetailModalKwargsTextarea');
+    if (!modelId || !el) return;
+    el.value = '';
+    fetch(`/api/model/chat_template_kwargs/get?modelId=${encodeURIComponent(modelId)}`)
+        .then(r => r.json())
+        .then(res => {
+            if (!(res && res.success)) {
+                return;
+            }
+            const kwargs = res.data && res.data.chat_template_kwargs ? res.data.chat_template_kwargs : null;
+            if (kwargs && Object.keys(kwargs).length > 0) {
+                el.value = JSON.stringify(kwargs, null, 2);
+            }
+        })
+        .catch(() => {});
 }
 
 function loadModelChatTemplate(showEmptyTip = false) {

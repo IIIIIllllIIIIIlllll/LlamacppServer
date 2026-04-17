@@ -25,7 +25,8 @@ import org.mark.llamacpp.server.LlamaServerManager;
 import org.mark.llamacpp.server.exception.RequestMethodException;
 import org.mark.llamacpp.server.service.ModelSamplingService;
 import org.mark.llamacpp.server.service.OpenAIService;
-			import org.mark.llamacpp.server.service.LlamaRecordService;
+import org.mark.llamacpp.server.service.ChatTemplateKwargsService;
+import org.mark.llamacpp.server.service.LlamaRecordService;
 import org.mark.llamacpp.server.tools.JsonUtil;
 import org.mark.llamacpp.server.tools.ParamTool;
 import org.slf4j.Logger;
@@ -213,6 +214,8 @@ public class LMStudioService {
 			if (requestJson.has("stream")) {
 				isStream = requestJson.get("stream").getAsBoolean();
 			}
+			
+			ChatTemplateKwargsService.getInstance().handleOpenAI(requestJson);
 			
 			// 这里做采样代理，针对llamacpp中的请求，注入采样参数。
 			ModelSamplingService service = ModelSamplingService.getInstance();

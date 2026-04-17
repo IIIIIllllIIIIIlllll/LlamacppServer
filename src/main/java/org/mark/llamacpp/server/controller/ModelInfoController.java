@@ -14,6 +14,7 @@ import org.mark.llamacpp.server.LlamaCppProcess;
 import org.mark.llamacpp.server.LlamaServer;
 import org.mark.llamacpp.server.LlamaServerManager;
 import org.mark.llamacpp.server.exception.RequestMethodException;
+import org.mark.llamacpp.server.service.ChatTemplateKwargsService;
 import org.mark.llamacpp.server.service.LlamaRecordService;
 import org.mark.llamacpp.server.service.ModelSamplingService;
 import org.mark.llamacpp.server.struct.ApiResponse;
@@ -105,7 +106,6 @@ public class ModelInfoController implements BaseController {
 			return true;
 		}
 		
-		
 		if (uri.startsWith("/api/model/template/set")) {
 			this.handleModelTemplateSetRequest(ctx, request);
 			return true;
@@ -120,6 +120,24 @@ public class ModelInfoController implements BaseController {
 			this.handleModelTemplateDefaultRequest(ctx, request);
 			return true;
 		}
+		
+		if (uri.startsWith("/api/model/chat_template_kwargs/set")) {
+			this.handleChatTemplateKwargsSet(ctx, request);
+			return true;
+		}
+		
+		if (uri.startsWith("/api/model/chat_template_kwargs/get")) {
+			this.handleChatTemplateKwargsGet(ctx, request);
+			return true;
+		}
+
+		if (uri.startsWith("/api/model/chat_template_kwargs/delete")) {
+			this.handleChatTemplateKwargsDelete(ctx, request);
+			return true;
+		}
+		
+		
+		//============================用量信息============================
 		// 查询对应模型的用量记录
 		if (uri.startsWith("/api/models/record")) {
 			this.handleModelRecordRequest(ctx, request);
@@ -889,6 +907,106 @@ public class ModelInfoController implements BaseController {
 		} catch (Exception e) {
 			logger.info("保存模型slots缓存时发生错误", e);
 			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("保存模型slots缓存失败: " + e.getMessage()));
+		}
+	}
+
+	/**
+	 * 	设置指定模型的chat template kwargs
+	 * @param ctx
+	 * @param request
+	 * @throws RequestMethodException
+	 */
+	private void handleChatTemplateKwargsSet(ChannelHandlerContext ctx, FullHttpRequest request) throws RequestMethodException {
+		this.assertRequestMethod(request.method() != HttpMethod.POST, "只支持POST请求");
+		try {
+			String content = request.content().toString(CharsetUtil.UTF_8);
+			if (content == null || content.trim().isEmpty()) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("请求体为空"));
+				return;
+			}
+			JsonObject obj = JsonUtil.fromJson(content, JsonObject.class);
+			if (obj == null) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("请求体解析失败"));
+				return;
+			}
+			String modelId = JsonUtil.getJsonString(obj, "modelId", null);
+			if (modelId == null || modelId.trim().isEmpty()) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("缺少必需的modelId参数"));
+				return;
+			}
+			JsonObject kwargs = (obj.has("chat_template_kwargs") && obj.get("chat_template_kwargs") != null
+					&& obj.get("chat_template_kwargs").isJsonObject())
+					? obj.getAsJsonObject("chat_template_kwargs")
+					: obj;
+			ChatTemplateKwargsService.getInstance().upsertKwargsConfig(modelId, kwargs);
+			Map<String, Object> data = new HashMap<>();
+			data.put("modelId", modelId);
+			data.put("saved", true);
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
+		} catch (Exception e) {
+			logger.info("设置chat template kwargs时发生错误", e);
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("设置chat template kwargs失败: " + e.getMessage()));
+		}
+	}
+
+	/**
+	 * 	获取指定模型的chat template kwargs
+	 * @param ctx
+	 * @param request
+	 * @throws RequestMethodException
+	 */
+	private void handleChatTemplateKwargsGet(ChannelHandlerContext ctx, FullHttpRequest request) throws RequestMethodException {
+		this.assertRequestMethod(request.method() != HttpMethod.GET, "只支持GET请求");
+		try {
+			Map<String, String> params = ParamTool.getQueryParam(request.uri());
+			String modelId = params.get("modelId");
+			if (modelId == null || modelId.trim().isEmpty()) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("缺少必需的modelId参数"));
+				return;
+			}
+			JsonObject kwargs = ChatTemplateKwargsService.getInstance().getOpenAIChatTemplateKwargs(modelId);
+			Map<String, Object> data = new HashMap<>();
+			data.put("modelId", modelId);
+			data.put("chat_template_kwargs", kwargs != null ? kwargs : new JsonObject());
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
+		} catch (Exception e) {
+			logger.info("获取chat template kwargs时发生错误", e);
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("获取chat template kwargs失败: " + e.getMessage()));
+		}
+	}
+
+	/**
+	 * 	删除指定模型的chat template kwargs
+	 * @param ctx
+	 * @param request
+	 * @throws RequestMethodException
+	 */
+	private void handleChatTemplateKwargsDelete(ChannelHandlerContext ctx, FullHttpRequest request) throws RequestMethodException {
+		this.assertRequestMethod(request.method() != HttpMethod.POST, "只支持POST请求");
+		try {
+			String content = request.content().toString(CharsetUtil.UTF_8);
+			if (content == null || content.trim().isEmpty()) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("请求体为空"));
+				return;
+			}
+			JsonObject obj = JsonUtil.fromJson(content, JsonObject.class);
+			if (obj == null) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("请求体解析失败"));
+				return;
+			}
+			String modelId = JsonUtil.getJsonString(obj, "modelId", null);
+			if (modelId == null || modelId.trim().isEmpty()) {
+				LlamaServer.sendJsonResponse(ctx, ApiResponse.error("缺少必需的modelId参数"));
+				return;
+			}
+			ChatTemplateKwargsService.getInstance().deleteKwargsConfig(modelId);
+			Map<String, Object> data = new HashMap<>();
+			data.put("modelId", modelId);
+			data.put("deleted", true);
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.success(data));
+		} catch (Exception e) {
+			logger.info("删除chat template kwargs时发生错误", e);
+			LlamaServer.sendJsonResponse(ctx, ApiResponse.error("删除chat template kwargs失败: " + e.getMessage()));
 		}
 	}
 

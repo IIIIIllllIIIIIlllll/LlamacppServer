@@ -206,7 +206,8 @@ public class AnthropicService {
         JsonObject oaiReq = this.convertAnthropicToOai(anthropicReq);
         // 处理一下think
         ParamTool.handleThinking(oaiReq);
-        
+        //
+        ChatTemplateKwargsService.getInstance().handleOpenAI(oaiReq);
         // 处理采样覆盖
         ModelSamplingService.getInstance().handleOpenAI(oaiReq);
         
