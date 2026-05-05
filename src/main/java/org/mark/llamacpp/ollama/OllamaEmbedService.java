@@ -194,6 +194,8 @@ public class OllamaEmbedService {
 			} catch (Exception e) {
 				logger.info("处理Ollama embed请求时发生错误", e);
 				Ollama.sendOllamaError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+			} catch (Throwable t) {
+				logger.error("虚拟线程异常已兜底: {}", t.getMessage(), t);
 			} finally {
 				ModelRequestTracker.getInstance().removeRequest(requestId);
 				if (connection != null) {

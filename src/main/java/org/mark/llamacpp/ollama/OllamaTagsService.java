@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.mark.llamacpp.gguf.GGUFModel;
-import org.mark.llamacpp.server.LlamaCppProcess;
+import org.mark.llamacpp.server.LlamaCppProcessFix;
 import org.mark.llamacpp.server.LlamaServerManager;
 import org.mark.llamacpp.server.tools.ParamTool;
 
@@ -39,11 +39,11 @@ public class OllamaTagsService {
 		}
 		
 		LlamaServerManager manager = LlamaServerManager.getInstance();
-		Map<String, LlamaCppProcess> loaded = manager.getLoadedProcesses();
+		Map<String, LlamaCppProcessFix> loaded = manager.getLoadedProcesses();
 		manager.listModel();
 		
 		List<Map<String, Object>> models = new ArrayList<>();
-		for (Map.Entry<String, LlamaCppProcess> entry : loaded.entrySet()) {
+		for (Map.Entry<String, LlamaCppProcessFix> entry : loaded.entrySet()) {
 			String modelId = entry.getKey();
 			GGUFModel model = manager.findModelById(modelId);
 			
@@ -97,11 +97,11 @@ public class OllamaTagsService {
 		}
 		
 		LlamaServerManager manager = LlamaServerManager.getInstance();
-		Map<String, LlamaCppProcess> loaded = manager.getLoadedProcesses();
+		Map<String, LlamaCppProcessFix> loaded = manager.getLoadedProcesses();
 		manager.listModel();
 		
 		List<Map<String, Object>> models = new ArrayList<>();
-		for (Map.Entry<String, LlamaCppProcess> entry : loaded.entrySet()) {
+		for (Map.Entry<String, LlamaCppProcessFix> entry : loaded.entrySet()) {
 			String modelId = entry.getKey();
 			GGUFModel model = manager.findModelById(modelId);
 			

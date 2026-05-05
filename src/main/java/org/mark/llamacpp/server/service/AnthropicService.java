@@ -46,7 +46,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
-import org.mark.llamacpp.server.LlamaCppProcess;
+import org.mark.llamacpp.server.LlamaCppProcessFix;
 
 /**
  * 	Anthropic API
@@ -123,7 +123,7 @@ public class AnthropicService {
         JsonObject response = new JsonObject();
         JsonArray data = new JsonArray();
         
-        Map<String, LlamaCppProcess> processes = manager.getLoadedProcesses();
+        Map<String, LlamaCppProcessFix> processes = manager.getLoadedProcesses();
         for (String modelId : processes.keySet()) {
             JsonObject model = new JsonObject();
             model.addProperty("type", "model");
@@ -423,6 +423,8 @@ public class AnthropicService {
             } catch (Exception e) {
                 logger.info("Error forwarding Anthropic request to llama.cpp", e);
                 this.sendError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+            } catch (Throwable t) {
+                logger.error("虚拟线程异常已兜底: {}", t.getMessage(), t);
             } finally {
                 if (requestId != null) ModelRequestTracker.getInstance().removeRequest(requestId);
                 if (connection != null) {
@@ -574,6 +576,8 @@ public class AnthropicService {
             } catch (Exception e) {
                 logger.info("Error forwarding Anthropic->OpenAI request to llama.cpp", e);
                 this.sendError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+            } catch (Throwable t) {
+                logger.error("虚拟线程异常已兜底: {}", t.getMessage(), t);
             } finally {
                 if (requestId != null) ModelRequestTracker.getInstance().removeRequest(requestId);
                 if (connection != null) {

@@ -11,7 +11,7 @@ import java.util.Map;
 import org.mark.llamacpp.gguf.GGUFMetaData;
 import org.mark.llamacpp.gguf.GGUFMetaDataReader;
 import org.mark.llamacpp.gguf.GGUFModel;
-import org.mark.llamacpp.server.LlamaCppProcess;
+import org.mark.llamacpp.server.LlamaCppProcessFix;
 import org.mark.llamacpp.server.LlamaServerManager;
 import org.mark.llamacpp.server.tools.ChatTemplateFileTool;
 import org.mark.llamacpp.server.tools.JsonUtil;
@@ -156,7 +156,7 @@ public class OllamaShowService {
 				}
 			}
 			// 如果这个模型已经启动了，那就以实际设置的上下文为准
-			LlamaCppProcess process = manager.getLoadedProcesses().get(modelId);
+			LlamaCppProcessFix process = manager.getLoadedProcesses().get(modelId);
 			if(process != null) {
 				// 修改上下文长度，以实际设定为准
 				String key = family + ".context_length";

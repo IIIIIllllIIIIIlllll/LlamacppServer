@@ -191,6 +191,8 @@ public class ChatStreamSession {
 			}
 			logger.info("处理聊天流式请求时发生错误 [{}]", this.resolveNodeName(this.routingNodeId), e);
 			this.openAIService.sendOpenAIErrorResponseWithCleanup(this.ctx, 500, null, e.getMessage(), null);
+		} catch (Throwable t) {
+			logger.error("虚拟线程异常已兜底: {}", t.getMessage(), t);
 		} finally {
 			ModelRequestTracker.getInstance().removeRequest(this.requestId);
 			try {

@@ -10,7 +10,7 @@ import org.mark.llamacpp.gguf.GGUFMetaData;
 import org.mark.llamacpp.gguf.GGUFMetaDataReader;
 import org.mark.llamacpp.gguf.GGUFModel;
 import org.mark.llamacpp.server.ConfigManager;
-import org.mark.llamacpp.server.LlamaCppProcess;
+import org.mark.llamacpp.server.LlamaCppProcessFix;
 import org.mark.llamacpp.server.LlamaServer;
 import org.mark.llamacpp.server.LlamaServerManager;
 import org.mark.llamacpp.server.NodeManager;
@@ -269,12 +269,12 @@ public class ModelInfoController implements BaseController {
 		
 		try {
 			LlamaServerManager manager = LlamaServerManager.getInstance();
-			Map<String, LlamaCppProcess> loaded = manager.getLoadedProcesses();
+			Map<String, LlamaCppProcessFix> loaded = manager.getLoadedProcesses();
 
 			Map<String, JsonObject> modelsByKey = new LinkedHashMap<>();
 			Map<String, JsonObject> dataById = new LinkedHashMap<>();
 
-			for (Map.Entry<String, LlamaCppProcess> e : loaded.entrySet()) {
+			for (Map.Entry<String, LlamaCppProcessFix> e : loaded.entrySet()) {
 				String modelId = e.getKey();
 				if (modelId == null || modelId.isBlank()) {
 					continue;

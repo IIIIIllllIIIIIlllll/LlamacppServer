@@ -18,7 +18,7 @@ import java.util.regex.Pattern;
 
 import org.mark.llamacpp.gguf.GGUFMetaData;
 import org.mark.llamacpp.gguf.GGUFModel;
-import org.mark.llamacpp.server.LlamaCppProcess;
+import org.mark.llamacpp.server.LlamaCppProcessFix;
 import org.mark.llamacpp.server.LlamaServerManager;
 import org.mark.llamacpp.server.tools.ParamTool;
 
@@ -195,11 +195,11 @@ public class LMStudioWebSocketHandler extends SimpleChannelInboundHandler<WebSoc
         try {
             LlamaServerManager manager = LlamaServerManager.getInstance();
             manager.listModel(false);
-            Map<String, LlamaCppProcess> loaded = manager.getLoadedProcesses();
+            Map<String, LlamaCppProcessFix> loaded = manager.getLoadedProcesses();
             List<Map<String, Object>> result = new ArrayList<>();
-            for (Map.Entry<String, LlamaCppProcess> e : loaded.entrySet()) {
+            for (Map.Entry<String, LlamaCppProcessFix> e : loaded.entrySet()) {
                 String modelId = e.getKey();
-                LlamaCppProcess proc = e.getValue();
+                LlamaCppProcessFix proc = e.getValue();
                 if (modelId == null || modelId.isBlank() || proc == null) continue;
                 
                 JsonObject caps = manager.getModelCapabilities(modelId);
@@ -265,11 +265,11 @@ public class LMStudioWebSocketHandler extends SimpleChannelInboundHandler<WebSoc
         try {
             LlamaServerManager manager = LlamaServerManager.getInstance();
             manager.listModel(false);
-            Map<String, LlamaCppProcess> loaded = manager.getLoadedProcesses();
+            Map<String, LlamaCppProcessFix> loaded = manager.getLoadedProcesses();
             Map<String, Object> found = null;
-            for (Map.Entry<String, LlamaCppProcess> e : loaded.entrySet()) {
+            for (Map.Entry<String, LlamaCppProcessFix> e : loaded.entrySet()) {
                 String modelId = e.getKey();
-                LlamaCppProcess proc = e.getValue();
+                LlamaCppProcessFix proc = e.getValue();
                 if (modelId == null || modelId.isBlank() || proc == null) continue;
                 String instanceKey = modelId + ":" + proc.getPid();
                 String ref = INSTANCE_REFERENCE_BY_KEY.computeIfAbsent(instanceKey, k -> randomInstanceReference());
@@ -306,7 +306,7 @@ public class LMStudioWebSocketHandler extends SimpleChannelInboundHandler<WebSoc
     private static Map<String, Object> buildLoadedModelItem(
             LlamaServerManager manager,
             String modelId,
-            LlamaCppProcess proc,
+            LlamaCppProcessFix proc,
             String instanceReference,
             long lastUsedTime,
             JsonObject caps

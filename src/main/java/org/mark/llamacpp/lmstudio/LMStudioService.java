@@ -19,7 +19,7 @@ import java.util.concurrent.Executors;
 
 import org.mark.llamacpp.gguf.GGUFMetaData;
 import org.mark.llamacpp.gguf.GGUFModel;
-import org.mark.llamacpp.server.LlamaCppProcess;
+import org.mark.llamacpp.server.LlamaCppProcessFix;
 import org.mark.llamacpp.server.LlamaServer;
 import org.mark.llamacpp.server.LlamaServerManager;
 import org.mark.llamacpp.server.exception.RequestMethodException;
@@ -107,11 +107,11 @@ public class LMStudioService {
 				}
 			}
 			LlamaServerManager manager = LlamaServerManager.getInstance();
-			Map<String, LlamaCppProcess> loadedProcesses = manager.getLoadedProcesses();
+			Map<String, LlamaCppProcessFix> loadedProcesses = manager.getLoadedProcesses();
 			List<GGUFModel> allModels = manager.listModel();
 			List<Map<String, Object>> data = new ArrayList<>();
 
-			for (Map.Entry<String, LlamaCppProcess> entry : loadedProcesses.entrySet()) {
+			for (Map.Entry<String, LlamaCppProcessFix> entry : loadedProcesses.entrySet()) {
 				String modelId = entry.getKey();
 				if (trimmedModelIdFilter != null && !trimmedModelIdFilter.equals(modelId)) {
 					continue;
@@ -445,6 +445,8 @@ public class LMStudioService {
 
 				}
 				this.sendOpenAIErrorResponseWithCleanup(ctx, 500, null, e.getMessage(), null);
+			} catch (Throwable t) {
+				logger.error("虚拟线程异常已兜底: {}", t.getMessage(), t);
 			} finally {
 				if (requestId != null) ModelRequestTracker.getInstance().removeRequest(requestId);
 				if (connection != null) {
@@ -488,6 +490,8 @@ public class LMStudioService {
 			} catch (Exception e) {
 				logger.info("转发嵌入请求到llama.cpp进程时发生错误", e);
 				this.sendOpenAIErrorResponseWithCleanup(ctx, 500, null, e.getMessage(), null);
+			} catch (Throwable t) {
+				logger.error("虚拟线程异常已兜底: {}", t.getMessage(), t);
 			} finally {
 				if (requestId != null) ModelRequestTracker.getInstance().removeRequest(requestId);
 				if (connection != null) {
@@ -533,6 +537,8 @@ public class LMStudioService {
 			} catch (Exception e) {
 				logger.info("转发文本补全请求到llama.cpp进程时发生错误", e);
 				this.sendOpenAIErrorResponseWithCleanup(ctx, 500, null, e.getMessage(), null);
+			} catch (Throwable t) {
+				logger.error("虚拟线程异常已兜底: {}", t.getMessage(), t);
 			} finally {
 				if (requestId != null) ModelRequestTracker.getInstance().removeRequest(requestId);
 				if (connection != null) {
@@ -1449,7 +1455,7 @@ public class LMStudioService {
 	private static JsonObject buildModelInfo(String modelName) {
 		JsonObject info = new JsonObject();
 		LlamaServerManager manager = LlamaServerManager.getInstance();
-		LlamaCppProcess proc = manager.getLoadedProcesses().get(modelName);
+		LlamaCppProcessFix proc = manager.getLoadedProcesses().get(modelName);
 		GGUFModel found = null;
 		for (GGUFModel m : manager.listModel()) {
 			if (m == null) continue;

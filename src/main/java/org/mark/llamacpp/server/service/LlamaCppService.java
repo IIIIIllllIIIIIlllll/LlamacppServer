@@ -246,6 +246,8 @@ public class LlamaCppService {
 			} catch (Exception e) {
 				logger.info("转发到远程 /completion 时发生错误", e);
 				this.sendError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR.code(), e.getMessage());
+			} catch (Throwable t) {
+				logger.error("虚拟线程异常已兜底: {}", t.getMessage(), t);
 			} finally {
 				if (connection != null) {
 					connection.disconnect();

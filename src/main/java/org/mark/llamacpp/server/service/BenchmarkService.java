@@ -22,7 +22,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import org.mark.llamacpp.server.LlamaCppProcess;
+import org.mark.llamacpp.server.LlamaCppProcessFix;
 import org.mark.llamacpp.server.LlamaServerManager;
 import org.mark.llamacpp.server.tools.JsonUtil;
 import org.slf4j.Logger;
@@ -107,7 +107,7 @@ public class BenchmarkService {
 			if (port == null) {
 				throw new IllegalStateException("未找到模型端口: " + modelId);
 			}
-			LlamaCppProcess process = manager.getLoadedProcesses().get(modelId);
+			LlamaCppProcessFix process = manager.getLoadedProcesses().get(modelId);
 			final String llamaBinPath = process == null ? null : process.getLlamaBinPath();
 			// 查找启动参数中，是否包含--device参数，如果有，则要单独列出来
 			List<String> deviceList = this.findDevicesInUse(process);
@@ -254,7 +254,7 @@ public class BenchmarkService {
 	 * @param process
 	 * @return
 	 */
-	private List<String> findDevicesInUse(LlamaCppProcess process) {
+	private List<String> findDevicesInUse(LlamaCppProcessFix process) {
 		// 找到llamacpp的路径
 		final String llamaBinPath = process == null ? null : process.getLlamaBinPath();
 		// 这个集合中的内容参考：Vulkan0: AMD Radeon(TM) Graphics (16253 MiB, 15440 MiB free)

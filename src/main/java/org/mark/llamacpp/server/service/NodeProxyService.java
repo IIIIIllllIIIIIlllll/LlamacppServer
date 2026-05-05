@@ -65,6 +65,8 @@ public class NodeProxyService {
                 logger.warn("代理请求失败: nodeId={}, path={}, error={}", nodeId, path, e.getMessage());
                 LlamaServer.sendJsonResponse(ctx,
                         org.mark.llamacpp.server.struct.ApiResponse.error("代理请求失败: " + e.getMessage()));
+            } catch (Throwable t) {
+                logger.error("虚拟线程异常已兜底: {}", t.getMessage(), t);
             } finally {
                 if (connection != null) connection.disconnect();
             }
@@ -187,6 +189,8 @@ public class NodeProxyService {
                 logger.warn("流式代理失败: nodeId={}, path={}, error={}", nodeId, path, e.getMessage());
                 LlamaServer.sendJsonResponse(ctx,
                         org.mark.llamacpp.server.struct.ApiResponse.error("流式代理失败: " + e.getMessage()));
+            } catch (Throwable t) {
+                logger.error("虚拟线程异常已兜底: {}", t.getMessage(), t);
             } finally {
                 if (connection != null) connection.disconnect();
             }

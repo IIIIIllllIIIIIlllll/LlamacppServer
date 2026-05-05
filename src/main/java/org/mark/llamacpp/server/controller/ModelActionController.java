@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.mark.llamacpp.gguf.GGUFMetaData;
 import org.mark.llamacpp.gguf.GGUFModel;
-import org.mark.llamacpp.server.LlamaCppProcess;
+import org.mark.llamacpp.server.LlamaCppProcessFix;
 import org.mark.llamacpp.server.LlamaHubNode;
 import org.mark.llamacpp.server.LlamaServer;
 import org.mark.llamacpp.server.LlamaServerManager;
@@ -491,14 +491,14 @@ public class ModelActionController implements BaseController {
 	 */
 	private List<Map<String, Object>> buildLocalLoadedModels() {
 		LlamaServerManager manager = LlamaServerManager.getInstance();
-		Map<String, LlamaCppProcess> loadedProcesses = manager.getLoadedProcesses();
+		Map<String, LlamaCppProcessFix> loadedProcesses = manager.getLoadedProcesses();
 		List<GGUFModel> allModels = manager.listModel();
 
 		List<Map<String, Object>> loadedModels = new ArrayList<>();
 
-		for (Map.Entry<String, LlamaCppProcess> entry : loadedProcesses.entrySet()) {
+		for (Map.Entry<String, LlamaCppProcessFix> entry : loadedProcesses.entrySet()) {
 			String modelId = entry.getKey();
-			LlamaCppProcess process = entry.getValue();
+			LlamaCppProcessFix process = entry.getValue();
 
 			GGUFModel modelInfo = null;
 			for (GGUFModel model : allModels) {

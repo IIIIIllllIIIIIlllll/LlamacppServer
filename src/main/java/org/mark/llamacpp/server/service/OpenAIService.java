@@ -19,7 +19,7 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import org.mark.llamacpp.server.LlamaCppProcess;
+import org.mark.llamacpp.server.LlamaCppProcessFix;
 import org.mark.llamacpp.server.LlamaHubNode;
 import org.mark.llamacpp.server.LlamaServerManager;
 import org.mark.llamacpp.server.NodeManager;
@@ -100,12 +100,12 @@ public class OpenAIService {
 				return;
 			}
 			LlamaServerManager manager = LlamaServerManager.getInstance();
-			Map<String, LlamaCppProcess> loaded = manager.getLoadedProcesses();
+			Map<String, LlamaCppProcessFix> loaded = manager.getLoadedProcesses();
 
 			Map<String, JsonObject> modelsByKey = new LinkedHashMap<>();
 			Map<String, JsonObject> dataById = new LinkedHashMap<>();
 
-			for (Map.Entry<String, LlamaCppProcess> e : loaded.entrySet()) {
+			for (Map.Entry<String, LlamaCppProcessFix> e : loaded.entrySet()) {
 				String modelId = e.getKey();
 				if (modelId == null || modelId.isBlank()) {
 					continue;
@@ -630,6 +630,8 @@ public class OpenAIService {
 					
 				}
 				this.sendOpenAIErrorResponseWithCleanup(ctx, 500, null, e.getMessage(), null);
+			} catch (Throwable t) {
+				logger.error("虚拟线程异常已兜底: {}", t.getMessage(), t);
 			} finally {
 				ModelRequestTracker.getInstance().removeRequest(requestId);
 				this.cleanupTrackedConnection(ctx, connection);
@@ -990,7 +992,6 @@ public class OpenAIService {
 					connection.disconnect();
 				}
 			}
-			throw e;
 		}
 		
 		// 发送结束标记
