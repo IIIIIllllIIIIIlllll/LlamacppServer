@@ -7,6 +7,8 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -327,13 +329,10 @@ public class CommandLineRunner {
 
 		if (os.contains("win")) {
 			pb.directory(exeDir);
-			String currentPath = env.get("PATH");
-			String dir = exeDir.getAbsolutePath();
-			if (currentPath == null || currentPath.isBlank()) {
-				env.put("PATH", dir);
-			} else if (!currentPath.contains(dir)) {
-				env.put("PATH", dir + ";" + currentPath);
-			}
+			List<String> paths = new ArrayList<>();
+			addExistingDir(paths, exeDir.getAbsolutePath());
+			addWindowsRocmDirs(paths);
+			prependWindowsPath(env, paths);
 			return;
 		}
 
@@ -426,6 +425,87 @@ public class CommandLineRunner {
 		if (exe == null) return false;
 		String lower = exe.toLowerCase(Locale.ROOT);
 		return lower.contains("rocm-smi") || lower.contains("rocm-");
+	}
+
+	private static void addWindowsRocmDirs(List<String> paths) {
+		File rocmRoot = new File("C:\\Program Files\\AMD\\ROCm");
+		File[] versions = rocmRoot.listFiles(File::isDirectory);
+		if (versions != null) {
+			Arrays.sort(versions, Comparator.comparing(File::getName).reversed());
+			for (File version : versions) {
+				addExistingDir(paths, new File(version, "bin").getAbsolutePath());
+				addExistingDir(paths, new File(version, "bin\\rocblas").getAbsolutePath());
+				addExistingDir(paths, new File(version, "bin\\hipblaslt").getAbsolutePath());
+			}
+		}
+
+		String[] fallbackRoots = {
+			"C:\\Program Files\\AMD\\AI_Bundle\\ROCm",
+			"C:\\Program Files\\AMD\\AI_Bundle"
+		};
+		for (String root : fallbackRoots) {
+			File dir = new File(root);
+			if (!dir.isDirectory()) {
+				continue;
+			}
+			addExistingDir(paths, new File(dir, "bin").getAbsolutePath());
+			addExistingDir(paths, new File(dir, "bin\\rocblas").getAbsolutePath());
+			addExistingDir(paths, new File(dir, "bin\\hipblaslt").getAbsolutePath());
+		}
+	}
+
+	private static void addExistingDir(List<String> paths, String path) {
+		if (path == null || path.isBlank()) {
+			return;
+		}
+		File dir = new File(path);
+		if (!dir.isDirectory()) {
+			return;
+		}
+		String abs = dir.getAbsolutePath();
+		for (String existing : paths) {
+			if (existing.equalsIgnoreCase(abs)) {
+				return;
+			}
+		}
+		paths.add(abs);
+	}
+
+	private static void prependWindowsPath(Map<String, String> env, List<String> paths) {
+		if (paths == null || paths.isEmpty()) {
+			return;
+		}
+		String key = findKeyIgnoreCase(env, "PATH");
+		String currentPath = key == null ? "" : env.getOrDefault(key, "");
+		StringBuilder merged = new StringBuilder();
+		for (String path : paths) {
+			if (containsWindowsPath(currentPath, path)) {
+				continue;
+			}
+			if (merged.length() > 0) {
+				merged.append(';');
+			}
+			merged.append(path);
+		}
+		if (currentPath != null && !currentPath.isBlank()) {
+			if (merged.length() > 0) {
+				merged.append(';');
+			}
+			merged.append(currentPath);
+		}
+		env.put(key == null ? "PATH" : key, merged.toString());
+	}
+
+	private static boolean containsWindowsPath(String pathList, String path) {
+		if (pathList == null || path == null) {
+			return false;
+		}
+		for (String entry : pathList.split(";")) {
+			if (entry.trim().equalsIgnoreCase(path)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private static boolean isWindows() {

@@ -1250,6 +1250,9 @@ public class LlamaServerManager {
 			sb.append(' ');
 			sb.append(extraParams.trim());
 		}
+		if (isMtpSpeculative(allArgs) && !cmdHasFlag(allArgs, "--parallel")) {
+			sb.append(" --parallel 1");
+		}
 		if (chatTemplateFilePath != null && !chatTemplateFilePath.trim().isEmpty() && !cmdHasFlag(allArgs, "--chat-template-file") && !cmdHasFlag(allArgs, "--chat-template")) {
 			sb.append(" --chat-template-file ");
 			sb.append(ParamTool.quoteIfNeeded(chatTemplateFilePath.trim()));
@@ -1290,6 +1293,86 @@ public class LlamaServerManager {
 		String f = flag.trim();
 		String s = " " + cmd.trim() + " ";
 		return s.contains(" " + f + " ") || s.contains(" " + f + "=");
+	}
+
+	private boolean isMtpSpeculative(String cmd) {
+		if (cmd == null || cmd.trim().isEmpty()) {
+			return false;
+		}
+		List<String> args = splitCommandLineArgs(cmd);
+		for (int i = 0; i < args.size(); i++) {
+			String arg = args.get(i);
+			if ("--spec-type".equals(arg)) {
+				return i + 1 < args.size() && "mtp".equalsIgnoreCase(args.get(i + 1));
+			}
+			String prefix = "--spec-type=";
+			if (arg.regionMatches(true, 0, prefix, 0, prefix.length())) {
+				return "mtp".equalsIgnoreCase(arg.substring(prefix.length()));
+			}
+		}
+		return false;
+	}
+
+	private List<String> splitCommandLineArgs(String commandLine) {
+		List<String> out = new ArrayList<>();
+		if (commandLine == null) {
+			return out;
+		}
+		String s = commandLine.trim();
+		if (s.isEmpty()) {
+			return out;
+		}
+
+		StringBuilder cur = new StringBuilder();
+		boolean allowSingle = !isWindows();
+		boolean inSingle = false;
+		boolean inDouble = false;
+
+		for (int i = 0; i < s.length(); i++) {
+			char c = s.charAt(i);
+
+			if (inDouble && c == '\\') {
+				if (i + 1 < s.length() && s.charAt(i + 1) == '"') {
+					cur.append('"');
+					i++;
+					continue;
+				}
+				cur.append(c);
+				continue;
+			}
+			if (allowSingle && inSingle && c == '\\') {
+				if (i + 1 < s.length() && s.charAt(i + 1) == '\'') {
+					cur.append('\'');
+					i++;
+					continue;
+				}
+				cur.append(c);
+				continue;
+			}
+
+			if (c == '"' && !inSingle) {
+				inDouble = !inDouble;
+				continue;
+			}
+			if (allowSingle && c == '\'' && !inDouble) {
+				inSingle = !inSingle;
+				continue;
+			}
+
+			if (!inSingle && !inDouble && Character.isWhitespace(c)) {
+				if (cur.length() > 0) {
+					out.add(cur.toString());
+					cur.setLength(0);
+				}
+				continue;
+			}
+
+			cur.append(c);
+		}
+		if (cur.length() > 0) {
+			out.add(cur.toString());
+		}
+		return out;
 	}
 
 	private static boolean isWindows() {

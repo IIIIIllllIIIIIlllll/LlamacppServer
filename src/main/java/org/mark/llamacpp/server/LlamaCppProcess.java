@@ -2,11 +2,14 @@ package org.mark.llamacpp.server;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -103,6 +106,9 @@ public class LlamaCppProcess {
 			ProcessBuilder pb = new ProcessBuilder(args);
 
 			Map<String, String> env = pb.environment();
+			if (isWindows()) {
+				applyWindowsRuntimePath(pb, env);
+			}
 			String existingLdPath = env.get("LD_LIBRARY_PATH");
 
 			StringBuilder ldPathBuilder = new StringBuilder();
@@ -382,5 +388,113 @@ public class LlamaCppProcess {
 	private static boolean isWindows() {
 		String os = System.getProperty("os.name");
 		return os != null && os.toLowerCase(Locale.ROOT).contains("win");
+	}
+
+	private void applyWindowsRuntimePath(ProcessBuilder pb, Map<String, String> env) {
+		List<String> paths = new ArrayList<>();
+		addExistingDir(paths, this.llamaBinPath);
+
+		List<String> args = splitCommandLineArgs(this.cmd);
+		if (!args.isEmpty()) {
+			File exe = new File(args.get(0));
+			File exeDir = exe.getParentFile();
+			if (exeDir != null) {
+				addExistingDir(paths, exeDir.getAbsolutePath());
+				pb.directory(exeDir);
+			}
+		}
+
+		addWindowsRocmDirs(paths);
+		prependPath(env, paths);
+	}
+
+	private static void addWindowsRocmDirs(List<String> paths) {
+		File rocmRoot = new File("C:\\Program Files\\AMD\\ROCm");
+		File[] versions = rocmRoot.listFiles(File::isDirectory);
+		if (versions != null) {
+			Arrays.sort(versions, Comparator.comparing(File::getName).reversed());
+			for (File version : versions) {
+				addExistingDir(paths, new File(version, "bin").getAbsolutePath());
+				addExistingDir(paths, new File(version, "bin\\rocblas").getAbsolutePath());
+				addExistingDir(paths, new File(version, "bin\\hipblaslt").getAbsolutePath());
+			}
+		}
+
+		String[] fallbackRoots = {
+			"C:\\Program Files\\AMD\\AI_Bundle\\ROCm",
+			"C:\\Program Files\\AMD\\AI_Bundle"
+		};
+		for (String root : fallbackRoots) {
+			File dir = new File(root);
+			if (!dir.isDirectory()) {
+				continue;
+			}
+			addExistingDir(paths, new File(dir, "bin").getAbsolutePath());
+			addExistingDir(paths, new File(dir, "bin\\rocblas").getAbsolutePath());
+			addExistingDir(paths, new File(dir, "bin\\hipblaslt").getAbsolutePath());
+		}
+	}
+
+	private static void addExistingDir(List<String> paths, String path) {
+		if (path == null || path.isBlank()) {
+			return;
+		}
+		File dir = new File(path);
+		if (!dir.isDirectory()) {
+			return;
+		}
+		String abs = dir.getAbsolutePath();
+		for (String existing : paths) {
+			if (existing.equalsIgnoreCase(abs)) {
+				return;
+			}
+		}
+		paths.add(abs);
+	}
+
+	private static void prependPath(Map<String, String> env, List<String> paths) {
+		if (paths == null || paths.isEmpty()) {
+			return;
+		}
+		String key = findEnvKey(env, "PATH");
+		String current = key == null ? "" : env.getOrDefault(key, "");
+		StringBuilder merged = new StringBuilder();
+		for (String path : paths) {
+			if (current != null && containsPathIgnoreCase(current, path)) {
+				continue;
+			}
+			if (merged.length() > 0) {
+				merged.append(';');
+			}
+			merged.append(path);
+		}
+		if (current != null && !current.isBlank()) {
+			if (merged.length() > 0) {
+				merged.append(';');
+			}
+			merged.append(current);
+		}
+		env.put(key == null ? "PATH" : key, merged.toString());
+	}
+
+	private static String findEnvKey(Map<String, String> env, String key) {
+		for (String existing : env.keySet()) {
+			if (existing.equalsIgnoreCase(key)) {
+				return existing;
+			}
+		}
+		return null;
+	}
+
+	private static boolean containsPathIgnoreCase(String pathList, String path) {
+		if (pathList == null || path == null) {
+			return false;
+		}
+		for (String entry : pathList.split(";")) {
+			if (entry.trim().equalsIgnoreCase(path)) {
+				return true;
+			}
+		}
+		return false;
 	}
 }
