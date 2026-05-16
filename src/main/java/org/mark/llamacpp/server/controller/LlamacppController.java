@@ -672,6 +672,18 @@ public class LlamacppController implements BaseController {
 			}
 			data.add("localBackends", localBackendsArr);
 
+			// Add locally available cudart package names
+			JsonArray localCudartsArr = new JsonArray();
+			List<String> cudarts = LlamaServerManager.getInstance().scanCudartPackages();
+			if (cudarts != null) {
+				for (String c : cudarts) {
+					if (c != null && !c.isBlank()) {
+						localCudartsArr.add(c);
+					}
+				}
+			}
+			data.add("localCudarts", localCudartsArr);
+
 			Map<String, Object> result = new HashMap<>();
 			result.put("success", true);
 			result.put("data", data);

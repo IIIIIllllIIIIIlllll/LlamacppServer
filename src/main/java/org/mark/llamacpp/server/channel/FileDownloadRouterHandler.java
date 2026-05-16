@@ -782,34 +782,4 @@ public class FileDownloadRouterHandler extends SimpleChannelInboundHandler<FullH
 		};
 	}
 
-	private static class LlamaCppExtractor {
-		static String parseBackendName(String fileName) {
-			String base = fileName;
-			int dotIdx = base.lastIndexOf('.');
-			if (dotIdx > 0) base = base.substring(0, dotIdx);
-			if (base.endsWith(".tar")) {
-				dotIdx = base.lastIndexOf('.');
-				if (dotIdx > 0) base = base.substring(0, dotIdx);
-			}
-			// llama-b9174-bin-win-cuda-13.1-x64 -> win-cuda-13.1-x64
-			// llama-b9174-bin-ubuntu-vulkan-x64 -> ubuntu-vulkan-x64
-			// cudart-llama-bin-win-cuda-12.4-x64 -> win-cuda-12.4-x64-cudart
-			if (base.contains("-bin-")) {
-				int binIdx = base.indexOf("-bin-");
-				String after = base.substring(binIdx + 5);
-				// Check if it starts with os prefix
-				if (after.startsWith("win-") || after.startsWith("ubuntu-") || after.startsWith("linux-") || after.startsWith("macos-")) {
-					return after;
-				}
-			}
-			if (base.contains("-cudart-")) {
-				int cudartIdx = base.indexOf("-cudart-");
-				String after = base.substring(cudartIdx + 8);
-				if (after.startsWith("win-") || after.startsWith("ubuntu-") || after.startsWith("linux-") || after.startsWith("macos-")) {
-					return after + "-cudart";
-				}
-			}
-			return base;
-		}
-	}
 }

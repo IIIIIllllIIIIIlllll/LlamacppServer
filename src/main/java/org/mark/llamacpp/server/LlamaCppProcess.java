@@ -7,6 +7,9 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -242,6 +245,7 @@ public class LlamaCppProcess {
 		}
 
 		this.addWindowsRocmDirs(paths);
+		this.addWindowsCudartDirs(paths);
 		this.prependPath(env, paths);
 	}
 
@@ -269,6 +273,66 @@ public class LlamaCppProcess {
 			this.addExistingDir(paths, new File(dir, "bin").getAbsolutePath());
 			this.addExistingDir(paths, new File(dir, "bin\\rocblas").getAbsolutePath());
 			this.addExistingDir(paths, new File(dir, "bin\\hipblaslt").getAbsolutePath());
+		}
+	}
+
+	private void addWindowsCudartDirs(List<String> paths) {
+		// 如果 llamaBinPath 下已有 cudart DLL，则跳过
+		if (this.hasCudartDlls(this.llamaBinPath)) {
+			return;
+		}
+		// 扫描 llamacpp/ 下所有 cudart 目录，全部加入 PATH
+		String root = LlamaServer.getDefaultLlamaCppPath();
+		Path rootPath = Paths.get(root);
+		if (!Files.exists(rootPath) || !Files.isDirectory(rootPath)) {
+			return;
+		}
+		try (java.util.stream.Stream<Path> entries = Files.list(rootPath)) {
+			for (Path subDir : entries.toList()) {
+				if (!Files.isDirectory(subDir)) {
+					continue;
+				}
+				if (!this.hasCudartDlls(subDir.toString())) {
+					continue;
+				}
+				this.addExistingDir(paths, subDir.toAbsolutePath().toString());
+			}
+		} catch (IOException e) {
+			logger.warn("扫描 cudart 目录失败: {}", e.getMessage());
+		}
+	}
+
+	private boolean hasCudartDlls(String dirPath) {
+		if (dirPath == null || dirPath.isBlank()) {
+			return false;
+		}
+		Path dir = Paths.get(dirPath);
+		if (!Files.isDirectory(dir)) {
+			return false;
+		}
+		try (java.util.stream.Stream<Path> entries = Files.list(dir)) {
+			boolean hasCublas = false;
+			boolean hasCublasLt = false;
+			boolean hasCudart = false;
+			for (Path entry : entries.toList()) {
+				if (!Files.isRegularFile(entry)) {
+					continue;
+				}
+				String name = entry.getFileName().toString();
+				String lower = name.toLowerCase();
+				if (lower.startsWith("cublas64_") && lower.endsWith(".dll")) {
+					hasCublas = true;
+				}
+				if (lower.startsWith("cublaslt64_") && lower.endsWith(".dll")) {
+					hasCublasLt = true;
+				}
+				if (lower.startsWith("cudart64_") && lower.endsWith(".dll")) {
+					hasCudart = true;
+				}
+			}
+			return hasCublas && hasCublasLt && hasCudart;
+		} catch (IOException e) {
+			return false;
 		}
 	}
 

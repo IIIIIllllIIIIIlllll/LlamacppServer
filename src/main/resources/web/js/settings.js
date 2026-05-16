@@ -40,6 +40,7 @@
     let _llamacppReleaseData = null;
     let _llamacppDownloading = {};
     let _llamacppLocalBackends = [];
+    let _llamacppLocalCudarts = [];
 
     function escapeHtml(s) {
         if (!s) return '';
@@ -99,6 +100,7 @@
             _llamacppLoaded = true;
             _llamacppReleaseData = result.data;
             _llamacppLocalBackends = Array.isArray(result.data.localBackends) ? result.data.localBackends : [];
+            _llamacppLocalCudarts = Array.isArray(result.data.localCudarts) ? result.data.localCudarts : [];
             renderLlamaCppRelease(result.data);
 
         } catch (e) {
@@ -157,7 +159,7 @@
             var dlCount = a.download_count || 0;
             var isDownloading = _llamacppDownloading[a.name];
             var backendName = parseLlamaCppBackendName(a.name);
-            var isInstalled = _llamacppLocalBackends.indexOf(backendName) >= 0;
+            var isInstalled = _llamacppLocalBackends.indexOf(backendName) >= 0 || _llamacppLocalCudarts.indexOf(backendName) >= 0;
 
             html += '<div class="llamacpp-asset-row" data-asset-name="' + escapeHtml(a.name) + '">';
             html += '  <div class="llamacpp-asset-info">';
